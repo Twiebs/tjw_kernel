@@ -1,0 +1,42 @@
+
+#include <stdint.h>
+
+enum VGAColor {
+	VGAColor_BLACK = 0,
+	VGAColor_BLUE = 1,
+	VGAColor_CYAN = 3,
+	VGAColor_RED = 4,
+	VGAColor_MAGENTA = 5,
+	VGAColor_BROWN = 6
+};
+
+uint16_t vga_make_entry(char c, uint8_t color) {
+	uint16_t char16 = c;
+	uint16_t color16 = color;
+	return char16 | color16 << 8;
+}
+
+typedef struct {
+	size_t Row;
+	size_t Column;
+	uint8_t Color;
+	uint16_t* Buffer;
+} terminal;
+
+void terminal_initialize(terminal *Terminal) {
+	Terminal->Row = 0;
+	Terminal->Column = 0;
+	Terminal->color = 
+}
+
+void kernel_main() {
+
+}
+
+int kernel_initalize() {
+	return 0;	
+}
+
+int kernal_terminate() {
+	return 0;
+}
