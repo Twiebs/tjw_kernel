@@ -58,6 +58,42 @@ static inline void write_string(terminal *Terminal, const char* Data) {
 	}
 }
 
+static inline void write_four_bits(terminal *Terminal, uint8_t bits)
+{
+	if (bits > 10) {
+		write_char(Terminal, 65 + (bits - 10));
+	} else {
+		write_char(Terminal, 48 + bits);
+	}
+}
+
+static inline void write_uint8_hex(terminal *Terminal, uint8_t Value)
+{
+	uint8_t Top = Value >> 4;
+	uint8_t Bottom = (uint8_t)((uint8_t)(Value << 4) >> 4);
+	write_four_bits(Terminal, Top);
+	write_four_bits(Terminal, Bottom);
+}
+
+
+static inline void write_uint32_hex(terminal *Terminal, uint32_t Value) 
+{
+	write_string(Terminal, "0x");
+		
+	uint8_t Bytes[4];
+	Bytes[0] = (uint8_t)(Value >> 24);
+	Bytes[1] = (uint8_t)(Value >> 16);
+	Bytes[2] = (uint8_t)(Value >> 8);
+	Bytes[3] = (uint8_t)(Value);
+	for (int i = 0; i < 4; i++) {
+		if (Bytes[i] != 0) {
+			write_uint8_hex(Terminal, Bytes[i]);
+		} else {
+			write_char(Terminal, '0');
+		}
+	}		
+}
+
 void terminal_initialize() {
 	initialize(&GlobalTerminal);			
 }
@@ -68,4 +104,11 @@ void terminal_write_string(const char *String) {
 
 void terminal_newline() {
 	newline(&GlobalTerminal);
+}
+
+void terminal_write_uint8_hex(uint8_t Value) {
+	write_uint8_hex(&GlobalTerminal, Value);
+}
+void terminal_write_uint32_hex(uint32_t Value) {
+	write_uint32_hex(&GlobalTerminal, Value);
 }

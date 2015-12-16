@@ -2,12 +2,41 @@
 
 #include <stddef.h>
 
-extern void idt_flush();
-extern void gdt_flush();
+extern void idt_flush(uint32_t);
+extern void gdt_flush(uint32_t);
 
 extern void isr0();
 extern void isr1();
 extern void isr2();
+extern void isr3();
+extern void isr4();
+extern void isr5();
+extern void isr6();
+extern void isr7();
+extern void isr8();
+extern void isr9();
+extern void isr10();
+extern void isr11();
+extern void isr12();
+extern void isr13();
+extern void isr14();
+extern void isr15();
+extern void isr16();
+extern void isr17();
+extern void isr18();
+extern void isr19();
+extern void isr20();
+extern void isr21();
+extern void isr22();
+extern void isr23();
+extern void isr24();
+extern void isr25();
+extern void isr26();
+extern void isr27();
+extern void isr28();
+extern void isr29();
+extern void isr30();
+extern void isr31();
  
 static void gdt_set_gate(kernel_gdt *GDT, int32_t Index, uint32_t Base, 
 						uint32_t Limit, uint8_t Access, uint8_t Gran) {
@@ -37,7 +66,7 @@ void gdt_initialize(kernel_gdt *GDT) {
 	gdt_set_gate(GDT, 2, 0, 0xFFFFFFFF, 0x92, 0xCF); // Data segment
 	gdt_set_gate(GDT, 3, 0, 0xFFFFFFFF, 0xFA, 0xCF); // User mode code segment
 	gdt_set_gate(GDT, 4, 0, 0xFFFFFFFF, 0xF2, 0xCF); // User mode data segment
-	gdt_flush();
+	gdt_flush((uint32_t)&GDT->GDTPtr);
 }
 
 
@@ -56,7 +85,10 @@ void idt_initialize(kernel_idt *IDT) {
 	idt_set_gate(IDT, 0, (uint32_t)isr0, 0x08, 0x8E);
 	idt_set_gate(IDT, 1, (uint32_t)isr1, 0x08, 0x8E);
 	idt_set_gate(IDT, 2, (uint32_t)isr2, 0x08, 0x8E);
-	idt_flush();
+	idt_set_gate(IDT, 3, (uint32_t)isr3, 0x08, 0x8E);
+	idt_set_gate(IDT, 4, (uint32_t)isr4, 0x08, 0x8E);
+
+	idt_flush((uint32_t)&IDT->Ptr);
 }
 
 
