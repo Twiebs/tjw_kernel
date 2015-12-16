@@ -1,3 +1,5 @@
+#ifndef _KERNEL_VGA_INCLUDE
+#define _KERNEL_VGA_INCLUDE
 #include <stdint.h>
 
 static const uint16_t* VGA_MEMORY = (uint16_t*)0xB8000;
@@ -27,3 +29,5 @@ inline uint8_t vga_color(enum VGAColor foreground, enum VGAColor background)
 	uint8_t result = foreground | background << 4;
 	return result;
 }
+
+#endif // _KERNEL_VGA_INCLUDE
