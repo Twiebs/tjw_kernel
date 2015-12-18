@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+// TODO(Torin) add pic_remap() to remap the pic for protected mode
+// irq based interrupt routines
+
 struct kernel_gdt_entry_struct {
 	uint16_t limit_low;
 	uint16_t base_low;
@@ -13,19 +16,7 @@ struct kernel_gdt_entry_struct {
 } __attribute__((packed));
 typedef struct kernel_gdt_entry_struct kernel_gdt_entry;
 
-// TODO(Torin) These ptr structs are pretty useless
-// Either combine the IDT and GDT Ptr struct into a 
-// DescriptorPtrStruct or just implement these values the kernel_gdt
-// and kernel_idt structs respectivly
-
-struct kernel_gdt_ptr_struct {
-	uint16_t limit;
-	uint32_t base;
-} __attribute__((packed));
-typedef struct kernel_gdt_ptr_struct kernel_gdt_ptr; 
-
 typedef struct {
-	kernel_gdt_ptr GDTPtr;
 	kernel_gdt_entry Entries[5];
 } kernel_gdt;
 
@@ -38,14 +29,7 @@ struct kernel_idt_entry_struct {
 } __attribute__((packed));
 typedef struct kernel_idt_entry_struct kernel_idt_entry;
 
-struct kernel_idt_ptr_struct {
-	uint16_t Limit;
-	uint32_t Base;
-} __attribute__((packed));
-typedef struct kernel_idt_ptr_struct kernel_idt_ptr;
-
 typedef struct {
-	kernel_idt_ptr Ptr;
 	kernel_idt_entry Entries[256];
 } kernel_idt;
 

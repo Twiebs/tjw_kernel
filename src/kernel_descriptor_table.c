@@ -1,9 +1,20 @@
 #include "kernel_descriptor_table.h"
+#include "kernel_asm.h"
 
-#include <stddef.h>
+typedef unsigned size_t;
 
-extern void idt_flush(uint32_t);
-extern void gdt_flush(uint32_t);
+struct idtr_struct {
+	uint16_t Limit;
+	uint32_t Base;
+} __attribute__((packed));
+
+struct gdtr_struct {
+	uint16_t Limit;
+	uint32_t Base;
+} __attribute__((packed));
+
+typedef struct idtr_struct idtr_t;
+typedef struct gdtr_struct gdtr_t;
 
 extern void isr0();
 extern void isr1();
@@ -37,7 +48,46 @@ extern void isr28();
 extern void isr29();
 extern void isr30();
 extern void isr31();
- 
+
+extern void gdt_install(uint32_t gdtr_addr);
+extern void idt_install(uint32_t idtr_addr);
+
+#if 0
+static const char* ivt_description_strings {
+	"Divide by Zero",
+	"Single Step (Debugger)",
+	"Non Maskable Interrupt (NMI) Pin"
+};
+#endif
+
+#define PIC_MASTER_COMAND_STATUS 0x20
+#define PIC_MASTER_INTERRUPT_MASK 0x21
+#define PIC_SLAVE_COMAND_STATUS 0xA0
+#define PIC_SLAVE_INTERRUPT_MASK 0xA1
+
+static inline void icw1() {
+//	static const uint8_t ICW = 0x11;
+	
+}
+
+void device_initalize() {
+				
+}
+
+void device_terminate() {
+	
+}
+#if 0
+static void generate_interrupt(int n) {
+	asm (
+		"mov al, byte ptr[n]"
+		"mov byte ptr[genint+1], al"
+		"jmp genint"
+		"genint:"
+			"int 0"
+		);	
+}
+#endif
 static void gdt_set_gate(kernel_gdt *GDT, int32_t Index, uint32_t Base, 
 						uint32_t Limit, uint8_t Access, uint8_t Gran) {
 	GDT->Entries[Index].base_low = (Base & 0xFFFF);
@@ -59,14 +109,16 @@ static void idt_set_gate(kernel_idt *IDT, uint8_t Index, uint32_t Base, uint16_t
 }
 
 void gdt_initialize(kernel_gdt *GDT) {
-	GDT->GDTPtr.limit = (sizeof(kernel_gdt_entry) * 5) - 1;
-	GDT->GDTPtr.base = (uint32_t)&GDT->Entries;
 	gdt_set_gate(GDT, 0, 0, 0, 0, 0); 				 // Null segment
 	gdt_set_gate(GDT, 1, 0, 0xFFFFFFFF, 0x9A, 0xCF); // Code segment
 	gdt_set_gate(GDT, 2, 0, 0xFFFFFFFF, 0x92, 0xCF); // Data segment
 	gdt_set_gate(GDT, 3, 0, 0xFFFFFFFF, 0xFA, 0xCF); // User mode code segment
 	gdt_set_gate(GDT, 4, 0, 0xFFFFFFFF, 0xF2, 0xCF); // User mode data segment
-	gdt_flush((uint32_t)&GDT->GDTPtr);
+
+	gdtr_t GDTR;
+	GDTR.Limit = (sizeof(kernel_gdt_entry) * 5) - 1;
+	GDTR.Base = (uint32_t)&GDT->Entries;
+	gdt_install((uint32_t)&GDTR);
 }
 
 
@@ -78,17 +130,17 @@ static inline void mem_set(void *Buffer, uint8_t Value, size_t Count) {
 }
 
 void idt_initialize(kernel_idt *IDT) {
-	IDT->Ptr.Limit = (sizeof(kernel_idt_entry) * 256) - 1;
-	IDT->Ptr.Base = (uint32_t)&IDT->Entries;
 	mem_set(&IDT->Entries, 0, sizeof(kernel_idt_entry) * 256);
-
 	idt_set_gate(IDT, 0, (uint32_t)isr0, 0x08, 0x8E);
 	idt_set_gate(IDT, 1, (uint32_t)isr1, 0x08, 0x8E);
 	idt_set_gate(IDT, 2, (uint32_t)isr2, 0x08, 0x8E);
 	idt_set_gate(IDT, 3, (uint32_t)isr3, 0x08, 0x8E);
 	idt_set_gate(IDT, 4, (uint32_t)isr4, 0x08, 0x8E);
 
-	idt_flush((uint32_t)&IDT->Ptr);
+	idtr_t IDTR;
+	IDTR.Limit = (sizeof(kernel_idt_entry) * 256) - 1;
+	IDTR.Base = (uint32_t)&IDT->Entries;
+	idt_install((uint32_t)&IDTR);
 }
 
 

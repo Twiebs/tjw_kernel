@@ -2,6 +2,8 @@
 #define _KERNEL_VGA_INCLUDE
 #include <stdint.h>
 
+// NOTE(Torin) This is acctualy a special text buffer for displaying terminal characters
+// Not really the VGA Memory
 static const uint16_t* VGA_MEMORY = (uint16_t*)0xB8000;
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;

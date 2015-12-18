@@ -1,23 +1,42 @@
-[GLOBAL gdt_flush]    ; Allows the C code to call gdt_flush().
+[GLOBAL gdt_install]   
 
-gdt_flush:
+gdt_install:
    mov eax, [esp+4]  ; Get the pointer to the GDT, passed as a parameter.
-   lgdt [eax]        ; Load the new GDT pointer
+  
+	; NOTE(Torin) Loads the gdt into the gdtr register
+	; and enters proteced mode
+  	cli
+   	lgdt [eax]        
+	mov eax, cr0
+	or al, 1
+	mov cr0, eax
 
+
+	; NOTE(Torin) 0x08 is the offset into the GDT where a protected mode
+	; code segement descriptor exists to load the code segment register with the 
+	; proper protected mode 32bit desctiptor
+	jmp 0x08:proteced_mode_main
+
+proteced_mode_main:	
    mov ax, 0x10      ; 0x10 is the offset in the GDT to our data segment
    mov ds, ax        ; Load all data segment selectors
    mov es, ax
    mov fs, ax
    mov gs, ax
    mov ss, ax
-   jmp 0x08:.flush   ; 0x08 is the offset to our code segment: Far jump!
-.flush:
    ret 
 
+[GLOBAL kernel_enter_protected_mode]
 
-[GLOBAL idt_flush]
+kernel_enter_protected_mode:
+	cli
+	mov eax, cr0
+   	or eax, 1
+   	mov cr0, eax
 
-idt_flush:
+[GLOBAL idt_install]
+
+idt_install:
 	mov eax, [esp+4] ;Pointer to the IDT 
 	lidt [eax]
 	ret

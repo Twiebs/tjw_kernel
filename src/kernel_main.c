@@ -3,6 +3,7 @@
 
 #include "kernel_terminal.h"
 #include "kernel_descriptor_table.h"
+#include "kernel_asm.h"
 
 void isr_handler(registers Registers) {
 	terminal_write_string("[Kernel Interrupt]\n");
@@ -59,6 +60,10 @@ void kernel_main() {
 	terminal_write_uint32_hex(11);
 	terminal_newline();
 	terminal_write_uint32_hex(4096);
+
+	outb(0x21, 0xFD);
+	outb(0xA1, 0xFF);
+	asm("sti");
 
 	asm volatile("int $0x02");	
 	asm volatile("int $0x03");
