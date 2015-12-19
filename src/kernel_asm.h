@@ -1,18 +1,21 @@
 #ifndef _KERNEL_ASM_INCLUDE
-#define _KERNEL_ASM_INCLDUE
+#define _KERNEL_ASM_INCLUDE
 
+#include "kernel_types.h"
 
 //Writes out a byte to an I/O location
-static inline void outb(uint16_t port, uint8_t value) {
+inline void outb(uint16_t port, uint8_t value) {
 	asm volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
 }
 
 // Reads in a byte from the I/O Port
-static inline uint8_t inb(uint16_t port) {
+inline uint8_t inb(uint16_t port) {
 	uint8_t result;
 	asm volatile ("inb %1, %0" : "=a"(result) : "Nd"(port));
 	return result;
 }
+
+
 
 // TODO(Torin) Consider switching to this method of 
 // setting the intterupt table it might be better then requiring
@@ -20,7 +23,7 @@ static inline uint8_t inb(uint16_t port) {
 
 // Calls lidt with the provided base pointer and 
 // size of the intterupt table
-static inline void lidt(void *base, uint16_t size){
+inline void lidt(void *base, uint16_t size){
 	struct {
 		uint16_t length;
 		uint16_t base;

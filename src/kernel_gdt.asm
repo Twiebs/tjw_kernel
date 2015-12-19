@@ -1,6 +1,6 @@
-[GLOBAL gdt_install]   
+[GLOBAL gdt_install_asm]   
 
-gdt_install:
+gdt_install_asm:
    mov eax, [esp+4]  ; Get the pointer to the GDT, passed as a parameter.
   
 	; NOTE(Torin) Loads the gdt into the gdtr register
@@ -26,17 +26,9 @@ proteced_mode_main:
    mov ss, ax
    ret 
 
-[GLOBAL kernel_enter_protected_mode]
+[GLOBAL idt_install_asm]
 
-kernel_enter_protected_mode:
-	cli
-	mov eax, cr0
-   	or eax, 1
-   	mov cr0, eax
-
-[GLOBAL idt_install]
-
-idt_install:
+idt_install_asm:
 	mov eax, [esp+4] ;Pointer to the IDT 
 	lidt [eax]
 	ret
@@ -91,7 +83,7 @@ ISR_NO_ERROR_CODE 28
 ISR_NO_ERROR_CODE 29
 ISR_NO_ERROR_CODE 30
 ISR_NO_ERROR_CODE 31
-
+ISR_NO_ERROR_CODE 32
 [EXTERN isr_handler]
 
 isr_common_stub:
@@ -118,6 +110,4 @@ isr_common_stub:
 	add esp, 8 ; Cleans up the pushed error code and pushed ISR number by incrementing the stack pointer
 	sti
 	iret
-
-
 

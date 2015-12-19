@@ -12,7 +12,9 @@ set(CMAKE_ASM_NASM_COMPILE_OBJECT "<CMAKE_ASM_NASM_COMPILER> ${CMAKE_ASK_NASM_FL
 set(KERNEL_SOURCES
 	kernel_main.c
 	kernel_terminal.c
-	kernel_descriptor_table.c)
+	kernel_descriptor_table.c
+	kernel_pit.c
+	kernel_pic.c)
 
 set(KERNEL_ASM_SOURCES
 	kernel_boot.asm
@@ -25,7 +27,7 @@ set(KERNEL_LINK_FLAGS
 	-nostdlib
 	-lgcc)
 
-set(KERNEL_LINKER_SCRIPT ../linker.ld)
+set(KERNEL_LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/linker.ld")
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -T ${KERNEL_LINKER_SCRIPT} -ffreestanding -O2 -nostdlib -lgcc")
 add_executable(kernel ${KERNEL_SOURCES} ${KERNEL_ASM_SOURCES})

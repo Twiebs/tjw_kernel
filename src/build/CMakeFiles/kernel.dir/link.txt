@@ -1,1 +1,0 @@
-i386-linux-gcc   -std=gnu99 -ffreestanding -O2 -Wall -Wextra   -T ../linker.ld -ffreestanding -O2 -nostdlib -lgcc CMakeFiles/kernel.dir/kernel_main.c.o CMakeFiles/kernel.dir/kernel_terminal.c.o CMakeFiles/kernel.dir/kernel_descriptor_table.c.o CMakeFiles/kernel.dir/kernel_boot.asm.o CMakeFiles/kernel.dir/kernel_gdt.asm.o  -o kernel.bin -rdynamic 

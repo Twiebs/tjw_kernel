@@ -3,8 +3,12 @@
 
 #include <stdint.h>
 
-// TODO(Torin) add pic_remap() to remap the pic for protected mode
-// irq based interrupt routines
+#define IDT_DESC_BIT16 0x06
+#define IDT_DESC_BIT32 0x0E
+#define IDT_DESC_RING1 0x40
+#define IDT_DESC_RING2 0x20
+#define IDT_DESC_RING3 0x60
+#define IDT_DESC_PRESENT 0x80
 
 struct kernel_gdt_entry_struct {
 	uint16_t limit_low;
@@ -42,5 +46,7 @@ typedef struct {
 
 void gdt_initialize(kernel_gdt *GDT);
 void idt_initialize(kernel_idt *IDT);
+
+void idt_set_entry(kernel_idt *IDT, uint8_t Index, uint32_t Base, uint16_t Selector, uint8_t Flags); 
 
 #endif //_KERNEL_DESCRIPTOR_TABLE_INCLUDE
