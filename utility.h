@@ -20,4 +20,12 @@ inline void __memcpy(uint8_t *dest, uint8_t *src, size_t size) {
 	}
 }
 
+internal inline
+size_t strlen(const char *str) {
+	size_t result = 0;
+	while (str[result] != 0)
+		result ++;
+	return result;
+}
+
 

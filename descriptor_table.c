@@ -1,3 +1,44 @@
+
+struct GDTEntryInfo {
+	uint32_t base;
+	uint32_t limit;
+	uint32_t type;
+};
+
+void gdt_encode_entry(uint8_t *target, GDTEntryInfo source)
+{
+    // Check the limit to make sure that it can be encoded
+    if ((source.limit > 65536) && (source.limit & 0xFFF) != 0xFFF) {
+        kerror("You can't do that!");
+    }
+    if (source.limit > 65536) {
+        // Adjust granularity if required
+        source.limit = source.limit >> 12;
+        target[6] = 0xC0;
+    } else {
+        target[6] = 0x40;
+    }
+ 
+    // Encode the limit
+    target[0] = source.limit & 0xFF;
+    target[1] = (source.limit >> 8) & 0xFF;
+    target[6] |= (source.limit >> 16) & 0xF;
+ 
+    // Encode the base 
+    target[2] = source.base & 0xFF;
+    target[3] = (source.base >> 8) & 0xFF;
+    target[4] = (source.base >> 16) & 0xFF;
+    target[7] = (source.base >> 24) & 0xFF;
+ 
+    // And... Type
+    target[5] = source.type;
+}
+
+
+
+
+
+
 // Each define here is for a specific flag in the descriptor.
 // Refer to the intel documentation for a description of what each one does.
 #define SEG_DESCTYPE(x)  ((x) << 0x04) // Descriptor type (0 for system, 1 for code/data)
@@ -40,7 +81,8 @@
 #define GDT32_DATA_PL3 SEG_DESCTYPE(1) | SEG_PRES(1) | SEG_SAVL(0) | \
                      SEG_LONG(0)     | SEG_SIZE(1) | SEG_GRAN(1) | \
                      SEG_PRIV(3)     | SEG_DATA_RDWR
- 
+
+
 internal uint64_t
 gdt_create_descriptor(uint32_t base, uint32_t limit, uint16_t flag) {
     uint64_t descriptor;
