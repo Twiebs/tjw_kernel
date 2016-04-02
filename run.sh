@@ -1,1 +1,1 @@
-qemu-system-i386 -kernel bin/kernel
+sudo qemu-system-i386 -hdb /dev/sde

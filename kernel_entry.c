@@ -10,20 +10,50 @@ _Pragma("GCC diagnostic ignored \"-Wunused-function\"");
 #define internal static
 #define global_variable static 
 
-#define kassert(expr, msg) stdout_write_fmt(msg);
-#define kerror(...) stdout_write_fmt(__VA_ARGS__);
-#define klog(...) stdout_write_fmt(__VA_ARGS__);
-#define kdebug(...) stdout_write_fmt(__VA_ARGS__);
+#define kassert(expr, msg) stdout_write_fmt(&_iostate, msg);
+#define kerror(...) stdout_write_fmt(&_iostate, __VA_ARGS__);
+#define klog(...) stdout_write_fmt(&_iostate, __VA_ARGS__);
+#define kdebug(...) stdout_write_fmt(&_iostate, __VA_ARGS__);
+#define kpanic(...) stdout_write_fmt(&_iostate, __VA_ARGS__);
 
-internal void
-stdout_write_fmt(const char *fmt, ...);
+#include "kernel_filesystem.h"
+
+//=================================================
+
+struct IOState {
+	bool is_output_buffer_dirty;
+	bool is_input_buffer_dirty;
+	bool is_command_ready;
+	char input_buffer[256];
+	char output_buffer[1024*16];
+	uint32_t input_buffer_count = 0;
+	uint32_t output_buffer_count = 0;
+} global_variable _iostate;
+
+struct FileSystem {
+	KFS_Header *kfs;
+	KFS_Node *kfs_nodes;
+	uint8_t *base_data;
+} global_variable _fs;
+
+struct VGATextTerm {
+	const char *top_entry;
+} global_variable _kterm;
+
+//===================================================
+
+internal void 
+stdout_write_fmt(IOState *io, const char *fmt, ...);
 
 extern "C" {
 #include "utility.h"
+#include "multiboot.h"
 #include "descriptor_table.c"
 #include "kernel_memory.cpp"
 #include "keyboard_map.h"
+
 #include "kernel_feature.c"
+#include "kernel_filesystem.c"
 }
 
 external uint8_t read_port(uint16_t port);
@@ -61,8 +91,6 @@ struct gdt_entry_struct {
   uint8_t base_24_31;
 } __attribute__((packed));
 
-static_assert(sizeof(idt_entry_struct) == 8, "invalid idt_entry_struct");
-static_assert(sizeof(gdt_entry_struct) == 8, "invalid gdt_entry_struct");
 
 #define IDT_ENTRY_COUNT 256
 
@@ -84,25 +112,36 @@ typedef enum {
 #define KEYCODE_BACKSPACE_RELEASED 0x8E
 #define KEYCODE_ENTER_PRESSED 0x1C
 
-global_variable bool is_output_buffer_dirty;
-global_variable bool is_input_buffer_dirty;
-global_variable bool is_command_ready;
-global_variable char input_buffer[256];
-global_variable char output_buffer[1024*16];
-global_variable uint32_t input_buffer_count = 0;
-global_variable uint32_t output_buffer_count = 0;
+internal void kterm_redraw_if_required(IOState *io);
 
 internal void
-stdout_write_fmt(const char *fmt, ...) {
+io_write_cstr(IOState *io, const char *cstr) {
+	size_t length = strlen(cstr);	
+	if (io->output_buffer_count + length + 1> sizeof(IOState::output_buffer)) {
+		memset(io->output_buffer, 0, sizeof(IOState::output_buffer));
+		kpanic("EXCEDED OUTPUT BUFFER");		
+		kterm_redraw_if_required(io);
+		asm volatile ("cli");
+		asm volatile ("hlt");
+	} else {
+		memcpy(&io->output_buffer[io->output_buffer_count], cstr, length);
+		io->output_buffer_count += length;
+		io->output_buffer[io->output_buffer_count] = 0;
+	}
+}
+
+internal void
+stdout_write_fmt(IOState *io, const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
   uint32_t index = 0;
 
-	const char *buffer_begin = &output_buffer[output_buffer_count];
-	char *write = &output_buffer[output_buffer_count];
+	const char *buffer_begin = &io->output_buffer[io->output_buffer_count];
+	char *write = &io->output_buffer[io->output_buffer_count];
 	while (fmt[index] != 0) {
 		if (fmt[index] == '%') {
 			index++;
+			
 			if (fmt[index] == 'u') {
 				uint32_t value = va_arg(args, uint32_t);
 
@@ -134,6 +173,29 @@ stdout_write_fmt(const char *fmt, ...) {
 				write += 8;
 				index++;
 			}
+
+			else if (fmt[index] == 's') {
+				//TODO(Torin) all of this io output manipulation is not correct
+				//at all... we need to check if it overflows and then handle that by 
+				//flushing the output buffer to a file
+				const char *str = (const char *)va_arg(args, uint32_t);
+				size_t length = strlen(str);
+				memcpy(write, str, length);
+				write += length;
+				index++;
+			}
+
+			else if (fmt[index] == '.') {
+				index++;
+				if (fmt[index] == '*') {
+					index++;
+					uint32_t string_length = (uint32_t)va_arg(args, uint32_t);
+					const char *str = (const char *)va_arg(args, uint32_t);
+					memcpy(write, str, string_length);
+					write += string_length;
+					index++;
+				}
+			}
 		}
 		else {
 			*write = fmt[index];
@@ -146,8 +208,8 @@ stdout_write_fmt(const char *fmt, ...) {
 	write++;
 
 	size_t bytes_written = write - buffer_begin;
-	output_buffer_count += bytes_written;
-	is_output_buffer_dirty = true;
+	io->output_buffer_count += bytes_written;
+	io->is_output_buffer_dirty = true;
 }
 
 
@@ -181,50 +243,93 @@ kernel_reboot() {
 	asm volatile ("int $0x3");
 }
 
-internal void kterm_redraw_if_required();
 #include "interrupt_handler.c"
 
-#define LITERAL_STRLEN(literal) (sizeof(literal) - 1)
-#define string_matches_literal(string, len, lit) strings_match(string,len, lit, LITERAL_STRLEN(lit))
+internal bool 
+process_shell_command(const char *command) {
+		const char *procedure_name = command;
+		size_t arg_count = 0;
+		const char *args[6];
+		size_t arg_lengths[6];
 
-internal int 
-strings_match(const char *stringA, size_t lengthA, 
-		const char *stringB, size_t lengthB) {
-	if (lengthA != lengthB) return 0;
-	for (size_t i = 0; i < lengthA; i++) {
-		if (stringA[i] != stringB[i]) {
-			return 0;
+		const char *current = command;
+		while (is_char_alpha(*current)) current++;
+		size_t procedure_name_length = current - procedure_name;
+		while (*current == ' ') {
+			current++; 
+			args[arg_count] = current;
+			while (*current != ' ' && *current != 0) current++;
+			arg_lengths[arg_count] = current - args[arg_count];
+			arg_count++;
 		}
-	}
-	return 1;
+
+		static auto is_expected_command = [](const char *input, size_t input_len, 
+				const char *command, uint32_t command_length, uint32_t expected_args, 
+				uint32_t actual_args, bool *command_was_handled) -> bool 
+		{
+			if (strings_match(input, input_len, command, command_length)) {
+				if (expected_args != actual_args) {
+					klog("%s expected %u arguments, only %u were provided", command, expected_args, actual_args);
+					*command_was_handled = true;
+					return false;
+				}
+				*command_was_handled = true;
+				return true;
+			}
+			return false;
+		};
+
+		
+#define command_hook(name, argc) else if (is_expected_command(procedure_name, procedure_name_length, name, LITERAL_STRLEN(name), argc, arg_count, &command_was_handled))
+
+		bool command_was_handled = false;
+
+		if (0) {}
+		command_hook("reboot", 0) { kernel_reboot(); }
+		command_hook("ls", 0) {
+			for (uint32_t i = 0; i < _fs.kfs->node_count; i++) {
+				KFS_Node *node = &_fs.kfs_nodes[i];
+				klog("filename: %s, filesize: %u", node->name, node->size);
+			}
+		}
+
+		command_hook("print", 1) {
+			KFS_Node *node = kfs_find_file_with_name(args[0], arg_lengths[0]);
+			if (node == 0) {
+				klog("file %.*s could not be found", arg_lengths[0], args[0]);
+			} else {
+				const uint8_t *node_data = _fs.base_data + node->offset;
+				klog("[%s]: %.*s", node->name, node->size, node_data);
+			}
+		}
+
+		if (!command_was_handled) {
+			klog("unknown command '%s'", command);
+			return false;
+		}
+		return true;
 }
 
 
-#if 1
 internal void
-kterm_redraw_if_required() {
+kterm_redraw_if_required(VGATextTerm *kterm, IOState *io) {
 	static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
 	static const uint8_t VGA_TEXT_ROW_COUNT = 25;
 	static uint8_t *VGA_TEXT_BUFFER = (uint8_t*)(0xB8000);
 
-	//TODO(Torin) This does not belong here
-	if (is_command_ready) {
-		if (string_matches_literal(input_buffer, input_buffer_count, "reboot")) {
-			kernel_reboot();
-		} else {
-			klog("unknown command");
-			memset((uint8_t *)input_buffer, 0, sizeof(input_buffer));
-			input_buffer_count = 0;
-			is_input_buffer_dirty = true;
-		}
-		is_command_ready = false;
+	if (io->is_command_ready) {
+		process_shell_command(io->input_buffer);
+		io->is_command_ready = false;
+		io->input_buffer_count = 0;
+		memset(io->input_buffer, 0, sizeof(IOState::input_buffer));
+		io->is_input_buffer_dirty = true;
 	}
 
-  if (is_output_buffer_dirty) {
+  if (io->is_output_buffer_dirty) {
 		uint8_t current_color = VGAColor_GREEN;
 		uint8_t current_row = 0, current_column = 0;
 		
-		const char *read = output_buffer;
+		const char *read = io->output_buffer;
 		while (*read != 0) {
 			size_t index = ((current_row * VGA_TEXT_COLUMN_COUNT) + current_column) * 2;
 			VGA_TEXT_BUFFER[index] = *read;
@@ -241,11 +346,11 @@ kterm_redraw_if_required() {
 				current_column = 0;
 			} 
 		}
-		is_output_buffer_dirty = false;
+		io->is_output_buffer_dirty = false;
 	}
 
 
-	if (is_input_buffer_dirty) {
+	if (io->is_input_buffer_dirty) {
 		uint32_t current_row = VGA_TEXT_ROW_COUNT - 1;
 		uint32_t current_column = 0;
 		uint32_t index = ((current_row * VGA_TEXT_COLUMN_COUNT) + current_column) * 2;
@@ -255,8 +360,8 @@ kterm_redraw_if_required() {
 		index += 2;
 		current_column += 1;
 	
-		for (uint32_t i = 0; i < input_buffer_count; i++) {
-		  VGA_TEXT_BUFFER[index] = input_buffer[i];
+		for (uint32_t i = 0; i < io->input_buffer_count; i++) {
+		  VGA_TEXT_BUFFER[index] = io->input_buffer[i];
 			VGA_TEXT_BUFFER[index+1] = VGAColor_GREEN;
 			index += 2;
 			current_column++;
@@ -269,22 +374,8 @@ kterm_redraw_if_required() {
 			index += 2;
 		}
 
-		is_input_buffer_dirty = false;
+		io->is_input_buffer_dirty = false;
 	}
-}
-
-#endif
-
-internal inline
-void idt_install_interrupt(const uint32_t irq_number, const uintptr_t irq_handler_addr) {
-  static const uint8_t INTERRUPT_GATE_32 = 0x8E;
-	static const uint8_t GDT_CODE_SEGMENT_OFFSET = 0x08;
-
-  idt_entries[irq_number].offset_0_15 = (uint16_t)(irq_handler_addr & 0xFFFF);
-  idt_entries[irq_number].offset_16_31 = (uint16_t)((irq_handler_addr >> 16) & 0xFFFF);
-  idt_entries[irq_number].code_segment_selector = GDT_CODE_SEGMENT_OFFSET;
-  idt_entries[irq_number].null_byte = 0;
-  idt_entries[irq_number].type_attributes = INTERRUPT_GATE_32; 
 }
 
 //TODO(Torin) Replace this with the apic
@@ -339,8 +430,8 @@ x86_pit_initialize(void)
 	static const uint8_t PIT_DATA_PORT2 = 0x42;
 	static const uint8_t PIT_COMMAND_PORT = 0x43;
 
-	uint8_t divisor_low = (uint8_t)(PIT_DIVISOR & 0xFF);
-	uint8_t divisor_high = (uint8_t)((PIT_DIVISOR >> 8) & 0xFF);
+	const uint8_t divisor_low = (uint8_t)(PIT_DIVISOR & 0xFF);
+	const uint8_t divisor_high = (uint8_t)((PIT_DIVISOR >> 8) & 0xFF);
 
 	write_port(PIT_COMMAND_PORT, PIT_COMMAND_REPEATING_MODE);
 	write_port(PIT_DATA_PORT0, divisor_low);
@@ -382,7 +473,21 @@ x86_gdt_initialize(void)
 extern "C" {
 
 internal void
-x86_idt_initalize() {
+x86_idt_initalize() 
+{
+
+	static auto idt_install_interrupt = [](const uint32_t irq_number, const uintptr_t irq_handler_addr) 
+	{
+		static const uint8_t INTERRUPT_GATE_32 = 0x8E;
+		static const uint8_t GDT_CODE_SEGMENT_OFFSET = 0x08;
+
+		idt_entries[irq_number].offset_0_15 = (uint16_t)(irq_handler_addr & 0xFFFF);
+		idt_entries[irq_number].offset_16_31 = (uint16_t)((irq_handler_addr >> 16) & 0xFFFF);
+		idt_entries[irq_number].code_segment_selector = GDT_CODE_SEGMENT_OFFSET;
+		idt_entries[irq_number].null_byte = 0;
+		idt_entries[irq_number].type_attributes = INTERRUPT_GATE_32; 
+	};
+
 	//Clear and initialize the idt to an unhandled stub for debugging
 	memset(idt_entries, 0, sizeof(idt_entries));
 	extern void asm_irq_unhandled_stub(void);
@@ -502,24 +607,50 @@ void safemode_checks() {
 	support_check("cpuid", cpuid_is_supported);
 	support_check("apic", cpuid_is_apic_supported);
 	support_check("longmode", cpuid_is_longmode_supported);
+	klog("=============================================");
 }
 
 export
-void kernel_entry(void) {
+void kernel_entry(MultibootInfo *mbinfo) {
+	klog("[GRUB Info]")
+	klog("grub module count: %u", mbinfo->mods_count);
+	klog("==========================================");
+
+	klog("this is a very long line of text that should wrap around the screen as you might expect that "
+			"it would; however, that functionality has not yet been implemented so this will just wrap without the tabs");
+
+
+
+
+	uint32_t *kfs_location = (uint32_t *)*((uint32_t *)(mbinfo->mods_addr));
+	uint32_t *kfs_end = (uint32_t *)*((uint32_t *)(mbinfo->mods_addr + 4));
+	KFS_Header *kfs = (KFS_Header *)kfs_location;
+	bool is_kfs_valid = (kfs->verifier == KFS_HEADER_VERIFIER);
+	klog("KFS Status: %s", is_kfs_valid ? "VALID" : "INVALID");
+	if (is_kfs_valid) {
+		klog("KFS File Count: %u", kfs->node_count);
+	}
+
+	_fs.kfs = kfs;
+	_fs.kfs_nodes = (KFS_Node *)(kfs + 1);
+	_fs.base_data = (uint8_t *)(_fs.kfs_nodes + kfs->node_count);
+
 	kterm_clear_screen();
 
 	safemode_checks();
-	
+
+
+	klog("[Kernel Initalization]");	
 	x86_gdt_initialize();
 	x86_pic8259_initalize();
 	x86_idt_initalize();
 	x86_pit_initialize();
+	kmem_initialize();
+  klog("[TwiebsOS] v0.7 Initialized");
+	klog("======================================");
 
-  klog("[TwiebsOS] v0.0 Initialized");
 
-	//kmem_initialize();
-
-#if 0
+#if 1
 
 	uint32_t *ptr = (uint32_t *)0xFFFFFFFF;
 	*ptr = 7;

@@ -82,17 +82,17 @@ irq_handler_keyboard(void) {
 		if (keycode < 0) return;
 
 		if (keycode == KEYCODE_BACKSPACE_PRESSED) {
-			if (input_buffer_count > 0) {
-				input_buffer[input_buffer_count] = 0;
-				input_buffer_count -= 1;
-				is_input_buffer_dirty = true;
+			if (_iostate.input_buffer_count > 0) {
+				_iostate.input_buffer[_iostate.input_buffer_count] = 0;
+				_iostate.input_buffer_count -= 1;
+				_iostate.is_input_buffer_dirty = true;
 			}
 		} else if (keycode == KEYCODE_ENTER_PRESSED) {
-			is_command_ready = true;
+			_iostate.is_command_ready = true;
 		} else {
-			input_buffer[input_buffer_count++] = keyboard_map[(uint32_t)keycode];
-			input_buffer[input_buffer_count] = 0;
-			is_input_buffer_dirty = true;
+			_iostate.input_buffer[_iostate.input_buffer_count++] = keyboard_map[(uint32_t)keycode];
+			_iostate.input_buffer[_iostate.input_buffer_count] = 0;
+			_iostate.is_input_buffer_dirty = true;
 		}
   }
 }
@@ -102,5 +102,5 @@ global_variable uint32_t kernel_supertick_count = 0;
 
 internal void 
 irq_handler_pit(void) {
-	kterm_redraw_if_required();
+	kterm_redraw_if_required(&_iostate);
 }

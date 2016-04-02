@@ -17,17 +17,16 @@ struct PageDirectory {
 	uint32_t page_directory_entries[1024];
 };
 
-#if 0
+#if 1
 global_variable PageDirectory _page_directory __attribute__((aligned(4096)));
 global_variable PageTable _first_page_table __attribute__((aligned(4096)));
 #endif
 
-#if 0
+#if 1
 internal void
 kmem_initialize() {
 	const uint32_t total_memory_size = 1024*1024*16;
 	const uint32_t page_count = total_memory_size / 4096;
-
 
 	memset(&_page_directory, 0, sizeof(PageDirectory));
 	_page_directory.page_directory_entries[0] = ((uintptr_t)(_first_page_table.page_table_entries)) | 3;

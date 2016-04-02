@@ -29,3 +29,29 @@ size_t strlen(const char *str) {
 }
 
 
+#define LITERAL_STRLEN(literal) (sizeof(literal) - 1)
+#define string_matches_literal(string, len, lit) strings_match(string,len, lit, LITERAL_STRLEN(lit))
+
+internal int 
+strings_match(const char *stringA, size_t lengthA, 
+		const char *stringB, size_t lengthB) {
+	if (lengthA != lengthB) return 0;
+	for (size_t i = 0; i < lengthA; i++) {
+		if (stringA[i] != stringB[i]) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+
+int is_char_alpha(char c) {
+	if ((c >= 'A' && c <= 'Z') ||
+			(c >= 'a' && c <= 'z')) {
+		return 1;
+	}
+
+	return 0;
+}
+
+

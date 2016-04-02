@@ -6,7 +6,7 @@ ata0-master: type=disk, path=disk.img, mode=flat
 
 mouse: enabled=0
 clock: sync=realtime
-cpu: count=1, ips=1500000
+cpu: count=1, ips=4294967295
 
 log: bochsout.txt
 boot: disk
