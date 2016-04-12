@@ -45,6 +45,8 @@ int main(int argc, char **argv) {
 	for (uint32_t i = 0; i < header.node_count; i++) {
 		fwrite(data[i], nodes[i].size, 1, kfs_file);
 	}
+
+
 	fclose(kfs_file);
 
 	printf("%u files written\n", header.node_count);

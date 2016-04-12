@@ -1,5 +1,14 @@
 #define LITERAL_STRLEN(literal) (sizeof(literal) - 1)
 
+#define pow(base, exponent) __builtin_pow(base, exponent)
+#define strcmp(a, b) __builtin_strcmp(a, b)
+#define strncmp(a, b, num) __builtin_strncmp(a, b, num)
+#define ldexp(x, exp) __builtin_ldexp(x, exp)
+
+#define malloc(size) kmem_alloc(size)
+#define free(size) kmem_free(size)
+#define realloc(p, newsize) kmem_realloc(p, newsize)
+
 #define memcpy_literal_and_increment(write,literal) \
 	memcpy(write, literal, LITERAL_STRLEN(literal)); \
   write += LITERAL_STRLEN(literal)
@@ -7,14 +16,13 @@
 #define memcpy(dest,src,size) __memcpy((uint8_t*)dest, (uint8_t*)src, size)
 #define memset(dest,value,size) __memset((uint8_t*)dest, value, size)
 
-inline
 void __memset(uint8_t *dest, uint8_t value, size_t size) {
   for (size_t i = 0; i < size; i++) {
 		dest[i] = value;
 	}
 }
 
-inline void __memcpy(uint8_t *dest, uint8_t *src, size_t size) {
+void __memcpy(uint8_t *dest, uint8_t *src, size_t size) {
 	for (size_t i = 0; i < size; i++) {
 		dest[i] = src[i];
 	}

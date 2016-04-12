@@ -1,4 +1,47 @@
 
+struct PageMapLevel4Table {
+	uint64_t entries[512];
+};
+
+struct PageDirectoryPointerTable {
+	uint64_t entries[512];
+};
+
+struct PageDirectoryTable {
+  uint64_t entries[512];
+};
+
+struct PageTable {
+  uint64_t entries[512];
+};
+
+global_variable PageMapLevel4Table _p4 __attribute__((aligned(4096)));
+global_variable PageDirectoryPointerTable _p3 __attribute((aligned(4096)));
+global_variable PageDirectoryTable _p2 __attribute((aligned(4096)));
+global_variable PageTable _page_tables[16] __attribute((aligned(4096)));
+
+internal void
+x64_initalize_paging() 
+{
+	static const uint64_t PRESENT_BIT 	= 1 << 0;
+	static const uint64_t WRITEABLE_BIT = 1 << 1;
+	static const uint64_t HUGE_PAGE_BIT = 1 << 7;
+
+	_p4.entries[0] = (uint64_t)(&_p3);
+	_p4.entries[0] |= (PRESENT_BIT | WRITEABLE_BIT); 
+	_p3.entries[0] = (uint64_t)(&_p2);
+	_p3.entries[0] |= (PRESENT_BIT | WRITEABLE_BIT);
+
+	for (uint64_t i = 0; i < 16; i++) 
+	{
+		uint64_t physical_address = 0x200000 * i;
+		_page_tables[i] = physical_address;
+		_page_tables[i] |= (PRESENT_BIT | WRITEABLE_BIT | HUGE_PAGE_BIT);
+	}
+}
+
+#if 0
+
 struct PageInfo {
 	uint32_t present : 1;
 	uint32_t read_write : 1;
@@ -22,6 +65,7 @@ global_variable PageDirectory _page_directory __attribute__((aligned(4096)));
 global_variable PageTable _first_page_table __attribute__((aligned(4096)));
 #endif
 
+external void asm_load_page_directory_and_enable_paging(uint32_t *pagedir);
 #if 1
 internal void
 kmem_initialize() {
@@ -34,7 +78,6 @@ kmem_initialize() {
 		_first_page_table.page_table_entries[i] = (i * 0x1000) | 0b00; 
 	}
 
-	extern void asm_load_page_directory_and_enable_paging(uint32_t *pagedir);
 	asm_load_page_directory_and_enable_paging((uint32_t *)(_page_directory.page_directory_entries));
 	klog("paging enabled");
 }
@@ -129,3 +172,4 @@ kmem_initalize() {
 #endif
 
 #undef get_memstate
+#endif
