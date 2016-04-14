@@ -24,6 +24,10 @@ section .text
 start:
 	cli
 	mov esp, stack_top
+	push 0x0
+	push ebx
+	push 0x0
+	push eax
 	mov edi, ebx
 
 	call is_multiboot2_bootloader
@@ -108,19 +112,10 @@ setup_paging_tables:
 	or eax, (PAGING_PRESENT_BIT | PAGING_WRITEABLE_BIT)
 	mov [p3_table], eax
 
-	;mov eax, 0x200000
-	;or eax, (PAGING_PRESENT_BIT | PAGING_WRITABLE_BIT | PAGING_HUGE_BIT)
-	;mov [p2_table]
-
-	mov ecx, 0
-.fill_p2_table:
-  mov eax, 0x200000
-	mul ecx
+	;Identity map the bottom 2MB for the kernels use
+	mov eax, 0x00 
 	or eax, (PAGING_PRESENT_BIT | PAGING_WRITEABLE_BIT | PAGING_HUGE_BIT)
-	mov [p2_table + ecx * 8], eax
-	inc ecx
-	cmp ecx, 512
-	jne .fill_p2_table
+	mov [p2_table], eax
 	ret
  
 enable_paging:
@@ -223,12 +218,6 @@ global p4_table
 global p3_table
 global p2_table
 
-;===============================================
-%define GDT_WRITE_ENABLED_BIT (1 << 41)
-%define GDT_IS_CODE_SEGMENT_BIT (1 << 43)
-%define GDT_TYPE_CODE_OR_DATA_BIT (1 << 44)
-%define GDT_PRESENT_BIT (1 << 47)
-%define GDT_IS_64_BIT (1 << 53)
 section .bss
 align 4096
 p4_table:
@@ -239,7 +228,6 @@ p3_table:
 align 4096
 p2_table:
   resb 4096
-
 stack_bottom:
   resb 8192
 stack_top:

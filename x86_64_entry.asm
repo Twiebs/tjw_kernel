@@ -14,5 +14,9 @@ asm_longmode_entry:
 	mov ax, 0x00
 	mov ss, ax
 
+	;Grub Multiboot info
+	pop rdi ;Magic
+	pop rsi ;Header Address
+
 	call kernel_longmode_entry	
 	hlt

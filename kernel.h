@@ -3,11 +3,18 @@
 #define internal static 
 #define global_variable static 
 
-#define kassert(expr, msg) stdout_write_fmt(&_iostate, msg)
+#define kassert(expr) if(!(expr)) { stdout_write_fmt(&_iostate, "[ERROR] ASSERTION FIRED: " #expr); kpanic(); }
+
 #define kerror(...) stdout_write_fmt(&_iostate, __VA_ARGS__)
 #define klog(...) stdout_write_fmt(&_iostate, __VA_ARGS__)
 #define kdebug(...) stdout_write_fmt(&_iostate, __VA_ARGS__)
-#define kpanic(...) stdout_write_fmt(&_iostate, __VA_ARGS__); kterm_redraw_if_required(&_kterm, &_iostate)
+
+#define klog_debug(...) stdout_write_fmt(&_iostate, __VA_ARGS__)
+#define klog_error(...) stdout_write_fmt(&_iostate, __VA_ARGS__)
+
+#define kpanic() kterm_redraw_if_required(&_kterm, &_iostate); \
+	asm volatile ("cli"); \
+	asm volatile ("hlt")
 
 #define DEBUG_LOG(msg) bochs_write_string(msg)
 
