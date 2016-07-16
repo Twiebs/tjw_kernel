@@ -1,3 +1,5 @@
+#if 0
+
 #include <stdint.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -294,3 +296,4 @@ void safemode_checks() {
 }
 #endif
 
+#endif

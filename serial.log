@@ -1,0 +1,20 @@
+PIC8259 Initialized and Remaped
+PIT initialized!
+IDT initialized
+amultiboot_info_size is 0x00000450
+found mbtag: 0x00000001
+found mbtag: 0x00000002
+found mbtag: 0x0000000A
+found mbtag: 0x00000006
+found mbtag: 0x00000009
+found mbtag: 0x00000004
+found mbtag: 0x00000005
+found mbtag: 0x00000008
+found mbtag: 0x0000000E
+found acpi old data
+rsdp is valid, rsdt physical address: 0xBFFE1737
+[kmem] page was allocated at physical_address 0x00000000BFFE1000 to map to virtual address 0x0000000400000000, the offset from the actual requested physical_addresss(0x00000000BFFE1737) is 0x0000000000000737, the page table entry is 0x00000000BFFE1083
+software interrupt recieved: 0x0000000E
+error_code: 0x00000000
+rip: 0x00000000
+Page Fault (page is non-present, caused by page read, happened in kernel-mode, reserved bits are fine, caused by data access, faulting_address: 0x0000000400000737)

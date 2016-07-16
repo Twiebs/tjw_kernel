@@ -120,12 +120,11 @@ stdout_write_fmt(IOState *io, const char *fmt, ...) {
 	io->output_buffer_entry_count++;
 	io->is_output_buffer_dirty = true;
 
-#ifdef KERNEL_BUILD_DEBUG
-	for (size_t i = 0; i < bytes_written; i++) {
-		write_port(COM1_PORT, buffer_begin[i]);
+
+	for (size_t i = 0; i < bytes_written - 1; i++) {
+		write_serial(buffer_begin[i]);
 	}
-	write_port(COM1_PORT, '\n');
-#endif
+	write_serial('\n');
 }
 
 

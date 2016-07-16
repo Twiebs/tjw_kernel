@@ -22,9 +22,9 @@ exit
 #endif
 
 #if defined(BUILD_IS_RUNNING)
-	nasm -felf64 x86_64_boot.asm -o x86_64_boot.asm.o
-	nasm -felf64 x86_64_entry.asm -o x86_64_entry.asm.o
-	gcc DEBUG_FLAGS -m64 -mno-red-zone -nostdlib -ffreestanding -c build.c -o build.c.o
+	nasm -felf64 src/x86_64_boot.asm 	-isrc/ -o x86_64_boot.asm.o
+	nasm -felf64 src/x86_64_entry.asm -isrc/ -o x86_64_entry.asm.o
+	gcc DEBUG_FLAGS -m64 -mno-red-zone -nostdlib -ffreestanding -I../tjw_kernel/src -c build.c -o build.c.o
 	ld -melf_x86_64 -n -T kernel_link.ld -o bin/kernel x86_64_boot.asm.o x86_64_entry.asm.o build.c.o
 #if defined(BUILD_DEBUG)
 	objcopy --only-keep-debug bin/kernel bin/debug_symbols
@@ -40,18 +40,18 @@ exit
 #include <stddef.h>
 #include <stdbool.h>
 
-#include "kernel.h"
-#include "kernel_io.h"
+#include "src/kernel.h"
+#include "src/kernel_io.h"
 
-#include "utility.h"
-#include "filesystem_kernel.h"
-#include "hardware_keyboard.h"
-#include "video_vga_text.h"
-#include "interrupt_handlers.h"
+#include "src/utility.h"
+#include "src/filesystem_kernel.h"
+#include "src/hardware_keyboard.h"
+#include "src/video_vga_text.h"
+#include "src/interrupt_handlers.h"
 
-#include "x86_64_entry.c"
-#include "interrupt_handler.c"
-#include "kernel_io.c"
-#include "video_vga_text.c"
-#include "filesystem_kernel.cpp"
+#include "src/x86_64_entry.c"
+#include "src/interrupt_handler.c"
+#include "src/kernel_io.c"
+#include "src/video_vga_text.c"
+#include "src/filesystem_kernel.cpp"
 #endif

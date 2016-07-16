@@ -1,3 +1,4 @@
+// NOTE(Torin)
 // X86_64 Kernel Entry Point
 // This x86_64_kernel_entry is called after
 // the computer has been booted with a multiboot2 compliant
@@ -129,7 +130,7 @@ void parse_root_system_descriptor(RSDP_Descriptor_1 *rsdp) {
 		uint64_t virtual_offset = 0;
 		uint64_t virtual_page_address = silly_page_map(rsdp->rsdt_address, &virtual_offset);
 		uint64_t virtual_header_address = (virtual_page_address + virtual_offset);
-#if 0		
+#if 1
 		ACPI_SDT_Header *acpi_header = (ACPI_SDT_Header *)(virtual_header_address);
 		if (acpi_header->signature == ACPI_MADT_SIGNATURE) {
 			klog_debug("found MADT table");
@@ -143,6 +144,7 @@ void parse_root_system_descriptor(RSDP_Descriptor_1 *rsdp) {
 		klog_debug("rsdp->is invalid!");
 	}
 
+  klog_debug("parsed root_system_descriptor");
 }
 
 internal void
@@ -159,10 +161,9 @@ apic_initalize(uintptr_t apic_register_base)
 		write_port(PIC2_DATA_PORT, 0b11111111);
 	}
 
-	{ //Set the APIC SIVR
+	{ //Set the APIC Spuritous interput vector Register
 		static const uint64_t APIC_SPURIOUS_INTERRUPT_VECTOR_REGISTER_OFFSET = 0xF0;
-
-		//Interrupt Command Register
+		//APIC Interrupt Command Register
 		static const uint64_t APIC_ICR1_OFFSET = 0x300;
 		static const uint64_t APIC_ICR2_OFFSET = 0x310;
 
@@ -170,9 +171,9 @@ apic_initalize(uintptr_t apic_register_base)
 		*sivr = 0xFF;
 	}
 
+  klog_debug("apic initalized");
 	asm volatile("sti");
 }
-
 
 internal void
 x86_pic8259_initalize(void)
@@ -203,15 +204,15 @@ x86_pic8259_initalize(void)
 	//NOTE(Torin) Currently set to 80x86
 	write_port(PIC1_DATA_PORT, ICW4_8068);
 	write_port(PIC2_DATA_PORT, ICW4_8068);
-	
+
 	write_port(PIC1_DATA_PORT, 0x20);
 	write_port(PIC2_DATA_PORT, 0x20);
-	write_port(PIC1_DATA_PORT, 0b11111111);
+	write_port(PIC1_DATA_PORT, 0b11111101);
 	write_port(PIC2_DATA_PORT, 0b11111111);
 	klog("PIC8259 Initialized and Remaped");
 }
 
-	internal void
+internal void
 x86_pit_initialize(void)  
 { //@Initialize @pit @PIT
 	//TODO(Torin) This frequency thing is probably bogus and needs to be
@@ -234,7 +235,8 @@ x86_pit_initialize(void)
 }
 
 internal void 
-vga_text_clear_screen() {  
+vga_text_clear_screen() 
+{  
 	static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
 	static const uint8_t VGA_TEXT_ROW_COUNT = 25;
 	uint8_t *VGA_TEXT_BUFFER = (uint8_t*)(0xB8000);
@@ -248,20 +250,17 @@ idt_install_interrupt(const uint32_t irq_number, const uint64_t irq_handler_addr
 	static const uint64_t PRIVILEGE_LEVEL_0 = 0b00000000;
 	static const uint64_t PRIVILEGE_LEVEL_3 = 0b01100000;
 	static const uint64_t PRESENT_BIT = (1 << 7); 
+	
+	static const uint64_t TYPE_TASK_GATE_64 = 0x5;
+	static const uint64_t TYPE_INTERRUPT_GATE_64 = 0xE;
+	static const uint64_t TYPE_TRAP_GATE_64 = 0xF;
 
-	//While running in long mode these flags are redefined to be 64bits
-	//NOTE(Torin) See AMD64 VOL2 247
-	static const uint64_t TYPE_TASK_GATE_32 = 0x5;
-	static const uint64_t TYPE_INTERRUPT_GATE_32 = 0xE;
-	static const uint64_t TYPE_TRAP_GATE_32 = 0xF;
-
-	//Offset setup in protected mode assembly before the switch to long mode
 	static const uint8_t GDT_CODE_SEGMENT_OFFSET = 0x08;
 	
 	_idt[irq_number].offset_0_15 = (uint16_t)(irq_handler_addr & 0xFFFF);
 	_idt[irq_number].offset_16_31 = (uint16_t)((irq_handler_addr >> 16) & 0xFFFF);
 	_idt[irq_number].offset_32_63 = (uint32_t)((irq_handler_addr >> 32) & 0xFFFFFFFF);
-	_idt[irq_number].type_and_attributes = PRESENT_BIT | TYPE_INTERRUPT_GATE_32 | PRIVILEGE_LEVEL_0; 
+	_idt[irq_number].type_and_attributes = PRESENT_BIT | TYPE_INTERRUPT_GATE_64 | PRIVILEGE_LEVEL_0; 
 	_idt[irq_number].code_segment_selector = GDT_CODE_SEGMENT_OFFSET;
 	_idt[irq_number].ist = 0;
 }
@@ -382,17 +381,17 @@ extern uintptr_t p3_table;
 extern PageTable p2_table;
 global_variable uint32_t current_page_index;
 
-
-internal uint64_t
-silly_page_map(const uint64_t requested_physical_address, uint64_t *offset) 
-{
+//NOTE(Torin) A simple and dirty page map that maps an entire
+//2MB physical memory block into the virtual address space
+static uint64_t //page_virtual_address
+silly_page_map(const uint64_t requested_physical_address, uint64_t *offset) {
 	static const uint64_t PAGING_PRESENT_BIT 		= (1 << 0);
 	static const uint64_t PAGING_WRITEABLE_BIT 	= (1 << 1);
 	static const uint64_t PAGING_HUGE_BIT 			= (1 << 7);
 
-	//If the physical address is unaligned on a page boundray we map the physical address
-	//offseted by the displacement from the last page boundray and return the offset from the
-	//actualy requested address
+	//NOTE(Torin) if requested_physical_address is not aligned to a page boundray 
+  //the resulting virtual_address is aligned to nearest page boundray and the offset into
+  //the result virtual_address is set to the offset output parameter
 	uint64_t physical_address_to_map = requested_physical_address;
 	uint64_t displacement_from_page_boundray = requested_physical_address & 0xFFF;
 	if (displacement_from_page_boundray > 0) {
@@ -402,15 +401,40 @@ silly_page_map(const uint64_t requested_physical_address, uint64_t *offset)
 	p2_table.entries[current_page_index] = physical_address_to_map | 
 		PAGING_PRESENT_BIT | PAGING_WRITEABLE_BIT | PAGING_HUGE_BIT;
 
-	uint64_t maped_virtual_address = current_page_index * 0x200000;
-	current_page_index += 1;
+	struct VirtualAddress {
+		uint64_t sign_extend: 16;
+		uint64_t p4_offset: 9;
+		uint64_t p3_offset: 9;
+		uint64_t p2_offset: 9;
+		uint64_t page_offset: 21;
+	} __attribute__((packed)) mapped_virtual_address;
+
+	uint64_t p4_offset = 0;
+	uint64_t p3_offset = 0;
+	uint64_t p2_offset = current_page_index;
+	uint64_t page_offset = displacement_from_page_boundray;
+	kassert(p4_offset < 512);
+	kassert(p3_offset < 512);
+	kassert(p2_offset < 512);
+	kassert(page_offset < 0x200000);
+
+	mapped_virtual_address.page_offset = 0; 
+	mapped_virtual_address.p2_offset = p2_offset;
+	mapped_virtual_address.p3_offset = p3_offset;
+	mapped_virtual_address.p4_offset = p4_offset;
+	mapped_virtual_address.sign_extend = (p4_offset & (1 << 8)) ? ((1 << 16) - 1) : 0;
+	
 	*offset = displacement_from_page_boundray;
 
 	klog_debug("[kmem] page was allocated at physical_address %lu to map to virtual address %lu, "
-			"the offset from the actual requested physical_addresss(%lu) is %lu", 
-			physical_address_to_map, maped_virtual_address, requested_physical_address, *offset);
+    "the offset from the actual requested physical_addresss(%lu) is %lu, "
+    "the page table entry is %lu",
+    physical_address_to_map, mapped_virtual_address, requested_physical_address, 
+    *offset, p2_table.entries[current_page_index]);
 
-	return maped_virtual_address;
+	current_page_index += 1;
+	uint64_t result = *((uint64_t *)&mapped_virtual_address);
+	return result;
 }
 
 internal void
@@ -421,6 +445,8 @@ kmem_initalize() {
 
 #include "multiboot2.h"
 
+#include "hardware_serial.cpp"
+
 export void 
 kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) 
 {
@@ -428,6 +454,9 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 	x86_pit_initialize();
 	x86_64_idt_initalize();
 	kmem_initalize();
+
+	serial_debug_init();
+	write_serial('a');
 
 	if (multiboot2_magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
 		klog_error("the kernel was not booted with a multiboot2 compliant bootloader!");
@@ -475,13 +504,11 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 	uint64_t apic_virtual_offset = 0;
 	uint64_t apic_virtual_address = silly_page_map(0xFEC00000, &apic_virtual_offset);
 	kassert(apic_virtual_offset == 0);
-	apic_initalize(apic_virtual_address);
 
-#warning Make the console scroll properly before continuing!
-	kdebug("garbage test");
-	kdebug("garbage test");
-	kdebug("garbage test");
-	kdebug("garbage test");
+	//apic_initalize(apic_virtual_address);
+
+	uint64_t *foobar = (uint64_t *)(0x950012);
+	//*foobar = 7;
 
 	while (1) { 
 		kterm_redraw_if_required(&_kterm, &_iostate);
