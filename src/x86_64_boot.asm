@@ -104,18 +104,18 @@ setup_paging_tables:
 	%define PAGING_DISABLE_CACHE (1 << 4)
 	%define PAGING_HUGE_BIT 				(1 << 7)
 
-	mov eax, p3_table
+	mov eax, g_p3_table
 	or eax, (PAGING_PRESENT_BIT | PAGING_WRITEABLE_BIT) 
-	mov [p4_table], eax
+	mov [g_p4_table], eax
 
-	mov eax, p2_table
+	mov eax, g_p2_table
 	or eax, (PAGING_PRESENT_BIT | PAGING_WRITEABLE_BIT)
-	mov [p3_table], eax
+	mov [g_p3_table], eax
 
 	;Identity map the bottom 2MB for the kernels use
 	mov eax, 0x00 
 	or eax, (PAGING_PRESENT_BIT | PAGING_WRITEABLE_BIT | PAGING_HUGE_BIT)
-	mov [p2_table], eax
+	mov [g_p2_table], eax
 	ret
  
 enable_paging:
@@ -125,7 +125,7 @@ enable_paging:
 	%define EFLAGS_ID_BIT (1 << 21)
 	%define EFER_MSR (0xC0000080)
 
-	mov eax, p4_table
+	mov eax, g_p4_table
 	mov cr3, eax
 
 	mov eax, cr4                 
@@ -214,19 +214,19 @@ error_handler:
 	mov byte  [0xb800a], al
 	hlt
 
-global p4_table
-global p3_table
-global p2_table
+global g_p4_table
+global g_p3_table
+global g_p2_table
 
 section .bss
 align 4096
-p4_table:
+g_p4_table:
   resb 4096
 align 4096
-p3_table:
+g_p3_table:
   resb 4096
 align 4096
-p2_table:
+g_p2_table:
   resb 4096
 stack_bottom:
   resb 8192

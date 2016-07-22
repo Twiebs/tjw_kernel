@@ -1,175 +1,120 @@
+//NOTE(Torin) Some conventions used in the kernel
+//p4 is the PML4E
+//p3 is the PDPE
+//p2 is the PDE
+//p1 is the PTE
 
-struct PageMapLevel4Table {
-	uint64_t entries[512];
-};
+typedef struct {
+	uintptr_t entries[512];
+} PageTable;
 
-struct PageDirectoryPointerTable {
-	uint64_t entries[512];
-};
+extern PageTable g_p4_table;
+extern PageTable g_p3_table;
+extern PageTable g_p2_table;
+global_variable uint32_t g_current_page_index;
 
-struct PageDirectoryTable {
-  uint64_t entries[512];
-};
 
-struct PageTable {
-  uint64_t entries[512];
-};
+//static const uint64_t PAGE_NO_EXECUTE_BIT         = 1 << 63;
+static const uint64_t PAGE_PRESENT_BIT 		        = 1 << 0;
+static const uint64_t PAGE_WRITEABLE_BIT 	        = 1 << 1;
+static const uint64_t PAGE_USER_ACCESS_BIT        = 1 << 2;
+static const uint64_t PAGE_WRITE_TROUGH_CACHE_BIT = 1 << 3;
+static const uint64_t PAGE_DISABLE_CACHE_BIT      = 1 << 4;
+static const uint64_t PAGE_ACCESSED_BIT           = 1 << 5;
+static const uint64_t PAGE_DIRY_BIT               = 1 << 6;
+static const uint64_t PAGE_HUGE_BIT 			        = 1 << 7;
+static const uint64_t PAGE_GLOBAL_BIT             = 1 << 8;
 
-global_variable PageMapLevel4Table _p4 __attribute__((aligned(4096)));
-global_variable PageDirectoryPointerTable _p3 __attribute((aligned(4096)));
-global_variable PageDirectoryTable _p2 __attribute((aligned(4096)));
-global_variable PageTable _page_tables[16] __attribute((aligned(4096)));
-
-internal void
-x64_initalize_paging() 
+static void
+log_page_info()
 {
-	static const uint64_t PRESENT_BIT 	= 1 << 0;
-	static const uint64_t WRITEABLE_BIT = 1 << 1;
-	static const uint64_t HUGE_PAGE_BIT = 1 << 7;
-
-	_p4.entries[0] = (uint64_t)(&_p3);
-	_p4.entries[0] |= (PRESENT_BIT | WRITEABLE_BIT); 
-	_p3.entries[0] = (uint64_t)(&_p2);
-	_p3.entries[0] |= (PRESENT_BIT | WRITEABLE_BIT);
-
-	for (uint64_t i = 0; i < 16; i++) 
-	{
-		uint64_t physical_address = 0x200000 * i;
-		_page_tables[i] = physical_address;
-		_page_tables[i] |= (PRESENT_BIT | WRITEABLE_BIT | HUGE_PAGE_BIT);
-	}
+  for(size_t i = 0; i < g_current_page_index; i++){
+    bool is_present = g_p2_table.entries[i] & 0b01;
+    uintptr_t physical_address = g_p2_table.entries[i] & ~(0b111111111111);
+    uintptr_t virtual_address = i * 1024 * 1024 * 2;
+    klog("page_entry: virtual %lu mapped to %lu", virtual_address, physical_address);
+  }
 }
 
-#if 0
+static void
+print_page_table_entry_info(const uintptr_t entry)
+{
+  uintptr_t physical_address = entry & ~0xFFF;
+  bool is_present = entry & PAGE_PRESENT_BIT;
+  bool is_writeable = entry & PAGE_WRITEABLE_BIT;
+  bool access_mode = entry & PAGE_USER_ACCESS_BIT;
+  bool is_write_through_caching = entry & PAGE_WRITE_TROUGH_CACHE_BIT;
+  bool is_caching_disabled = entry & PAGE_DISABLE_CACHE_BIT;
+  bool is_huge_page = entry & PAGE_HUGE_BIT;
 
-struct PageInfo {
-	uint32_t present : 1;
-	uint32_t read_write : 1;
-	uint32_t user_mode: 1;
-	uint32_t is_accessed : 1;
-	uint32_t is_dirty : 1;
-	uint32_t _UNUSED : 7;
-	uint32_t frame_addr : 20;
-};
-
-struct PageTable {
-	uint32_t page_table_entries[1024];
-};
-
-struct PageDirectory {
-	uint32_t page_directory_entries[1024];
-};
-
-#if 1
-global_variable PageDirectory _page_directory __attribute__((aligned(4096)));
-global_variable PageTable _first_page_table __attribute__((aligned(4096)));
-#endif
-
-external void asm_load_page_directory_and_enable_paging(uint32_t *pagedir);
-#if 1
-internal void
-kmem_initialize() {
-	const uint32_t total_memory_size = 1024*1024*16;
-	const uint32_t page_count = total_memory_size / 4096;
-
-	memset(&_page_directory, 0, sizeof(PageDirectory));
-	_page_directory.page_directory_entries[0] = ((uintptr_t)(_first_page_table.page_table_entries)) | 3;
-	for (uint32_t i = 0; i < 1024; i++) {
-		_first_page_table.page_table_entries[i] = (i * 0x1000) | 0b00; 
-	}
-
-	asm_load_page_directory_and_enable_paging((uint32_t *)(_page_directory.page_directory_entries));
-	klog("paging enabled");
-}
-#endif
-
-#if 0
-struct PageDirectory {
-	PageTable *tables[1024];
-	uint32_t table_physical_addr[1024];
-	uint32_t physical_addr;
-};
-
-struct MemoryState {
-	uint32_t placement_address;
-	uint32_t active_frame_count;
-	uint32_t *frame_state_bitsets;
-	PageDirectory *page_directory;
-	PageDirectory *current_directory;
-};
-
-global_variable MemoryState __kmemstate;
-internal inline MemoryState *___get_memstate() {
-	return &__kmemstate;
+  klog_debug("physical_address: %lu", physical_address);
+  klog_debug("present: %s", is_present ? "true" : "false");
+  klog_debug("writeable: %s", is_writeable ? "true" : "false");
+  klog_debug("user accessiable: %s", access_mode ? "true" : "false");
+  klog_debug("write through caching: %s", is_write_through_caching ? "true" : "false");
+  klog_debug("caching disabled: %s", is_caching_disabled ? "true" : "false");
+  klog_debug("huge page: %s", is_huge_page ? "true" : "false"); 
 }
 
-#define get_memstate ___get_memstate
+static void 
+print_virtual_address_info_2MB(const uintptr_t virtual_address)
+{
+  uint64_t p4_index = (virtual_address >> 39) & 0x1FF;
+  uint64_t p3_index = (virtual_address >> 30) & 0x1FF;
+  uint64_t p2_index = (virtual_address >> 21) & 0x1FF;
+  uint64_t offset   = (virtual_address >> 0)  & 0xFFFFF;
 
-internal uintptr_t 
-kmem_allocate(size_t size, uint32_t alignment) {
-	MemoryState *memstate = get_memstate();
-	uintptr_t alignment_mask = alignment - 1;
-	if (memstate->placement_address & alignment_mask) {
-		uintptr_t alignment_offset = alignment - (memstate->placement_address & alignment_mask);
-		memstate->placement_address += alignment_offset;
-	}
+  klog_debug("p4_index: %lu", p4_index);
+  klog_debug("p3_index: %lu", p3_index);
+  klog_debug("p2_index: %lu", p2_index);
+  klog_debug("offset: %lu", offset);
 
-	uintptr_t result = _kmemstate.placement_address;
-	_kmemstate.placement_address += size;
-	return result;
+  klog_debug("p4_entry_info:");
+  print_page_table_entry_info(g_p4_table.entries[p4_index]);
+  klog_debug("p3_entry_info:");
+  print_page_table_entry_info(g_p3_table.entries[p3_index]);
+  klog_debug("p2_entry_info:");
+  print_page_table_entry_info(g_p2_table.entries[p2_index]);
 }
 
-internal uintptr_t 
-kmem_find_first_available_frame() {
-	MemoryState *memstate = get_memstate();
-	uint32_t frame_state_bitset_array_count = _frame_count / 32;
-	for (uint32_t i = 0; i < frame_state_bitset_array_count; i++) {
-		if (memstate->frames[i] != 0xFFFFFFFF) {
-			for (uint32_t j = 0; j < 32; j++) {
-				uint32_t mask = 0x1 << j;
-				if (!(memstate->frames[i] & mask)) {
-					return i * 4 * 8 + j
-				}
-			}
-		}
-	}
+//NOTE(Torin) A simple and dirty page map that maps an entire
+//2MB physical memory block into the virtual address space
+static uintptr_t //page_virtual_address
+silly_page_map(const uintptr_t requested_physical_address, uintptr_t *offset, bool is_writeable)
+{
+  //TODO(Torin) Make sure pages default to using the NOEXECUTE bit and have a seperate mechanisim
+  //inplace for when ELF executables are loaded so that allocated memory can never be executed from
+
+  //NOTE(Torin) Bits 9 - 11 and Bits 52-62 are can be used freely
+	//NOTE(Torin) if requested_physical_address is not aligned to a page boundray 
+  //the resulting virtual_address is aligned to nearest page boundray and the offset into
+  //the result virtual_address is set to the offset output parameter
+
+  //NOTE(Torin) 2MB pages must be aligned on a 2MB boundray not 4KB	
+  uint64_t physical_address_to_map = requested_physical_address;
+	uint64_t displacement_from_page_boundray = requested_physical_address & 0x1FFFFF;
+  physical_address_to_map -= displacement_from_page_boundray;
+
+	g_p2_table.entries[g_current_page_index] = physical_address_to_map | PAGE_PRESENT_BIT | PAGE_HUGE_BIT;
+  if(is_writeable) g_p2_table.entries[g_current_page_index] |= PAGE_WRITEABLE_BIT;
+
+  uintptr_t mapped_virtual_address = g_current_page_index * 1024 * 1024 * 2;
+	*offset = displacement_from_page_boundray;
+	g_current_page_index += 1;
+
+	klog_debug("[kmem] page was allocated at physical_address %lu to map to virtual address %lu, "
+    "the offset from the actual requested physical_addresss(%lu) is %lu, "
+    "the page table entry is %lu",
+    physical_address_to_map, mapped_virtual_address, requested_physical_address, 
+    *offset, g_p2_table.entries[g_current_page_index]);
+	return mapped_virtual_address;
 }
 
-internal PageInfo 
-kmem_frame_allocate() {
+static inline
+void kmem_initalize(){
+	g_current_page_index = 1;
 	
-
+  kdebug("p4_table is at addr: %lu", &g_p4_table);
+	kdebug("p3_table is at addr: %lu", &g_p3_table);
+	kdebug("p2_table is at addr: %lu", &g_p2_table);
 }
-
-internal void 
-kmem_frame_release(PageInfo *info) {
-
-}
-
-internal void
-kmem_initalize() {
-	MemoryState *memstate = get_memstate();
-
-	//TODO(Torin) This is absurd  
-	uintptr_t mem_end_page = 0x1000000;
-	memstate->frame_count = mem_end_page / 0x1000;
-	memstate->frame_state_bitsets = 
-		(uint32_t *)kmem_allocate(memstate->frame_count / 32);
-	memset(memstate->frame_state_bitsets, 0, memstate->frame_count / 32);
-
-	//TODO(Torin) This is even worse
-	memstate->page_directory = (PageDirectory *)kmem_allocate(sizeof(PageDirectory));
-	memset(memestate->page_directory, 0, sizeof(PageDirectory));
-	memstate->current_directory = memstate->page_directory;
-
-	uint32_t i = 0;
-	while (i < placement_address) {
-		kmem_frame_
-	}
-
-
-}
-#endif
-
-#undef get_memstate
-#endif

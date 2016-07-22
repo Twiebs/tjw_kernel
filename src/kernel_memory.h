@@ -1,0 +1,1 @@
+internal uint64_t silly_page_map(uint64_t physical_address, uint64_t *offset, bool is_writeable);

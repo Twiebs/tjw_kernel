@@ -1,6 +1,6 @@
 bits 64
 
-%include "interrupt.asm"
+%include "interrupt_handler.asm"
 
 global asm_longmode_entry
 extern kernel_longmode_entry

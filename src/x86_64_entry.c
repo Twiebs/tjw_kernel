@@ -35,117 +35,7 @@ global_variable IOState _iostate;
 global_variable FileSystem _fs;
 global_variable VGATextTerm _kterm;
 
-//=================================================================
-
-static const uint8_t MADT_ENTRY_TYPE_PROCESSOR_LOCAL_APIC = 0;
-static const uint8_t MADT_ENTRY_TYPE_IO_APIC = 1;
-static const uint8_t MADT_ENTRY_TYPE_INTERRUPT_SOURCE_OVERRIDE = 2;
-
-typedef struct {
-  uint8_t signature[8];
-	uint8_t check_sum;
-	uint8_t oem_id[6];
-	uint8_t revision;
-	uint32_t rsdt_address;
-} __attribute__((packed)) RSDP_Descriptor_1;
-
-typedef struct {
-	RSDP_Descriptor_1 first_part;
-	uint32_t length;
-	uint64_t xsdt_address;
-	uint8_t extended_checksum;
-	uint8_t reserved[3];
-} __attribute__((packed)) RSDP_Descriptor_2;
-
-typedef struct {
-	uint32_t signature;
-	uint32_t length;
-	uint8_t revision;
-	uint8_t checksum;
-	uint8_t oem_id[6];
-	uint64_t oem_table_id;
-	uint32_t oem_revision;
-	uint32_t creator_id;
-	uint32_t creator_revision;
-} __attribute__((packed)) ACPI_SDT_Header;
-
-typedef struct {
-	uint32_t signature;
-	uint32_t length;
-	uint8_t revision;
-	uint8_t checksum;
-	uint8_t oem_id[6];
-	uint64_t oem_table_id;
-	uint32_t oem_revision;
-	uint32_t creator_id;
-	uint32_t creator_revision;
-	uint32_t local_controler_address;
-	uint32_t flags;
-} __attribute__((packed)) MADT_Header;
-
-typedef struct {
-	uint8_t entry_type;
-	uint8_t entry_length;
-} MADT_Entry;
-
-typedef struct  {
-	uint8_t acpi_processor_id;
-	uint8_t apic_id;
-	uint32_t flags;
-} MADT_Entry_Processor_Local_APIC;
-
-typedef struct {
-	uint8_t io_apic_id;
-	uint8_t reserved;
-	uint32_t io_apic_address;
-	uint32_t global_system_interrupt_base;
-} MADT_Entry_IO_APIC;
-
-typedef struct {
-	uint8_t bus_source;
-	uint8_t irq_source;
-	uint32_t global_system_interrupt;
-	uint16_t flags;
-} MADT_Entry_Interrupt_Source_Override;
-
-internal uint64_t silly_page_map(uint64_t physical_address, uint64_t *offset);
-
-
-void parse_root_system_descriptor(RSDP_Descriptor_1 *rsdp) {
-	if (rsdp->signature[0] == 'R' &&
-			rsdp->signature[1] == 'S' &&
-			rsdp->signature[2] == 'D' &&
-			rsdp->signature[3] == ' ' &&
-			rsdp->signature[4] == 'P' &&
-			rsdp->signature[5] == 'T' &&
-			rsdp->signature[6] == 'R' &&
-			rsdp->signature[7] == ' ') 
-	{
-
-
-		static const uint32_t ACPI_MADT_SIGNATURE = ('C' << 24) | ('I' << 16) | ('P' << 8) | ('A');
-
-		klog_debug("rsdp is valid, rsdt physical address: %u", rsdp->rsdt_address);
-
-		uint64_t virtual_offset = 0;
-		uint64_t virtual_page_address = silly_page_map(rsdp->rsdt_address, &virtual_offset);
-		uint64_t virtual_header_address = (virtual_page_address + virtual_offset);
-#if 1
-		ACPI_SDT_Header *acpi_header = (ACPI_SDT_Header *)(virtual_header_address);
-		if (acpi_header->signature == ACPI_MADT_SIGNATURE) {
-			klog_debug("found MADT table");
-		}
-#endif
-
-	} 
-	
-	else 
-	{
-		klog_debug("rsdp->is invalid!");
-	}
-
-  klog_debug("parsed root_system_descriptor");
-}
+#include "kernel_acpi.c"
 
 internal void
 apic_initalize(uintptr_t apic_register_base) 
@@ -183,6 +73,7 @@ x86_pic8259_initalize(void)
 	static const uint8_t PIC1_DATA_PORT = 0x21;
 	static const uint8_t PIC2_DATA_PORT = 0xA1;
 
+	//Initalization Command Words (ICW)
 	static const uint8_t ICW1_INIT_CASCADED = 0x11;
 	static const uint8_t ICW2_PIC1_IRQ_NUMBER_BEGIN = 0x20;
 	static const uint8_t ICW2_PIC2_IRQ_NUMBER_BEGIN = 0x28;
@@ -190,7 +81,6 @@ x86_pic8259_initalize(void)
 	static const uint8_t ICW3_PIC2_IRQ_LINE_2 = 0x2;
 	static const uint8_t ICW4_8068 = 0x01;
 
-	//Initalization Command Words (ICW)
 	//ICW1 Tells PIC to wait for 3 more words
 	write_port(PIC1_COMMAND_PORT, ICW1_INIT_CASCADED);
 	write_port(PIC2_COMMAND_PORT, ICW1_INIT_CASCADED);
@@ -370,93 +260,18 @@ x86_64_idt_initalize()
   klog("IDT initialized");
 }
 
-
-typedef struct {
-	uintptr_t entries[512];
-} PageTable;
-
-
-extern uintptr_t p4_table;
-extern uintptr_t p3_table;
-extern PageTable p2_table;
-global_variable uint32_t current_page_index;
-
-//NOTE(Torin) A simple and dirty page map that maps an entire
-//2MB physical memory block into the virtual address space
-static uint64_t //page_virtual_address
-silly_page_map(const uint64_t requested_physical_address, uint64_t *offset) {
-	static const uint64_t PAGING_PRESENT_BIT 		= (1 << 0);
-	static const uint64_t PAGING_WRITEABLE_BIT 	= (1 << 1);
-	static const uint64_t PAGING_HUGE_BIT 			= (1 << 7);
-
-	//NOTE(Torin) if requested_physical_address is not aligned to a page boundray 
-  //the resulting virtual_address is aligned to nearest page boundray and the offset into
-  //the result virtual_address is set to the offset output parameter
-	uint64_t physical_address_to_map = requested_physical_address;
-	uint64_t displacement_from_page_boundray = requested_physical_address & 0xFFF;
-	if (displacement_from_page_boundray > 0) {
-		physical_address_to_map -= displacement_from_page_boundray;
-	}
-
-	p2_table.entries[current_page_index] = physical_address_to_map | 
-		PAGING_PRESENT_BIT | PAGING_WRITEABLE_BIT | PAGING_HUGE_BIT;
-
-	struct VirtualAddress {
-		uint64_t sign_extend: 16;
-		uint64_t p4_offset: 9;
-		uint64_t p3_offset: 9;
-		uint64_t p2_offset: 9;
-		uint64_t page_offset: 21;
-	} __attribute__((packed)) mapped_virtual_address;
-
-	uint64_t p4_offset = 0;
-	uint64_t p3_offset = 0;
-	uint64_t p2_offset = current_page_index;
-	uint64_t page_offset = displacement_from_page_boundray;
-	kassert(p4_offset < 512);
-	kassert(p3_offset < 512);
-	kassert(p2_offset < 512);
-	kassert(page_offset < 0x200000);
-
-	mapped_virtual_address.page_offset = 0; 
-	mapped_virtual_address.p2_offset = p2_offset;
-	mapped_virtual_address.p3_offset = p3_offset;
-	mapped_virtual_address.p4_offset = p4_offset;
-	mapped_virtual_address.sign_extend = (p4_offset & (1 << 8)) ? ((1 << 16) - 1) : 0;
-	
-	*offset = displacement_from_page_boundray;
-
-	klog_debug("[kmem] page was allocated at physical_address %lu to map to virtual address %lu, "
-    "the offset from the actual requested physical_addresss(%lu) is %lu, "
-    "the page table entry is %lu",
-    physical_address_to_map, mapped_virtual_address, requested_physical_address, 
-    *offset, p2_table.entries[current_page_index]);
-
-	current_page_index += 1;
-	uint64_t result = *((uint64_t *)&mapped_virtual_address);
-	return result;
-}
-
-internal void
-kmem_initalize() {
-	current_page_index = 1;
-}
-
-
 #include "multiboot2.h"
-
 #include "hardware_serial.cpp"
+#include "kernel_memory.cpp"
 
 export void 
 kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) 
 {
+	serial_debug_init();
 	x86_pic8259_initalize();
 	x86_pit_initialize();
 	x86_64_idt_initalize();
-	kmem_initalize();
-
-	serial_debug_init();
-	write_serial('a');
+  kmem_initalize();
 
 	if (multiboot2_magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
 		klog_error("the kernel was not booted with a multiboot2 compliant bootloader!");
@@ -477,8 +292,8 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 		switch (tag->type) {
 
 			case MULTIBOOT_TAG_TYPE_ACPI_OLD: {
-				klog_debug("found acpi old data");
 				struct multiboot_tag_old_acpi *acpi_info = (struct multiboot_tag_old_acpi *)(tag);
+				klog_debug("found acpi old data.  rsp address is %lu", acpi_info->rsdp);
 				parse_root_system_descriptor((RSDP_Descriptor_1*)acpi_info->rsdp);
 			} break;
 
@@ -489,26 +304,49 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 				parse_root_system_descriptor(&rsdp->first_part);
 			} break;
 
+      case MULTIBOOT_TAG_TYPE_MMAP: {
+        klog_debug("found mmap multiboot tag");
+        struct multiboot_tag_mmap *mmap_tag = (struct multiboot_tag_mmap *)(tag);
+        multiboot_memory_map_t *mmap_entry = (multiboot_memory_map_t *)(mmap_tag->entries);
+        while((uintptr_t)mmap_entry < (uintptr_t)mmap_tag + mmap_tag->size){
+          const char *MB_MMAP_TYPE_STRINGS[] = {
+            "INVALID_TYPE",
+            "MEMORY_AVAILABLE",
+            "MEMORY_ACPI_RECLAIMABLE",
+            "MEMORY_NON_VOLITALE_STORAGE",
+            "MEMORY_BAD_RAM"
+          };
+
+          klog_debug("addr: %lu, size: %lu, type: %s", mmap_entry->addr, mmap_entry->len, MB_MMAP_TYPE_STRINGS[mmap_entry->type]);
+          mmap_entry = (multiboot_memory_map_t *)((uintptr_t)mmap_entry + mmap_tag->entry_size);
+        }
+      };
+
 		}
 
 		kterm_redraw_if_required(&_kterm, &_iostate);
 		tag = (struct multiboot_tag *)(((uint8_t *)tag) + ((tag->size + 7) & ~7));
 	} 
-	
-	kdebug("p4_table is at addr: %lu", &p4_table);
-	kdebug("p3_table is at addr: %lu", &p3_table);
-	kdebug("p2_table is at addr: %lu", &p2_table);
 
-	//Maping the APIC physical address to 2M for now
-	//TODO(Torin) provide a mechanisim for physical addresses that are allready aligned!
+#if 0
+  for(size_t i = 0; i < 10; i++){
+    uintptr_t virtual_offset = 0;
+    uintptr_t virtual_page = silly_page_map(1024*1024*16 + (i*1024*1024*2), &virtual_offset, true);
+    uintptr_t virtual_address = virtual_page + virtual_offset;
+    print_virtual_address_info_2MB(virtual_address);
+    kassert(virtual_offset == 0);
+    memset(virtual_address, 0xFF, 1024*1024*2);
+  }
+#endif
+  
+  #if 0
+  //Maping the APIC physical address to 2M for now
 	uint64_t apic_virtual_offset = 0;
 	uint64_t apic_virtual_address = silly_page_map(0xFEC00000, &apic_virtual_offset);
 	kassert(apic_virtual_offset == 0);
-
 	//apic_initalize(apic_virtual_address);
+  #endif
 
-	uint64_t *foobar = (uint64_t *)(0x950012);
-	//*foobar = 7;
 
 	while (1) { 
 		kterm_redraw_if_required(&_kterm, &_iostate);
@@ -529,7 +367,4 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 	_fs.kfs_nodes = (KFS_Node *)(kfs + 1);
 	_fs.base_data = (uint8_t *)(_fs.kfs_nodes + kfs->node_count);
 #endif
-
-
-
 }

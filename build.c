@@ -1,11 +1,11 @@
 #if 0
+echo =========================================================================================================
 gcc -DBUILD_IS_RUNNING -E build.c | sh
 exit
 #endif
 
 #define BUILD_DEBUG
-#define BUILD_SINGLE_TRANSLATION_UNIT 
-#define BUILD_KERNEL_X86_64
+
 
 #pragma GCC diagnostic warning "-Wall"
 #pragma GCC diagnostic warning "-Wextra"
@@ -13,13 +13,10 @@ exit
 #pragma GCC diagnostic ignored "-Wunused-variable"
 #pragma GCC diagnostic ignored "-Wunused-function"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
-#endif
-
-#ifdef BUILD_DEBUG
 #define DEBUG_FLAGS -g -O0
-#else
+#else//BUILD_DEBUG
 #define DEBUG_FLAGS
-#endif
+#endif//BUILD_DEBUG
 
 #if defined(BUILD_IS_RUNNING)
 	nasm -felf64 src/x86_64_boot.asm 	-isrc/ -o x86_64_boot.asm.o
@@ -41,13 +38,13 @@ exit
 #include <stdbool.h>
 
 #include "src/kernel.h"
-#include "src/kernel_io.h"
-
 #include "src/utility.h"
+#include "src/kernel_io.h"
+#include "src/kernel_memory.h"
 #include "src/filesystem_kernel.h"
 #include "src/hardware_keyboard.h"
 #include "src/video_vga_text.h"
-#include "src/interrupt_handlers.h"
+#include "src/interrupt_handler.h"
 
 #include "src/x86_64_entry.c"
 #include "src/interrupt_handler.c"

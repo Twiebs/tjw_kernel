@@ -36,42 +36,44 @@ typedef struct {
 typedef void(*InterruptHandlerProc)(void);
 
 internal inline 
-void isr_handler_page_fault(ISRRegisterState register_state) {
-	uintptr_t faulting_address;
-	asm volatile ("movq %%cr2, %0" : "=r"(faulting_address));
-
+void isr_handler_page_fault(ISRRegisterState register_state) 
+{
 	static const uint64_t CAUSE_PROTECTION_VIOLATION_OR_NOT_PRESENT = (1 << 0);
 	static const uint64_t CAUSE_WRITE_OR_READ = (1 << 1);
 	static const uint64_t CAUSE_USER_OR_KERNEL = (1 << 2);
 	static const uint64_t CAUSE_RESERVED_BIT_SET = (1 << 3);
 	static const uint64_t CAUSE_INSTRUCTION_FETCH = (1 << 4);
 
-	uint64_t is_protection_voloation_else_not_present = 
-		register_state.error_code & CAUSE_PROTECTION_VIOLATION_OR_NOT_PRESENT;
+	uintptr_t faulting_address;
+	asm volatile ("movq %%cr2, %0" : "=r"(faulting_address));
+	uint64_t is_protection_voloation_else_not_present = register_state.error_code & CAUSE_PROTECTION_VIOLATION_OR_NOT_PRESENT;
 	uint64_t is_write_else_read = register_state.error_code & CAUSE_WRITE_OR_READ;
 	uint64_t is_usermode_else_kernel = register_state.error_code & CAUSE_USER_OR_KERNEL;
 	uint64_t is_reserved_bit_overwritten = register_state.error_code & CAUSE_RESERVED_BIT_SET;
 	uint64_t is_instruction_else_data = register_state.error_code & CAUSE_INSTRUCTION_FETCH;
 	
 	kerror("Page Fault (%s%s%s%s%s, faulting_address: %lu)", 
-			(is_protection_voloation_else_not_present ? "caused by protection violation, " : "page is non-present, "),
-			(is_write_else_read ? "cause by page write, " : "caused by page read, "),
-			(is_usermode_else_kernel ? "happened in user-mode, " : "happened in kernel-mode, "),
-			(is_reserved_bit_overwritten ? "a reserved bit was overrwriten, " : "reserved bits are fine, "),
-			(is_instruction_else_data ? "caused by instruction fetch" : "caused by data access"),
-			(faulting_address));
+    (is_protection_voloation_else_not_present ? "caused by protection violation, " : "page is non-present, "),
+    (is_write_else_read ? "cause by page write, " : "caused by page read, "),
+    (is_usermode_else_kernel ? "happened in user-mode, " : "happened in kernel-mode, "),
+    (is_reserved_bit_overwritten ? "a reserved bit was overrwriten, " : "reserved bits are fine, "),
+    (is_instruction_else_data ? "caused by instruction fetch" : "caused by data access"),
+    (faulting_address));
+  print_virtual_address_info_2MB(faulting_address);
 
 	if (is_usermode_else_kernel == false) {
 		//This is a serious bug there should never be a page-fault in the kernel
 		//TODO(Torin) Need better painic mechanisim that handles this sort of thing manualy
 		//and mabye drops back into real mode to go back to old-school vga text buffer and
 		//does a blue-screen of death type of deal to insure that the error is reported properly
+
+    log_page_info();
+
 		kterm_redraw_if_required(&_kterm, &_iostate);
 		asm volatile ("hlt");
 	} else {
-		//This was the userspace application lets kill it
-		//TODO(TORIN)
-		klog("UNHANDLED USERSPACE VIOLATION!!!");
+		//TODO(TORIN) This was the userspace application lets kill it
+    klog("UNHANDLED USERSPACE VIOLATION!!!");
 		kterm_redraw_if_required(&_kterm, &_iostate);
 		asm volatile ("hlt");
 	}
