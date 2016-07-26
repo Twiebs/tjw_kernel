@@ -29,11 +29,22 @@ int is_transmit_empty() {
    return read_port(PORT + 5) & 0x20;
 }
  
+ #if 0
 void write_serial(char a) {
    while (is_transmit_empty() == 0);
    write_port(PORT,a);
 }
+#endif
 
+void write_serial(void *src, size_t length){
+  uint8_t *read = (uint8_t *)src;
+  for(size_t i = 0; i < length; i++){
+    write_port(PORT, read[i]);
+  }
+}
+
+
+#if 0
 internal void
 serial_enable_port(uint16_t port) 
 {
@@ -56,3 +67,4 @@ serial_write_char(uint16_t port, char c) {
 
 	write_port(port, c);
 }
+#endif

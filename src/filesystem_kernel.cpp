@@ -1,4 +1,4 @@
-
+#if 0
 internal KFS_Node *
 kfs_find_file_with_name(const char *filename, size_t length) {
   for (uint32_t i = 0; i < _fs.kfs->node_count; i++) {
@@ -30,3 +30,4 @@ internal uint8_t
 	uint8_t *data = _fs.base_data + node->offset;
 	return data;
 }
+#endif

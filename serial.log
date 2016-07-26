@@ -1,28 +1,24 @@
-PIC8259 Initialized and Remaped
-PIT initialized!
-IDT initialized
-p4_table is at addr: 0x0000000000104000
-p3_table is at addr: 0x0000000000105000
-p2_table is at addr: 0x0000000000106000
-multiboot_info_size is 0x00000450
-found mbtag: 0x00000001
-found mbtag: 0x00000002
-found mbtag: 0x0000000A
-found mbtag: 0x00000006
-found mmap multiboot tag
-addr: 0x0000000000000000, size: 0x000000000009FC00, type: MEMORY_AVAILABLE
-addr: 0x000000000009FC00, size: 0x0000000000000400, type: MEMORY_ACPI_RECLAIMABLE
-addr: 0x00000000000F0000, size: 0x0000000000010000, type: MEMORY_ACPI_RECLAIMABLE
-addr: 0x0000000000100000, size: 0x00000000BFEE0000, type: MEMORY_AVAILABLE
-addr: 0x00000000BFFE0000, size: 0x0000000000020000, type: MEMORY_ACPI_RECLAIMABLE
-addr: 0x00000000FFFC0000, size: 0x0000000000040000, type: MEMORY_ACPI_RECLAIMABLE
-addr: 0x0000000100000000, size: 0x0000000040000000, type: MEMORY_AVAILABLE
-found mbtag: 0x00000009
-found mbtag: 0x00000004
-found mbtag: 0x00000005
-found mbtag: 0x00000008
-found mbtag: 0x0000000E
-found acpi old data.  rsp address is 0x0000000000110AC8
-rsdp is valid, rsdt physical address: 0xBFFE1737
-[kmem] page was allocated at physical_address 0x00000000BFE00000 to map to virtual address 0x0000000000200000, the offset from the actual requested physical_addresss(0x00000000BFFE1737) is 0x00000000001E1737, the page table entry is 0x0000000000000000
-parsed root_system_descriptor
+This entry contains a vast quantity of text that execeds the maximum character count allowed on a single line within the legacy vga text buffer.  In fact it manages to span a full 3 lines!
+entry: 0x00000000
+entry: 0x00000001
+entry: 0x00000002
+entry: 0x00000003
+entry: 0x00000004
+entry: 0x00000005
+entry: 0x00000006
+entry: 0x00000007
+entry: 0x00000008
+entry: 0x00000009
+entry: 0x0000000A
+entry: 0x0000000B
+entry: 0x0000000C
+entry: 0x0000000D
+entry: 0x0000000E
+entry: 0x0000000F
+entry: 0x00000010
+entry: 0x00000011
+entry: 0x00000012
+entry: 0x00000013
+entry: 0x00000014
+entry: 0x00000015
+entry: 0x00000016

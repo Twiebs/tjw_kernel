@@ -1,3 +1,3 @@
 sh upload.sh
-sudo qemu-custom -s -serial file:serial.log -D qemu.log -d int,pcall -hdb /dev/sde -no-reboot -m 4G &
+sudo qemu-custom -serial file:serial.log -hdb /dev/sde -m 4G -s -S &
 sh gdb_connect.sh

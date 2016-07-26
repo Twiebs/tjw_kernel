@@ -1,15 +1,4 @@
 
-internal void
-kernel_reboot() {
-	struct {
-			uint16_t size;
-			uintptr_t address;
-	} __attribute__((packed)) idtr = { 0, 0 };
-	asm volatile ("lidt %0" : : "m"(idtr));
-	asm volatile ("int $0x3");
-}
-
-
 
 
 #define COMMAND_UNKNOWN_COMMAND 1
@@ -22,7 +11,7 @@ is_command_signature_valid(const char *input, size_t input_len,
 {
 	if (strings_match(input, input_len, command_name, command_length)) {
 		if (expected_arg_count != actual_arg_count) {
-			klog("%s expected %u arguments, only %u were provided", command_name, expected_arg_count, actual_arg_count);
+			klog_error("%s expected %u arguments, only %u were provided", command_name, expected_arg_count, actual_arg_count);
 			return COMMAND_INVALID_ARG_COUNT;
 		} else {
 			return 0;
@@ -31,7 +20,7 @@ is_command_signature_valid(const char *input, size_t input_len,
 	return COMMAND_UNKNOWN_COMMAND;
 }
 
-
+#if 0
 internal bool 
 process_shell_command(const char *command) {
 		const char *procedure_name = command;
@@ -63,24 +52,24 @@ process_shell_command(const char *command) {
 		command_hook("ls", 0) {
 			for (uint32_t i = 0; i < _fs.kfs->node_count; i++) {
 				KFS_Node *node = &_fs.kfs_nodes[i];
-				klog("filename: %s, filesize: %u", node->name, node->size);
+				klog_info("filename: %s, filesize: %u", node->name, node->size);
 			}
 		}
 
 		command_hook("print", 1) {
 			KFS_Node *node = kfs_find_file_with_name(args[0], arg_lengths[0]);
 			if (node == 0) {
-				klog("file %.*s could not be found", arg_lengths[0], args[0]);
+				klog_info("file %.*s could not be found", arg_lengths[0], args[0]);
 			} else {
 				const uint8_t *node_data = _fs.base_data + node->offset;
-				klog("[%s]: %.*s", node->name, node->size, node_data);
+				klog_info("[%s]: %.*s", node->name, node->size, node_data);
 			}
 		}
 
 
 
 		if (command_validity_status == COMMAND_UNKNOWN_COMMAND) {
-			klog("unknown command '%s'", command);
+			klog_info("unknown command '%s'", command);
 			return false;
 		} else if (command_validity_status == COMMAND_INVALID_ARG_COUNT) {
 			return false;
@@ -89,47 +78,72 @@ process_shell_command(const char *command) {
 
 		return true;
 }
+#endif
 
-
-
-internal void
-kterm_redraw_if_required(VGATextTerm *kterm, IOState *io) {
+void redraw_vga_text_terminal_if_dirty(VGA_Text_Terminal *kterm, Console_Buffer *cb)
+{
 	static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
 	static const uint8_t VGA_TEXT_ROW_COUNT = 25;
 	static uint8_t *VGA_TEXT_BUFFER = (uint8_t*)(0xB8000);
-	//static const uint32_t VGA_TEXT_INDEX_MAX = VGA_TEXT_COLUMN_COUNT * VGA_TEXT_ROW_COUNT;
 	static const uint32_t VGA_TEXT_INDEX_MAX = 2000;
 
-	if (kterm->top_entry == 0) {
-		kterm->top_entry = io->output_buffer;
-		kterm->top_entry_index = 0;
-		kterm->scroll_count = 0;
-		kterm->last_entry_count = 0;
-	}
-	
-	if (kterm->scroll_count != 0) {
-		int32_t ammount_to_scroll = kterm->scroll_count;
-		int32_t index_after_scroll = (int32_t)kterm->top_entry_index + kterm->scroll_count;
-		if (index_after_scroll < 0) {
-			ammount_to_scroll = -kterm->top_entry_index;
-		} 
+  if((cb->flags & Console_Flag_OUTPUT_DIRTY) == 0) return;
 
-			if (ammount_to_scroll > 0) {
-				while (*kterm->top_entry != 0) kterm->top_entry++;
-				kterm->top_entry++;
-				kterm->top_entry_index++;
-				io->is_output_buffer_dirty = true;
-			} else if (ammount_to_scroll < 0){
-				kterm->top_entry -= 2;
-				while (*kterm->top_entry != 0) kterm->top_entry--;
-				kterm->top_entry++;
-				kterm->top_entry_index--;
-				io->is_output_buffer_dirty = true;
-			}
+  uint32_t top_entry_index = cb->scroll_entry_index;
+  uint32_t entries_to_draw = 0;
+  uint32_t current_line_count = 0;
+  while(current_line_count < VGA_TEXT_ROW_COUNT){
+    int64_t entry_length = cb->length_of_entry[top_entry_index];
+    while(entry_length > 0){
+      current_line_count++;
+      entry_length -= VGA_TEXT_COLUMN_COUNT; 
+      if(current_line_count > VGA_TEXT_ROW_COUNT) break;
+    }
+    entries_to_draw++;
+    if(entries_to_draw >= cb->current_entry_count){
+      break;
+    }
+    top_entry_index = (top_entry_index - 1)  % CONSOLE_ENTRY_COUNT;
+  }
 
-		kterm->scroll_count = 0;
-	}
-	
+  uint8_t current_color = VGAColor_GREEN;
+  uint8_t current_row = 0, current_column = 0;
+  memset(VGA_TEXT_BUFFER, 0, (VGA_TEXT_COLUMN_COUNT * VGA_TEXT_ROW_COUNT) * 2);
+
+  #define write_vga_data(buffer, buffer_length) \
+    for(size_t buffer_offset= 0; buffer_offset < buffer_length; buffer_offset++){ \
+      size_t vga_index = ((current_row * VGA_TEXT_COLUMN_COUNT) + current_column) * 2; \
+      VGA_TEXT_BUFFER[vga_index] = buffer[buffer_offset]; \
+      VGA_TEXT_BUFFER[vga_index+1] = current_color; \
+      current_column++; \
+      if(current_column > VGA_TEXT_COLUMN_COUNT) { \
+        current_column = 0; \
+        current_row++; \
+      } \
+    }
+      
+  for(size_t i = 0; i < entries_to_draw; i++){
+    size_t current_entry_index = (top_entry_index + i) % CONSOLE_ENTRY_COUNT;
+    size_t entry_start_offset = cb->offset_of_entry[current_entry_index];
+    size_t entry_length = cb->length_of_entry[current_entry_index];
+    size_t entry_end_offset = entry_start_offset + entry_length;
+    if(entry_start_offset + entry_length > CONSOLE_OUTPUT_BUFFER_SIZE){
+      size_t end_bytes_to_write = entry_end_offset - CONSOLE_OUTPUT_BUFFER_SIZE;
+      size_t start_bytes_to_write = entry_length - end_bytes_to_write;
+      write_vga_data((cb->output_buffer + entry_start_offset), start_bytes_to_write);
+      write_vga_data((cb->output_buffer), end_bytes_to_write);
+    } else {
+      write_vga_data((cb->output_buffer + entry_start_offset), entry_length);
+    }
+    current_row++;
+    current_column = 0;
+  }
+
+  cb->flags = cb->flags & ~Console_Flag_OUTPUT_DIRTY;
+}
+
+
+#if 0	
 	if (io->is_command_ready) {
 		process_shell_command(io->input_buffer);
 		io->is_command_ready = false;
@@ -137,12 +151,11 @@ kterm_redraw_if_required(VGATextTerm *kterm, IOState *io) {
 		memset(io->input_buffer, 0, sizeof(io->input_buffer));
 		io->is_input_buffer_dirty = true;
 	}
+#endif
 
+#if 0
   if (io->is_output_buffer_dirty) {
-		memset(VGA_TEXT_BUFFER, 0, (VGA_TEXT_COLUMN_COUNT * VGA_TEXT_ROW_COUNT) * 2);
-		uint8_t current_color = VGAColor_GREEN;
-		uint8_t current_row = 0, current_column = 0;
-		
+				
 		const char *read = kterm->top_entry;
 		while (*read != 0 && current_row < 25) {
 			size_t index = ((current_row * VGA_TEXT_COLUMN_COUNT) + current_column) * 2;
@@ -191,4 +204,5 @@ kterm_redraw_if_required(VGATextTerm *kterm, IOState *io) {
 	}
 }
 
+  #endif
 

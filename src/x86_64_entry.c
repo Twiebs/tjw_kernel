@@ -7,9 +7,9 @@
 // IDT still must be initalized
 
 typedef struct {
-	KFS_Header *kfs;
-	KFS_Node *kfs_nodes;
-	uint8_t *base_data;
+  KFS_Header *kfs;
+  KFS_Node *kfs_nodes;
+  uint8_t *base_data;
 } FileSystem;
 
 typedef struct {
@@ -29,20 +29,30 @@ typedef struct {
 	uint32_t null_uint32;
 } x86_64_IDT_Entry;
 
+typedef struct {
+  Console_Buffer console_buffer;
+  VGA_Text_Terminal vga_text_term;
+  bool is_logging_disabled;
+} Kernel_Globals;
+
+static Kernel_Globals globals;
+
 global_variable x86_64_IDT_Entry _idt[256];
 global_variable uintptr_t _interrupt_handlers[256];
-global_variable IOState _iostate;
-global_variable FileSystem _fs;
-global_variable VGATextTerm _kterm;
 
 #include "kernel_acpi.c"
 
 internal void
-apic_initalize(uintptr_t apic_register_base) 
+ioapic_initalize(uintptr_t ioapic_register_base)
+{
+}
+
+internal void
+lapic_initalize(uintptr_t apic_register_base)
 {
 	asm volatile ("cli");
-
-	{ //Disable the oldschool PIC first
+	
+  { //Disable the legacy PIC first
 		static const uint8_t PIC1_DATA_PORT = 0x21;
 		static const uint8_t PIC2_DATA_PORT = 0xA1;
 		write_port(PIC1_DATA_PORT, 0x20);
@@ -51,13 +61,14 @@ apic_initalize(uintptr_t apic_register_base)
 		write_port(PIC2_DATA_PORT, 0b11111111);
 	}
 
-	{ //Set the APIC Spuritous interput vector Register
-		static const uint64_t APIC_SPURIOUS_INTERRUPT_VECTOR_REGISTER_OFFSET = 0xF0;
+	{ 
+    //APIC Spuritous interput vector 
+		static const uint64_t APIC_SIVR_OFFSET = 0xF0;
 		//APIC Interrupt Command Register
 		static const uint64_t APIC_ICR1_OFFSET = 0x300;
 		static const uint64_t APIC_ICR2_OFFSET = 0x310;
 
-		uint32_t *sivr = (uint32_t *)(apic_register_base + APIC_SPURIOUS_INTERRUPT_VECTOR_REGISTER_OFFSET);
+		uint32_t *sivr = (uint32_t *)(apic_register_base + APIC_SIVR_OFFSET);
 		*sivr = 0xFF;
 	}
 
@@ -66,8 +77,8 @@ apic_initalize(uintptr_t apic_register_base)
 }
 
 internal void
-x86_pic8259_initalize(void)
-{ //@Initalize And Remap the @8259_PIC @PIC @pic
+legacy_pic8259_initalize(void)
+{ 
 	static const uint8_t PIC1_COMMAND_PORT = 0x20;
 	static const uint8_t PIC2_COMMAND_PORT = 0xA0;
 	static const uint8_t PIC1_DATA_PORT = 0x21;
@@ -95,15 +106,16 @@ x86_pic8259_initalize(void)
 	write_port(PIC1_DATA_PORT, ICW4_8068);
 	write_port(PIC2_DATA_PORT, ICW4_8068);
 
+  //Write EndOfInterupt and set interrupt enabled mask 
 	write_port(PIC1_DATA_PORT, 0x20);
 	write_port(PIC2_DATA_PORT, 0x20);
 	write_port(PIC1_DATA_PORT, 0b11111101);
 	write_port(PIC2_DATA_PORT, 0b11111111);
-	klog("PIC8259 Initialized and Remaped");
+	klog_info("PIC8259 Initialized");
 }
 
 internal void
-x86_pit_initialize(void)  
+legacy_pit_initialize(void)  
 { //@Initialize @pit @PIT
 	//TODO(Torin) This frequency thing is probably bogus and needs to be
 	//fixed so that specific times can be programmed
@@ -121,17 +133,7 @@ x86_pit_initialize(void)
 	write_port(PIT_COMMAND_PORT, PIT_COMMAND_REPEATING_MODE);
 	write_port(PIT_DATA_PORT0, divisor_low);
 	write_port(PIT_DATA_PORT0, divisor_high);
-	klog ("PIT initialized!");
-}
-
-internal void 
-vga_text_clear_screen() 
-{  
-	static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
-	static const uint8_t VGA_TEXT_ROW_COUNT = 25;
-	uint8_t *VGA_TEXT_BUFFER = (uint8_t*)(0xB8000);
-	memset(VGA_TEXT_BUFFER, 0, 
-			(VGA_TEXT_COLUMN_COUNT * VGA_TEXT_ROW_COUNT) * 2);
+	klog_info("PIT initialized!");
 }
 
 internal void
@@ -257,7 +259,7 @@ x86_64_idt_initalize()
 	} __attribute__((packed)) idtr = { sizeof(_idt) - 1, (uintptr_t)_idt };
 	asm volatile ("lidt %0" : : "m"(idtr));
 	asm volatile ("sti");
-  klog("IDT initialized");
+  klog_info("IDT initialized");
 }
 
 #include "multiboot2.h"
@@ -267,11 +269,23 @@ x86_64_idt_initalize()
 export void 
 kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) 
 {
+  klog_disable();
 	serial_debug_init();
-	x86_pic8259_initalize();
-	x86_pit_initialize();
+	legacy_pic8259_initalize();
+	legacy_pit_initialize();
 	x86_64_idt_initalize();
   kmem_initalize();
+
+  klog_enable();
+  klog_debug("This entry contains a vast quantity of text that execeds the maximum character count allowed on a single line "
+  "within the legacy vga text buffer.  In fact it manages to span a full 3 lines!");
+  for(size_t i = 0; i <= 22; i++){
+    klog_debug("entry: %u", (uint32_t)i);
+  }
+  klog_disable();
+
+
+  System_Info sys = {};
 
 	if (multiboot2_magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
 		klog_error("the kernel was not booted with a multiboot2 compliant bootloader!");
@@ -294,14 +308,14 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 			case MULTIBOOT_TAG_TYPE_ACPI_OLD: {
 				struct multiboot_tag_old_acpi *acpi_info = (struct multiboot_tag_old_acpi *)(tag);
 				klog_debug("found acpi old data.  rsp address is %lu", acpi_info->rsdp);
-				parse_root_system_descriptor((RSDP_Descriptor_1*)acpi_info->rsdp);
+				parse_root_system_descriptor((RSDP_Descriptor_1*)acpi_info->rsdp, &sys);
 			} break;
 
 			case MULTIBOOT_TAG_TYPE_ACPI_NEW: {
 			  klog_debug("found acpi new data");
 				struct multiboot_tag_new_acpi *acpi_info = (struct multiboot_tag_new_acpi *)(tag);
 				RSDP_Descriptor_2 *rsdp = (RSDP_Descriptor_2 *)acpi_info->rsdp;
-				parse_root_system_descriptor(&rsdp->first_part);
+				parse_root_system_descriptor(&rsdp->first_part, &sys);
 			} break;
 
       case MULTIBOOT_TAG_TYPE_MMAP: {
@@ -324,33 +338,24 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 
 		}
 
-		kterm_redraw_if_required(&_kterm, &_iostate);
+		//kterm_redraw_if_required(&_kterm, &_iostate);
 		tag = (struct multiboot_tag *)(((uint8_t *)tag) + ((tag->size + 7) & ~7));
 	} 
 
-#if 0
-  for(size_t i = 0; i < 10; i++){
-    uintptr_t virtual_offset = 0;
-    uintptr_t virtual_page = silly_page_map(1024*1024*16 + (i*1024*1024*2), &virtual_offset, true);
-    uintptr_t virtual_address = virtual_page + virtual_offset;
-    print_virtual_address_info_2MB(virtual_address);
-    kassert(virtual_offset == 0);
-    memset(virtual_address, 0xFF, 1024*1024*2);
-  }
-#endif
   
-  #if 0
+  klog_debug("system_info:");
+  klog_debug("ioapic_register_base: %lu", sys.ioapic_register_base);
+  klog_debug("lapic_register_base: %lu", sys.lapic_register_base);
+   
   //Maping the APIC physical address to 2M for now
-	uint64_t apic_virtual_offset = 0;
-	uint64_t apic_virtual_address = silly_page_map(0xFEC00000, &apic_virtual_offset);
-	kassert(apic_virtual_offset == 0);
-	//apic_initalize(apic_virtual_address);
-  #endif
-
+	uintptr_t apic_physical_page, apic_page_offset = 0;
+	uintptr_t apic_virtual_page = silly_page_map(sys.lapic_register_base, true, &apic_physical_page, &apic_page_offset);
+  uintptr_t apic_register_base_address = apic_virtual_page + apic_page_offset;
+  //lapic_initalize(apic_register_base_address);
 
 	while (1) { 
-		kterm_redraw_if_required(&_kterm, &_iostate);
-		asm volatile("hlt"); 
+		redraw_vga_text_terminal_if_dirty(&globals.vga_text_term, &globals.console_buffer);
+		asm volatile("hlt");
 	};
 
 

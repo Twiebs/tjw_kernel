@@ -52,7 +52,7 @@ void isr_handler_page_fault(ISRRegisterState register_state)
 	uint64_t is_reserved_bit_overwritten = register_state.error_code & CAUSE_RESERVED_BIT_SET;
 	uint64_t is_instruction_else_data = register_state.error_code & CAUSE_INSTRUCTION_FETCH;
 	
-	kerror("Page Fault (%s%s%s%s%s, faulting_address: %lu)", 
+	klog_error("Page Fault (%s%s%s%s%s, faulting_address: %lu)", 
     (is_protection_voloation_else_not_present ? "caused by protection violation, " : "page is non-present, "),
     (is_write_else_read ? "cause by page write, " : "caused by page read, "),
     (is_usermode_else_kernel ? "happened in user-mode, " : "happened in kernel-mode, "),
@@ -68,13 +68,12 @@ void isr_handler_page_fault(ISRRegisterState register_state)
 		//does a blue-screen of death type of deal to insure that the error is reported properly
 
     log_page_info();
-
-		kterm_redraw_if_required(&_kterm, &_iostate);
+		redraw_vga_text_terminal_if_dirty(&globals.vga_text_term, &globals.console_buffer);
 		asm volatile ("hlt");
 	} else {
 		//TODO(TORIN) This was the userspace application lets kill it
-    klog("UNHANDLED USERSPACE VIOLATION!!!");
-		kterm_redraw_if_required(&_kterm, &_iostate);
+    klog_error("UNHANDLED USERSPACE VIOLATION!!!");
+		redraw_vga_text_terminal_if_dirty(&globals.vga_text_term, &globals.console_buffer);
 		asm volatile ("hlt");
 	}
 }
@@ -82,9 +81,9 @@ void isr_handler_page_fault(ISRRegisterState register_state)
 
 
 export void isr_common_handler(ISRRegisterState regstate) {
-	kdebug("software interrupt recieved: %u", regstate.interrupt_number);
-	kdebug("error_code: %u", regstate.error_code);
-	kdebug("rip: %u", regstate.return_rip);
+	klog_debug("software interrupt recieved: %u", regstate.interrupt_number);
+	klog_debug("error_code: %u", regstate.error_code);
+	klog_debug("rip: %u", regstate.return_rip);
 
 	if (regstate.interrupt_number == 14) {
 		isr_handler_page_fault(regstate);
@@ -98,10 +97,10 @@ export void irq_common_handler(IRQRegisterState regstate) {
 	  InterruptHandlerProc proc = (InterruptHandlerProc)_interrupt_handlers[regstate.interrupt_number];
 		proc();
 	} else if (regstate.interrupt_number == 0xFFFFFFFF) {
-		klog("INVALID INTERRUPT");
+		klog_error("INVALID INTERRUPT");
 		return;
 	} else {
-		klog("Uninialized interrupt handler!");
+		klog_error("Uninialized interrupt handler!");
 	}
 
 	 static const uint8_t PIC1_COMMAND_PORT = 0x20;
@@ -126,6 +125,7 @@ irq_handler_keyboard(void) {
 		int8_t keycode = read_port(KEYBOARD_DATA_PORT);
 		if (keycode < 0) return;
 
+#if 0
 		if (keycode == KEYCODE_BACKSPACE_PRESSED) {
 			if (_iostate.input_buffer_count > 0) {
 				_iostate.input_buffer[_iostate.input_buffer_count] = 0;
@@ -143,6 +143,7 @@ irq_handler_keyboard(void) {
 			_iostate.input_buffer[_iostate.input_buffer_count] = 0;
 			_iostate.is_input_buffer_dirty = true;
 		}
+#endif
 #if 0
 		klog("keycode: %u", (uint32_t)keycode);
 #endif
@@ -151,5 +152,5 @@ irq_handler_keyboard(void) {
 
 internal void 
 irq_handler_pit(void) {
-	kterm_redraw_if_required(&_kterm, &_iostate);
+	redraw_vga_text_terminal_if_dirty(&globals.vga_text_term, &globals.console_buffer);
 }
