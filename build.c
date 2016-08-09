@@ -20,15 +20,18 @@ exit
 #endif//BUILD_DEBUG
 
 #if defined(BUILD_IS_RUNNING)
-	nasm -felf64 src/x86_64_boot.asm 	-isrc/ -o x86_64_boot.asm.o
-	nasm -felf64 src/x86_64_entry.asm -isrc/ -o x86_64_entry.asm.o
+  nasm -fbin src/secondary_cpu_init.asm -o trampoline.bin
+  tools/bin_to_txt trampoline.bin src/trampoline.txt
+
 	gcc DEBUG_FLAGS -m64 -mno-red-zone -nostdlib -ffreestanding -I../tjw_kernel/src -c build.c -o build.c.o
-	ld -melf_x86_64 -n -T kernel_link.ld -o bin/kernel x86_64_boot.asm.o x86_64_entry.asm.o build.c.o
+	nasm -felf64 src/primary_cpu_init.asm -isrc/ -o primary_cpu_init.asm.o
+	nasm -felf64 src/x86_64_entry.asm -isrc/ -o x86_64_entry.asm.o
+  ld -melf_x86_64 -n -T kernel_link.ld -o bin/kernel build.c.o x86_64_entry.asm.o primary_cpu_init.asm.o
 #if defined(BUILD_DEBUG)
 	objcopy --only-keep-debug bin/kernel bin/debug_symbols
 	objcopy --strip-debug bin/kernel bin/kernel
 #endif
-	rm *.o
+	#warning rm *.o
 	exit
 #endif
 
@@ -40,6 +43,7 @@ exit
 
 #include "src/kernel.h"
 #include "src/utility.h"
+#include "src/kernel_synch.h"
 #include "src/kernel_io.h"
 #include "src/kernel_memory.h"
 #include "src/filesystem_kernel.h"

@@ -68,12 +68,12 @@ void isr_handler_page_fault(ISRRegisterState register_state)
 		//does a blue-screen of death type of deal to insure that the error is reported properly
 
     log_page_info();
-		redraw_vga_text_terminal_if_dirty(&globals.vga_text_term, &globals.console_buffer);
+		redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log);
 		asm volatile ("hlt");
 	} else {
 		//TODO(TORIN) This was the userspace application lets kill it
     klog_error("UNHANDLED USERSPACE VIOLATION!!!");
-		redraw_vga_text_terminal_if_dirty(&globals.vga_text_term, &globals.console_buffer);
+		redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log);
 		asm volatile ("hlt");
 	}
 }
@@ -152,5 +152,5 @@ irq_handler_keyboard(void) {
 
 internal void 
 irq_handler_pit(void) {
-	redraw_vga_text_terminal_if_dirty(&globals.vga_text_term, &globals.console_buffer);
+	redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log);
 }

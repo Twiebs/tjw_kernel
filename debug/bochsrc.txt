@@ -1,14 +1,16 @@
-megs: 2048
 romimage: file=/usr/share/bochs/BIOS-bochs-latest
 vgaromimage: file=/usr/share/bochs/VGABIOS-lgpl-latest
 
-ata0-master: type=disk, path=disk.img, mode=flat 
+log: bochsout.txt
+com1: enabled=1, mode=file, dev=serial.txt
+port_e9_hack: enabled=1
+magic_break: enabled=1
 
 mouse: enabled=0
 clock: sync=realtime
-cpu: count=1, ips=4294967295
 
-log: bochsout.txt
-com1: enabled=1, mode=file, dev=serial.out
-port_e9_hack: enabled=1
+ata0-master: type=disk, path=disk.img, mode=flat 
+cpu: count=2, ips=4294967295
+megs: 2048
+
 boot: disk

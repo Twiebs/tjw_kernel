@@ -36,6 +36,7 @@ size_t strlen(const char *str) {
 	return result;
 }
 
+#define min(a,b) (a < b ? a : b)
 
 #define LITERAL_STRLEN(literal) (sizeof(literal) - 1)
 #define string_matches_literal(string, len, lit) strings_match(string,len, lit, LITERAL_STRLEN(lit))

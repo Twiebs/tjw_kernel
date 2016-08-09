@@ -3,13 +3,12 @@ ENTRY(start)
 
 SECTIONS 
 {
-	. = 1M;
 
+	. = 1M;
 	.boot :
 	{
 		*(.multiboot2_header)
 	}
-
 
 	.text ALIGN(4096): 
 	{ 
@@ -18,14 +17,11 @@ SECTIONS
 
 	.data :
 	{
-		*(.gdt)
+		*(.data)
 	}
 
 	.bss ALIGN(4096): 
 	{
 		*(.bss)
   }
-
-	kernel_end = .;
-
 }

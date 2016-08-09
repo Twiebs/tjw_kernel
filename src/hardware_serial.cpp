@@ -39,6 +39,7 @@ void write_serial(char a) {
 void write_serial(void *src, size_t length){
   uint8_t *read = (uint8_t *)src;
   for(size_t i = 0; i < length; i++){
+    while(is_transmit_empty() == 0) {}
     write_port(PORT, read[i]);
   }
 }

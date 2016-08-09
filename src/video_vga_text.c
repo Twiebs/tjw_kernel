@@ -80,6 +80,107 @@ process_shell_command(const char *command) {
 }
 #endif
 
+void redraw_vga_text_terminal_if_log_is_dirty(VGA_Text_Terminal *kterm, Circular_Log *log)
+{
+	static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
+	static const uint8_t VGA_TEXT_ROW_COUNT = 25;
+	static uint8_t *VGA_TEXT_BUFFER = (uint8_t*)(0xB8000);
+	static const uint32_t VGA_TEXT_INDEX_MAX = 2000;
+
+  if(log->current_entry_count < VGA_TEXT_ROW_COUNT){
+    for(size_t i = 0; i < log->current_entry_count; i++){
+     Circular_Log_Entry *entry = &log->entries[i]; 
+     size_t chars_to_write = min(VGA_TEXT_COLUMN_COUNT, entry->length);
+      for(size_t j = 0; j < chars_to_write; j++){
+        size_t vga_index = ((i * VGA_TEXT_COLUMN_COUNT) + j) * 2;
+        VGA_TEXT_BUFFER[vga_index+0] = entry->message[j];
+        VGA_TEXT_BUFFER[vga_index+1] = VGAColor_GREEN;
+      }
+    }
+  } else {
+    size_t row_index = 0;
+    for(int i = VGA_TEXT_ROW_COUNT - 1; i >= 0; i--){
+      size_t entry_index = (log->current_scroll_position - i) % CIRCULAR_LOG_ENTRY_COUNT;
+      Circular_Log_Entry *entry = &log->entries[entry_index];
+      size_t chars_to_write = min(VGA_TEXT_COLUMN_COUNT, entry->length);
+      for(size_t j = 0; j < chars_to_write; j++){
+        size_t vga_index = ((row_index * VGA_TEXT_COLUMN_COUNT) + j) * 2;
+        VGA_TEXT_BUFFER[vga_index+0] = entry->message[j];
+        VGA_TEXT_BUFFER[vga_index+1] = VGAColor_GREEN;
+      }
+      row_index++;
+    }
+  }
+}
+
+
+
+#if 0	
+	if (io->is_command_ready) {
+		process_shell_command(io->input_buffer);
+		io->is_command_ready = false;
+		io->input_buffer_count = 0;
+		memset(io->input_buffer, 0, sizeof(io->input_buffer));
+		io->is_input_buffer_dirty = true;
+	}
+#endif
+
+#if 0
+  if (io->is_output_buffer_dirty) {
+				
+		const char *read = kterm->top_entry;
+		while (*read != 0 && current_row < 25) {
+			size_t index = ((current_row * VGA_TEXT_COLUMN_COUNT) + current_column) * 2;
+			VGA_TEXT_BUFFER[index] = *read;
+			VGA_TEXT_BUFFER[index+1] = current_color;
+			current_column++;
+			if (current_column > VGA_TEXT_COLUMN_COUNT) {
+				current_column = 2;
+				current_row++;
+			}
+			read++;
+			if (*read == 0) {
+				read++;
+				current_row++;
+				current_column = 0;
+			} 
+		}
+		io->is_output_buffer_dirty = false;
+	}
+
+	if (io->is_input_buffer_dirty) {
+		uint32_t current_row = VGA_TEXT_ROW_COUNT - 1;
+		uint32_t current_column = 0;
+		uint32_t index = ((current_row * VGA_TEXT_COLUMN_COUNT) + current_column) * 2;
+
+		VGA_TEXT_BUFFER[index] = '>';
+		VGA_TEXT_BUFFER[index+1] = VGAColor_GREEN;
+		index += 2;
+		current_column += 1;
+	
+		for (uint32_t i = 0; i < io->input_buffer_count; i++) {
+		  VGA_TEXT_BUFFER[index] = io->input_buffer[i];
+			VGA_TEXT_BUFFER[index+1] = VGAColor_GREEN;
+			index += 2;
+			current_column++;
+		}
+
+		uint32_t diff = VGA_TEXT_COLUMN_COUNT - current_column;
+		for (uint32_t i = 0; i < diff; i+=2) {
+			VGA_TEXT_BUFFER[index] = 0;
+			VGA_TEXT_BUFFER[index+1] = 0;
+			index += 2;
+		}
+
+		io->is_input_buffer_dirty = false;
+	}
+}
+
+
+
+
+
+
 void redraw_vga_text_terminal_if_dirty(VGA_Text_Terminal *kterm, Console_Buffer *cb)
 {
 	static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
@@ -88,21 +189,32 @@ void redraw_vga_text_terminal_if_dirty(VGA_Text_Terminal *kterm, Console_Buffer 
 	static const uint32_t VGA_TEXT_INDEX_MAX = 2000;
 
   if((cb->flags & Console_Flag_OUTPUT_DIRTY) == 0) return;
-
-  uint32_t top_entry_index = cb->scroll_entry_index;
+  
   uint32_t entries_to_draw = 0;
   uint32_t current_line_count = 0;
+  uint32_t top_entry_index = cb->scroll_entry_index;
+  uint32_t top_entry_start_offset = 0; //Only draw top_entry_length - top_entry_start_offset
+
   while(current_line_count < VGA_TEXT_ROW_COUNT){
-    int64_t entry_length = cb->length_of_entry[top_entry_index];
-    while(entry_length > 0){
-      current_line_count++;
-      entry_length -= VGA_TEXT_COLUMN_COUNT; 
-      if(current_line_count > VGA_TEXT_ROW_COUNT) break;
+    uint32_t entry_line_count = 0;
+    int64_t chars_remaining = cb->length_of_entry[top_entry_index];
+    while(chars_remaining> 0){
+      entry_line_count++;
+      chars_remaining -= VGA_TEXT_COLUMN_COUNT;  
     }
-    entries_to_draw++;
-    if(entries_to_draw >= cb->current_entry_count){
+
+    uint32_t last_line_length = chars_remaining + VGA_TEXT_COLUMN_COUNT;
+    if(entry_line_count + current_line_count > VGA_TEXT_ROW_COUNT){
+      uint32_t lines_to_append = VGA_TEXT_ROW_COUNT - current_line_count; 
+      top_entry_start_offset = cb->length_of_entry[top_entry_index];
+      top_entry_start_offset -= last_line_length;
+      top_entry_start_offset -= (lines_to_append - 1) * VGA_TEXT_COLUMN_COUNT; 
+      entries_to_draw++;
       break;
     }
+
+    entries_to_draw++;
+    if(entries_to_draw >= cb->current_entry_count) break;
     top_entry_index = (top_entry_index - 1)  % CONSOLE_ENTRY_COUNT;
   }
 
@@ -121,8 +233,17 @@ void redraw_vga_text_terminal_if_dirty(VGA_Text_Terminal *kterm, Console_Buffer 
         current_row++; \
       } \
     }
-      
-  for(size_t i = 0; i < entries_to_draw; i++){
+
+
+  { //Top row base case
+    size_t offset = cb->offset_of_entry[top_entry_index] + top_entry_start_offset; 
+    size_t length = cb->length_of_entry[top_entry_index] - top_entry_start_offset;
+    write_vga_data((cb->output_buffer + offset), length);
+    current_row++;
+    current_column = 0;
+  }
+
+  for(size_t i = 1; i < entries_to_draw; i++){
     size_t current_entry_index = (top_entry_index + i) % CONSOLE_ENTRY_COUNT;
     size_t entry_start_offset = cb->offset_of_entry[current_entry_index];
     size_t entry_length = cb->length_of_entry[current_entry_index];
@@ -205,4 +326,4 @@ void redraw_vga_text_terminal_if_dirty(VGA_Text_Terminal *kterm, Console_Buffer 
 }
 
   #endif
-
+#endif

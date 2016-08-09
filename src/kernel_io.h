@@ -1,6 +1,7 @@
 #define CONSOLE_ENTRY_COUNT (1024)
 #define CONSOLE_OUTPUT_BUFFER_SIZE (1 << 14)
 
+#if 0
 typedef enum {
   Console_Flag_OUTPUT_DIRTY = 1 << 0,
   Console_Flag_INPUT_DIRTY = 1 << 1,
@@ -17,8 +18,24 @@ typedef struct {
   char input_buffer[256];
   char output_buffer[CONSOLE_OUTPUT_BUFFER_SIZE];
 } Console_Buffer;
+#endif
 
-void console_write_fmt(Console_Buffer *cb, const char *fmt, ...);
+#define CIRCULAR_LOG_MESSAGE_SIZE 128
+#define CIRCULAR_LOG_ENTRY_COUNT 256
 
+typedef struct {
+  char message[CIRCULAR_LOG_MESSAGE_SIZE];
+  uint32_t length;
+} Circular_Log_Entry;
+
+typedef struct {
+  Circular_Log_Entry entries[CIRCULAR_LOG_ENTRY_COUNT];
+  size_t entry_write_position;
+  size_t current_entry_count;
+  size_t current_scroll_position;
+  Spin_Lock spinlock;
+} Circular_Log;
+
+void klog_write_fmt(Circular_Log *log, const char *fmt, ...);
 void klog_disable();
 void klog_enable();

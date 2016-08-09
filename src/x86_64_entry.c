@@ -30,7 +30,7 @@ typedef struct {
 } x86_64_IDT_Entry;
 
 typedef struct {
-  Console_Buffer console_buffer;
+  Circular_Log log;
   VGA_Text_Terminal vga_text_term;
   bool is_logging_disabled;
 } Kernel_Globals;
@@ -42,12 +42,12 @@ global_variable uintptr_t _interrupt_handlers[256];
 
 #include "kernel_acpi.c"
 
-internal void
+static void
 ioapic_initalize(uintptr_t ioapic_register_base)
 {
 }
 
-internal void
+static void
 lapic_initalize(uintptr_t apic_register_base)
 {
 	asm volatile ("cli");
@@ -64,19 +64,102 @@ lapic_initalize(uintptr_t apic_register_base)
 	{ 
     //APIC Spuritous interput vector 
 		static const uint64_t APIC_SIVR_OFFSET = 0xF0;
-		//APIC Interrupt Command Register
-		static const uint64_t APIC_ICR1_OFFSET = 0x300;
-		static const uint64_t APIC_ICR2_OFFSET = 0x310;
-
+    static const uint32_t SIVR_ENABLE = 1 << 8;
+    static const uint32_t SIVR_FOCUS_CHECKING = 1 << 9;
 		uint32_t *sivr = (uint32_t *)(apic_register_base + APIC_SIVR_OFFSET);
-		*sivr = 0xFF;
+		*sivr = (31 | SIVR_ENABLE); 
 	}
 
-  klog_debug("apic initalized");
+  klog_debug("lapic initalized for cpu0 is initalized");
 	asm volatile("sti");
+  klog_debug("now receiving lapic interrupts!");
 }
 
+internal inline void
+write_apic_register(uintptr_t address, uint32_t value){
+  *(uint32_t *)(address) = value;
+  uint32_t read = *(uint32_t *)address;
+}
+
+#define bochs_magic_breakpoint asm volatile("xchgw %bx, %bx");
+
+static const uint8_t TRAMPOLINE_BINARY[] = {
+#include "trampoline.txt"
+};
+
+
 internal void
+initalize_cpu(uintptr_t apic_register_base, uint8_t target_apic_id, uint8_t target_page_number)
+{
+  static const uintptr_t APIC_ICR1_OFFSET = 0x300;
+  static const uintptr_t APIC_ICR2_OFFSET = 0x310;
+
+  static const uint8_t DELIVERY_MODE_FIXED = 0b000;
+  static const uint8_t DELIVERY_MODE_LOWEST_PRIORITY = 0b001;
+  static const uint8_t DELIVERY_MODE_SMI = 0b010;
+  static const uint8_t DELIVERY_MODE_NMI = 0b100;
+  static const uint8_t DELIVERY_MODE_INIT = 0b101;
+  static const uint8_t DELIVERY_MODE_SIPI = 0b110;
+
+  static const uint8_t DESTINATION_MODE_PHYSICAL = 0;
+  static const uint8_t DESTINATION_MODE_LOGICAL = 1;
+
+  static const uint8_t DEILVERY_STATUS_IDLE = 0;
+  static const uint8_t DELIVERY_STATUS_PENDING = 1;
+
+  struct ICR1_STRUCT {
+    uint8_t vector;                     // 0 - 7
+    uint8_t delivery_mode : 3;          // 8 - 10 
+    uint8_t destination_mode : 1;       // 11 
+    uint8_t delivery_status : 1;        // 12 
+    uint8_t reserved0 : 1;              // 13
+    uint8_t level : 1;                  // 14
+    uint8_t trigger_mode : 1;           //15
+    uint8_t reserved1 : 2;              //16 - 17
+    uint8_t destination_shorthand : 2;  // 18 -19
+    uint16_t reserved2 : 11;            // 20 - 31
+  } __attribute((packed));
+
+  struct ICR2_STRUCT {
+    uint32_t reserved_0_ : 24;
+    uint8_t destination_field;
+  } __attribute((packed));
+
+  typedef struct ICR1_STRUCT ICR1_Register;
+  typedef struct ICR2_STRUCT ICR2_Register;
+
+  ICR1_Register icr1 = {};
+  icr1.delivery_mode = DELIVERY_MODE_INIT;
+  ICR2_Register icr2 = {};
+  icr2.destination_field = target_apic_id;
+
+  //NOTE(Torin) Writing to the ICR1 causues a IPI to be generated automaticly so ICR2 is written first
+  //Send INIT IPI To set processor to wait for SIPI
+
+  uint32_t icr2_value = *(uint32_t *)&icr2;
+  uint32_t icr1_value = *(uint32_t *)&icr1;
+  klog_debug("icr2_value: %u", icr2_value);
+  klog_debug("icr1_value: %u", icr1_value);
+
+  write_apic_register(apic_register_base + APIC_ICR2_OFFSET, *(uint32_t *)&icr2);
+  write_apic_register(apic_register_base + APIC_ICR1_OFFSET, *(uint32_t *)&icr1);
+  while(icr1.delivery_status == 1){
+    klog_debug("waiting for icr1 to get delivered!");
+  }
+
+  for(size_t i = 0; i < 0xFFFFF; i++) { asm volatile ( "nop" ); }
+
+  //Setup and send SIPI
+  icr1.vector = target_page_number; 
+  icr1.delivery_mode = DELIVERY_MODE_SIPI;
+  write_apic_register(apic_register_base + APIC_ICR2_OFFSET, *(uint32_t *)&icr2);
+  write_apic_register(apic_register_base + APIC_ICR1_OFFSET, *(uint32_t *)&icr1);
+  for(size_t i = 0; i < 0xFFFFF; i++) { asm volatile ( "nop" ); }
+  write_apic_register(apic_register_base + APIC_ICR2_OFFSET, *(uint32_t *)&icr2);
+  write_apic_register(apic_register_base + APIC_ICR1_OFFSET, *(uint32_t *)&icr1);
+}
+
+static void
 legacy_pic8259_initalize(void)
 { 
 	static const uint8_t PIC1_COMMAND_PORT = 0x20;
@@ -114,7 +197,7 @@ legacy_pic8259_initalize(void)
 	klog_info("PIC8259 Initialized");
 }
 
-internal void
+static void
 legacy_pit_initialize(void)  
 { //@Initialize @pit @PIT
 	//TODO(Torin) This frequency thing is probably bogus and needs to be
@@ -136,6 +219,7 @@ legacy_pit_initialize(void)
 	klog_info("PIT initialized!");
 }
 
+//TODO(Torin) Remove IDT Global variable
 internal void
 idt_install_interrupt(const uint32_t irq_number, const uint64_t irq_handler_addr) 
 {
@@ -264,26 +348,25 @@ x86_64_idt_initalize()
 
 #include "multiboot2.h"
 #include "hardware_serial.cpp"
-#include "kernel_memory.cpp"
+#include "kernel_memory.c"
+
+extern void
+ap_entry_procedure(void){
+  klog_debug("Grettings CPU0!  CPU1 here. I'm having a fantastic day!  How are you?");
+  asm volatile("hlt");
+}
 
 export void 
 kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) 
 {
-  klog_disable();
+  //klog_disable();
 	serial_debug_init();
 	legacy_pic8259_initalize();
 	legacy_pit_initialize();
 	x86_64_idt_initalize();
   kmem_initalize();
 
-  klog_enable();
-  klog_debug("This entry contains a vast quantity of text that execeds the maximum character count allowed on a single line "
-  "within the legacy vga text buffer.  In fact it manages to span a full 3 lines!");
-  for(size_t i = 0; i <= 22; i++){
-    klog_debug("entry: %u", (uint32_t)i);
-  }
-  klog_disable();
-
+  klog_debug("ap_entry_procedure: %lu", ap_entry_procedure);
 
   System_Info sys = {};
 
@@ -319,6 +402,7 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 			} break;
 
       case MULTIBOOT_TAG_TYPE_MMAP: {
+        #if 0
         klog_debug("found mmap multiboot tag");
         struct multiboot_tag_mmap *mmap_tag = (struct multiboot_tag_mmap *)(tag);
         multiboot_memory_map_t *mmap_entry = (multiboot_memory_map_t *)(mmap_tag->entries);
@@ -334,27 +418,35 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
           klog_debug("addr: %lu, size: %lu, type: %s", mmap_entry->addr, mmap_entry->len, MB_MMAP_TYPE_STRINGS[mmap_entry->type]);
           mmap_entry = (multiboot_memory_map_t *)((uintptr_t)mmap_entry + mmap_tag->entry_size);
         }
+        #endif
       };
 
 		}
 
 		//kterm_redraw_if_required(&_kterm, &_iostate);
 		tag = (struct multiboot_tag *)(((uint8_t *)tag) + ((tag->size + 7) & ~7));
-	} 
+	}
 
+  klog_debug("copying trampoline code to 0x1000");
+  memcpy(0x1000, TRAMPOLINE_BINARY, sizeof(TRAMPOLINE_BINARY));
+  uintptr_t *trampoline_exit = (uintptr_t *)0x2000;
+  *trampoline_exit = (uintptr_t)ap_entry_procedure;
   
   klog_debug("system_info:");
   klog_debug("ioapic_register_base: %lu", sys.ioapic_register_base);
   klog_debug("lapic_register_base: %lu", sys.lapic_register_base);
-   
+
   //Maping the APIC physical address to 2M for now
 	uintptr_t apic_physical_page, apic_page_offset = 0;
 	uintptr_t apic_virtual_page = silly_page_map(sys.lapic_register_base, true, &apic_physical_page, &apic_page_offset);
   uintptr_t apic_register_base_address = apic_virtual_page + apic_page_offset;
-  //lapic_initalize(apic_register_base_address);
+
+  lapic_initalize(apic_register_base_address);
+  initalize_cpu(apic_register_base_address, 1, 0x01);
+  redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log);
 
 	while (1) { 
-		redraw_vga_text_terminal_if_dirty(&globals.vga_text_term, &globals.console_buffer);
+		redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log);
 		asm volatile("hlt");
 	};
 

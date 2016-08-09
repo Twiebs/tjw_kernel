@@ -1,5 +1,7 @@
-static void
-write_uint8_base16(char *dest, uint8_t value) {
+
+#if 0
+static inline 
+void uint8_to_string_base16(char *dest, uint8_t value){
   #define write_four_bits_base16(dest, four_bits) \
 	if (four_bits > 9) { *dest = 'A' + (four_bits - 10); }  \
 	else { *dest = '0' + four_bits; }
@@ -10,98 +12,94 @@ write_uint8_base16(char *dest, uint8_t value) {
   #undef write_four_bits_base16
 }
 
-static void
-write_uint32_base16(char *dest, uint32_t value) {
+static inline
+void uint32_to_string_base16(char *dest, uint32_t value){
 	uint8_t byte3 = (uint8_t)(value >> 24);
 	uint8_t byte2 = (uint8_t)(value >> 16);
 	uint8_t byte1 = (uint8_t)(value >> 8);
 	uint8_t byte0 = (uint8_t)value;
-	write_uint8_base16(dest + 0, byte3);
-	write_uint8_base16(dest + 2, byte2);
-	write_uint8_base16(dest + 4, byte1);
-	write_uint8_base16(dest + 6, byte0);
+	uint8_to_string_base16(dest + 0, byte3);
+	uint8_to_string_base16(dest + 2, byte2);
+	uint8_to_string_base16(dest + 4, byte1);
+	uint8_to_string_base16(dest + 6, byte0);
 }
 
-static void
-append_console_entry(uint32_t entry, const void *data, uint32_t length, Console_Buffer *cb){
-  size_t offset = cb->offset_of_entry[entry] + cb->length_of_entry[entry] % CONSOLE_OUTPUT_BUFFER_SIZE;
-  if(offset + length > CONSOLE_OUTPUT_BUFFER_SIZE){
-    size_t bytes_to_write = CONSOLE_OUTPUT_BUFFER_SIZE - (offset + length);
-    memcpy(cb->output_buffer + offset, data, bytes_to_write);
-    memcpy(cb->output_buffer, data, length - bytes_to_write);
+static inline
+void uint64_to_string_base16(char *dest, uint64_t value){
+  uint32_t value0 = (uint32_t)(value >> 32);
+  uint32_t value1 = (uint32_t)(value);
+  uint32_to_string_base16(dest + 0, value1);
+  uint32_to_string_base16(dest + 8, value0);
+}
+#endif
+
+static inline
+void string_inplace_reverse(char *str, size_t length){
+  size_t midpoint = length / 2;
+  for(size_t i = 0; i < midpoint; i++){
+    char oldValue = str[i];
+    str[i] = str[length - 1 - i];
+    str[length - 1 - i] = oldValue;
+  }
+} 
+
+static inline 
+size_t uint64_to_string_base16(char *dest, uint64_t value){
+  size_t bytes_written = 0;
+  if(value == 0) {
+    dest[0] = '0';
+    bytes_written = 1;
   } else {
-    memcpy(cb->output_buffer + offset, data, length);
+    while(value > 0){
+      static const char LOOKUP[] = "0123456789ABCDEF";
+      dest[bytes_written++] = LOOKUP[value % 16];
+      value /= 16;
+    }
+    string_inplace_reverse(dest, bytes_written);
   }
-  cb->length_of_entry[entry] += length;
+  return bytes_written;
 }
 
-void 
-console_write_fmt(Console_Buffer *cb, const char *fmt, ...) 
+static size_t 
+kernel_vsnprintf(char *buffer, size_t capacity, const char *fmt, va_list args) 
 {
-  if(globals.is_logging_disabled) return;
-
-  va_list args;
-  va_start(args,fmt);
-
-  size_t previous_entry_index = (cb->entry_write_pos - 1) % CONSOLE_ENTRY_COUNT;
-  size_t entry_index = cb->entry_write_pos % CONSOLE_ENTRY_COUNT;
-  cb->offset_of_entry[entry_index] = cb->offset_of_entry[previous_entry_index] + cb->length_of_entry[previous_entry_index];
-  if(cb->scroll_entry_index == ((entry_index - 1) % CONSOLE_ENTRY_COUNT)){
-    cb->scroll_entry_index++;
-  }
-  cb->entry_write_pos++;
-  if(cb->current_entry_count < CONSOLE_ENTRY_COUNT){
-    cb->current_entry_count++;
-  }
-
+  size_t bytes_written = 0;
   size_t fmt_index = 0;
   while(fmt[fmt_index] != 0){
     if(fmt[fmt_index] == '%'){
 			fmt_index++;
+
 			if(fmt[fmt_index] == 'l') {
 				fmt_index++;
-
-        //uint64_t base16
-				if(fmt[fmt_index] == 'u') 
-        {
-					uint64_t value = va_arg(args, uint64_t );
-					uint32_t dword0 = (uint32_t)(value >> 32);
-					uint32_t dword1 = (uint32_t)(value);
-          char text[18];
-          text[0] = '0';
-          text[1] = 'x';
-          write_uint32_base16(text + 2, dword0);
-					write_uint32_base16(text + 10, dword1);
-          append_console_entry(entry_index, text, 18, cb);
+				if(fmt[fmt_index] == 'u') {
+					uint64_t value = va_arg(args, uint64_t);
+          if(bytes_written + 18 > capacity) return bytes_written;
+          buffer[bytes_written + 0] = '0';
+          buffer[bytes_written + 1] = 'x';
+          bytes_written += 2;
+          bytes_written += uint64_to_string_base16(buffer + bytes_written, value);
           fmt_index++;
 				}
 			}
 
       //uint32_t base16	
-			else if (fmt[fmt_index] == 'u') 
-      {
+			else if (fmt[fmt_index] == 'u') {
 				uint32_t value = va_arg(args, uint32_t);
-				uint8_t byte3 = (uint8_t)(value >> 24);
-				uint8_t byte2 = (uint8_t)(value >> 16);
-				uint8_t byte1 = (uint8_t)(value >> 8);
-				uint8_t byte0 = (uint8_t)value;
-        char text[10];
-        text[0] = '0';
-        text[1] = 'x';
-				write_uint8_base16(text + 2, byte3);
-				write_uint8_base16(text + 4, byte2);
-				write_uint8_base16(text + 6, byte1);
-				write_uint8_base16(text + 8, byte0);
-        append_console_entry(entry_index, text, 10, cb);
+        if(bytes_written + 10 > capacity) return bytes_written;
+        buffer[bytes_written + 0] = '0';
+        buffer[bytes_written + 1] = 'x';
+        bytes_written += 2;
+				bytes_written += uint64_to_string_base16(buffer + bytes_written, (uint64_t)value);
         fmt_index++;
 			}
 
       //cstring
-			else if (fmt[fmt_index] == 's') 
-      {
+			else if (fmt[fmt_index] == 's') {
 				const char *str = (const char *)va_arg(args, uintptr_t);
 				size_t length = strlen(str);
-        append_console_entry(entry_index, str, length, cb);
+        if(bytes_written + length > capacity) return bytes_written;
+        memcpy(buffer + bytes_written, str, length);
+        bytes_written += length; 
 				fmt_index++;
 			}
 
@@ -111,7 +109,9 @@ console_write_fmt(Console_Buffer *cb, const char *fmt, ...)
 					fmt_index++;
 					size_t str_length = (size_t)va_arg(args, uintptr_t);
 					const char *str = (const char *)va_arg(args, uintptr_t);
-          append_console_entry(entry_index, str, str_length, cb);
+          if(bytes_written + str_length > capacity) return bytes_written;
+          memcpy(buffer + bytes_written, str, str_length);
+          bytes_written += str_length;
 					fmt_index++;
 				}
 			}
@@ -124,131 +124,38 @@ console_write_fmt(Console_Buffer *cb, const char *fmt, ...)
       }
 
       size_t length = fmt_index - begin;
-      append_console_entry(entry_index, &fmt[begin], length, cb);
+      if(bytes_written + length > capacity) return bytes_written;
+      memcpy(buffer + bytes_written, fmt + begin, length);
+      bytes_written += length;
 		}
   } 
-
-  size_t begin_offset = cb->offset_of_entry[entry_index];
-  size_t entry_length = cb->length_of_entry[entry_index];
-  if(begin_offset + entry_length > CONSOLE_OUTPUT_BUFFER_SIZE){
-    size_t end_bytes_to_write = (begin_offset + entry_length) - CONSOLE_OUTPUT_BUFFER_SIZE;
-    size_t first_bytes_to_write = entry_length - end_bytes_to_write;
-    write_serial(cb->output_buffer + begin_offset, first_bytes_to_write);
-    write_serial(cb->output_buffer, end_bytes_to_write);
-    write_serial("\n", 1);
-  } else {
-    write_serial(cb->output_buffer + begin_offset, entry_length);
-    write_serial("\n", 1);
-  }
-
-  cb->flags = cb->flags | Console_Flag_OUTPUT_DIRTY;
+  return bytes_written;
 }
 
-#if 0
-internal void
-stdout_write_fmt(IOState *io, const char *fmt, ...) {
-	va_list args;
-	va_start(args, fmt);
-  uint32_t index = 0;
+void klog_write_fmt(Circular_Log *log, const char *fmt, ...){
+  if(globals.is_logging_disabled) return;
 
-	const char *buffer_begin = &io->output_buffer[io->output_buffer_count];
-	char *write = &io->output_buffer[io->output_buffer_count];
-	while (fmt[index] != 0) {
-		if (fmt[index] == '%') {
-			index++;
-
-			if (fmt[index] == 'l') {
-				index++;
-				if (fmt[index] == 'u') {
-
-					uint64_t value = va_arg(args, uint64_t );
-					uint32_t dword0 = (uint32_t)(value >> 32);
-					uint32_t dword1 = (uint32_t)(value);
-
-					memcpy_literal_and_increment(write, "0x");
-					write_uint32_base16(write + 0, dword0);
-					write_uint32_base16(write + 8, dword1);
-					write += 16;
-					index++;
-				}
-			}
-			
-			else if (fmt[index] == 'u') {
-				uint32_t value = va_arg(args, uint32_t);
-				uint8_t byte3 = (uint8_t)(value >> 24);
-				uint8_t byte2 = (uint8_t)(value >> 16);
-				uint8_t byte1 = (uint8_t)(value >> 8);
-				uint8_t byte0 = (uint8_t)value;
-				memcpy_literal_and_increment(write, "0x");
-				write_uint8_base16(write + 0, byte3);
-				write_uint8_base16(write + 2, byte2);
-				write_uint8_base16(write + 4, byte1);
-				write_uint8_base16(write + 6, byte0);
-				write += 8;
-				index++;
-			}
-
-			else if (fmt[index] == 's') {
-				//TODO(Torin) all of this io output manipulation is not correct
-				//at all... we need to check if it overflows and then handle that by 
-				//flushing the output buffer to a file
-				const char *str = (const char *)va_arg(args, size_t);
-				size_t length = strlen(str);
-				memcpy(write, str, length);
-				write += length;
-				index++;
-			}
-
-			else if (fmt[index] == '.') {
-				index++;
-				if (fmt[index] == '*') {
-					index++;
-					size_t string_length = (size_t)va_arg(args, size_t);
-					const char *str = (const char *)va_arg(args, size_t);
-					memcpy(write, str, string_length);
-					write += string_length;
-					index++;
-				}
-			}
-		}
-		else {
-			*write = fmt[index];
-			write++;
-			index++;
-		}
-	}
-
-	*write = 0;
-	write++;
-
-	size_t bytes_written = write - buffer_begin;
-	io->output_buffer_count += bytes_written;
-	io->output_buffer_entry_count++;
-	io->is_output_buffer_dirty = true;
-
-
-	for (size_t i = 0; i < bytes_written - 1; i++) {
-	}
+  spinlock_aquire(&log->spinlock); 
+  size_t entry_index = log->entry_write_position % CIRCULAR_LOG_ENTRY_COUNT;
+  Circular_Log_Entry *entry = &log->entries[entry_index];
+  log->entry_write_position++;
+  log->current_scroll_position++;
+  if(log->current_entry_count < CIRCULAR_LOG_ENTRY_COUNT){ log->current_entry_count++; }
+  spinlock_release(&log->spinlock);
   
-}
-#endif
+  va_list args;
+  va_start(args, fmt);
+  entry->length = kernel_vsnprintf(entry->message, CIRCULAR_LOG_MESSAGE_SIZE, fmt, args);
+  va_end(args);
 
-#if 0
-internal void
-io_write_cstr(IOState *io, const char *cstr) {
-	size_t length = strlen(cstr);	
-	if (io->output_buffer_count + length + 1 > sizeof(io->output_buffer)) {
-		memset(io->output_buffer, 0, sizeof(io->output_buffer));
-		klog_error("EXCEDED OUTPUT BUFFER");		
-		kpanic();
-	} else {
-		memcpy(&io->output_buffer[io->output_buffer_count], cstr, length);
-		io->output_buffer_count += length;
-		io->output_buffer[io->output_buffer_count] = 0;
-	}
+  //NOTE(Torin: 2016-08-08) This could cause serial output to mismatch
+  //console output if a cpu core formats a sufficantly small message and aquires
+  //the spin lock before the first core finishes formating the message
+  spinlock_aquire(&log->spinlock);
+  write_serial(entry->message, entry->length);
+  write_serial("\n", 1);
+  spinlock_release(&log->spinlock);
 }
-#endif
-
 
 void klog_disable(){
   globals.is_logging_disabled = true;

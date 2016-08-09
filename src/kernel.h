@@ -5,11 +5,11 @@
 
 #define kassert(expr) if(!(expr)) { klog_error("ASSERTION FAILED!!!"); kpanic(); }
 
-#define klog_debug(...) console_write_fmt(&globals.console_buffer, __VA_ARGS__)
-#define klog_info(...) console_write_fmt(&globals.console_buffer, __VA_ARGS__)
-#define klog_error(...) console_write_fmt(&globals.console_buffer, __VA_ARGS__)
+#define klog_debug(...) klog_write_fmt(&globals.log, __VA_ARGS__)
+#define klog_info(...)  klog_write_fmt(&globals.log, __VA_ARGS__)
+#define klog_error(...) klog_write_fmt(&globals.log, __VA_ARGS__)
 
-#define kpanic() redraw_vga_text_terminal_if_dirty(&globals.vga_text_term, &globals.console_buffer); \
+#define kpanic() redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log); \
 	asm volatile ("cli"); \
 	asm volatile ("hlt")
 

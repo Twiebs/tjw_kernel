@@ -16,4 +16,4 @@ typedef struct {
 	uint32_t last_entry_count;
 } VGA_Text_Terminal; 
 
-void redraw_vga_text_terminal_if_dirty(VGA_Text_Terminal *term, Console_Buffer *cb);
+void redraw_vga_text_terminal_if_log_is_dirty(VGA_Text_Terminal *kterm, Circular_Log *log);
