@@ -107,14 +107,19 @@ export void irq_common_handler(IRQRegisterState regstate) {
 	 static const uint8_t PIC2_COMMAND_PORT = 0xA0;
 	 static const uint8_t PIC_EOI_CODE = 0x20;
 
+   lapic_write_register(globals.lapic_address, 0xB0, 0x00);
+   lapic_write_register(globals.lapic_address, 0xB0, 0x00);
+
+
+#if 0
 	 //TODO(Torin) This might be wrong
 	 if (regstate.interrupt_number < 8) {
 		 write_port(PIC1_COMMAND_PORT, PIC_EOI_CODE);
 	 } else {
 			write_port(PIC2_COMMAND_PORT, PIC_EOI_CODE);
 	 }
+#endif
 }
-
 
 internal void 
 irq_handler_keyboard(void) {
@@ -125,29 +130,25 @@ irq_handler_keyboard(void) {
 		int8_t keycode = read_port(KEYBOARD_DATA_PORT);
 		if (keycode < 0) return;
 
-#if 0
-		if (keycode == KEYCODE_BACKSPACE_PRESSED) {
-			if (_iostate.input_buffer_count > 0) {
-				_iostate.input_buffer[_iostate.input_buffer_count] = 0;
-				_iostate.input_buffer_count -= 1;
-				_iostate.is_input_buffer_dirty = true;
+    
+		if(keycode == KEYCODE_BACKSPACE_PRESSED){
+			if(globals.log.input_buffer_count > 0) {
+				globals.log.input_buffer[globals.log.input_buffer_count] = 0;
+				globals.log.input_buffer_count -= 1;
 			}
 		} else if (keycode == KEYCODE_ENTER_PRESSED) {
-			_iostate.is_command_ready = true;
+			//_iostate.is_command_ready = true;
 		} else if (keycode == KEYCODE_UP_PRESSED) {
-			_kterm.scroll_count = -1;
+			//_kterm.scroll_count = -1;
 		} else if (keycode == KEYCODE_DOWN_PRESSED) {
-			_kterm.scroll_count = 1;
+			//_kterm.scroll_count = 1;
 		} else {
-			_iostate.input_buffer[_iostate.input_buffer_count++] = keyboard_map[(uint32_t)keycode];
-			_iostate.input_buffer[_iostate.input_buffer_count] = 0;
-			_iostate.is_input_buffer_dirty = true;
+      if(globals.log.input_buffer_count > sizeof(globals.log.input_buffer)) return;
+      globals.log.input_buffer[globals.log.input_buffer_count++] = keyboard_map[(uint32_t)keycode];
 		}
-#endif
-#if 0
-		klog("keycode: %u", (uint32_t)keycode);
-#endif
   }
+
+  redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log);
 }
 
 internal void 

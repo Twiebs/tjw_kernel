@@ -108,8 +108,31 @@ void redraw_vga_text_terminal_if_log_is_dirty(VGA_Text_Terminal *kterm, Circular
         VGA_TEXT_BUFFER[vga_index+0] = entry->message[j];
         VGA_TEXT_BUFFER[vga_index+1] = VGAColor_GREEN;
       }
+
+      int chars_to_clear = VGA_TEXT_COLUMN_COUNT - chars_to_write;
+      for(int j = 0; j < chars_to_clear; j++){
+        size_t vga_index = ((row_index * VGA_TEXT_COLUMN_COUNT) + j + chars_to_write) * 2;
+        VGA_TEXT_BUFFER[vga_index + 0] = 0x00;
+        VGA_TEXT_BUFFER[vga_index + 1] = 0x00;
+      }
+
       row_index++;
     }
+  }
+
+
+  size_t chars_to_write = min(log->input_buffer_count, VGA_TEXT_COLUMN_COUNT);
+  for(size_t i = 0; i < chars_to_write; i++){
+    size_t vga_index = ((24 * VGA_TEXT_COLUMN_COUNT) + i) * 2;    
+    VGA_TEXT_BUFFER[vga_index+0] = log->input_buffer[i];
+    VGA_TEXT_BUFFER[vga_index+1] = VGAColor_RED;
+  }
+
+  size_t chars_to_clear = VGA_TEXT_COLUMN_COUNT - chars_to_write;
+  for(size_t i = 0; i < chars_to_clear; i++){
+    size_t vga_index = ((24 * VGA_TEXT_COLUMN_COUNT) + i + chars_to_write) * 2;    
+    VGA_TEXT_BUFFER[vga_index+0] = 0x00; 
+    VGA_TEXT_BUFFER[vga_index+1] = 0x00; 
   }
 }
 

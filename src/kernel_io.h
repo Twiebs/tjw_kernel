@@ -33,6 +33,8 @@ typedef struct {
   size_t entry_write_position;
   size_t current_entry_count;
   size_t current_scroll_position;
+  char input_buffer[256];
+  size_t input_buffer_count;
   Spin_Lock spinlock;
 } Circular_Log;
 

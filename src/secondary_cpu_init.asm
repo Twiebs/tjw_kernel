@@ -1,7 +1,5 @@
 [BITS 16]
 
-%define P4_TABLE 0x10F000
-
 %define CR0_PAGING_ENABLED_BIT (1 << 31)
 
 %define CR4_PAE_BIT (1 << 5) ;Physical Address Extention
@@ -26,7 +24,7 @@ ap_init_procedure:
   out 0x21, al
   lidt[IDT]
 
-  mov eax, P4_TABLE 
+  mov eax, [ds:0x1000]
 	mov cr3, eax
 
 	mov eax, cr4                 
@@ -52,10 +50,7 @@ long_mode:
 	mov gs, ax
   mov ax, 0x00
 	mov ss, ax
-  xchg bx, bx
-
-  xchg bx, bx
-  mov rax, [0x2000]
+  mov rax, [0x2008]
   mov rsp, 0x2000 
   call rax
   hlt

@@ -112,6 +112,7 @@ void parse_root_system_descriptor(const RSDP_Descriptor_1 *rsdp, System_Info *sy
               kassert(local_apic->flags & 0b1); //Processor must be enabled!
               sys->processor_count++;
             }break;
+
             case IO_APIC:{
               typedef struct {
                 MADT_Entry_Header header;
@@ -121,12 +122,19 @@ void parse_root_system_descriptor(const RSDP_Descriptor_1 *rsdp, System_Info *sy
                 uint32_t global_system_interrupt_base;
               } MADT_Entry_IO_APIC;
 
+              
               MADT_Entry_IO_APIC *ioapic = (MADT_Entry_IO_APIC *)madt_entry;
-              if(ioapic->io_apic_id == 0) {
-                sys->ioapic_register_base = ioapic->io_apic_address;
+              klog_info("found an IOAPIC");
+              klog_info("ioapic id: %u", (uint32_t)ioapic->io_apic_id);
+              klog_info("ioapic physical address: %u", ioapic->io_apic_address);
+
+              if(sys->ioapic_register_base != 0){
+                klog_info("system contains multiple ioapics");
               } else {
-                klog_debug("system contains multiple ioapics");
+                sys->ioapic_register_base = ioapic->io_apic_address;
               }
+
+
             }break;
             case INTERRUPT_SOURCE_OVERRIDE:{
             }break;

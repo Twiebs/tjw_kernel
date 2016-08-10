@@ -33,6 +33,7 @@ typedef struct {
   Circular_Log log;
   VGA_Text_Terminal vga_text_term;
   bool is_logging_disabled;
+  uintptr_t lapic_address;
 } Kernel_Globals;
 
 static Kernel_Globals globals;
@@ -42,14 +43,86 @@ global_variable uintptr_t _interrupt_handlers[256];
 
 #include "kernel_acpi.c"
 
-static void
-ioapic_initalize(uintptr_t ioapic_register_base)
-{
+
+static inline
+void ioapic_write_register(const uintptr_t ioapic_base, const uint8_t offset, const uint32_t value){
+  *(uint32_t *)(ioapic_base) = offset;
+  *(uint32_t *)(ioapic_base + 0x10) = value;
+}
+
+static inline
+uint32_t ioapic_read_register(const uintptr_t ioapic_base, const uint8_t offset){
+  *(uint32_t *)(ioapic_base) = offset;
+  return *(uint32_t *)(ioapic_base + 0x10);
+}
+
+static inline
+void lapic_write_register(uintptr_t lapic_base, uintptr_t register_offset, uint32_t value){
+  *(uint32_t *)(lapic_base + register_offset) = value;
 }
 
 static void
-lapic_initalize(uintptr_t apic_register_base)
-{
+ioapic_initalize(uintptr_t ioapic_register_base) {
+  
+  struct IRQR_LOW_STRUCT {
+    union {
+      struct {
+        uint8_t vector; // 0-7
+        uint8_t delivery_mode : 2; //8-10
+        uint8_t destination_mode : 1; //11
+        uint8_t delivery_status : 1; // 12
+        uint8_t pin_polarity : 1; // 13
+        uint8_t remote_irr : 1; //14
+        uint8_t trigger_mode : 1; //15
+        uint8_t mask : 1; //16
+        uint16_t reserved : 15; 
+      };
+      uint32_t packed;
+    };
+  } __attribute__((packed));
+
+  struct IRQR_HIGH_STRUCT {
+    union {
+      struct {
+        uint32_t reserved    : 24;
+        uint32_t destination :  8;
+      };
+      uint32_t packed;
+    };
+  } __attribute__((packed));
+
+  typedef struct IRQR_LOW_STRUCT IRQR_LOW;
+  typedef struct IRQR_HIGH_STRUCT IRQR_HIGH;
+
+  static const uint8_t DELIVERY_MODE_FIXED = 0x00;
+
+  { //Keyboard
+    IRQR_LOW low = {};
+    IRQR_HIGH high = {};
+    low.vector = 0x21;
+    ioapic_write_register(ioapic_register_base, 0x12, low.packed);
+    ioapic_write_register(ioapic_register_base, 0x13, high.packed);
+  }
+
+
+#if 0
+  for(size_t i = 0; i < 8; i++){
+    IRQR_LOW irqr_low = {};
+    IRQR_HIGH irqr_high = {};
+    irqr_low.packed = ioapic_read_register(ioapic_register_base, 0x10 + (i * 2));
+    irqr_high.packed = ioapic_read_register(ioapic_register_base, 0x10 + (i * 2) + 1);
+    klog_debug("IRQ %u", (uint32_t)i);
+    klog_debug("vector: %u", (uint32_t)irqr_low.vector);
+    klog_debug("mask %u", (uint32_t)irqr_low.mask);
+  }
+#endif
+
+}
+
+
+
+static void
+lapic_initalize(uintptr_t apic_register_base) {
 	asm volatile ("cli");
 	
   { //Disable the legacy PIC first
@@ -75,22 +148,40 @@ lapic_initalize(uintptr_t apic_register_base)
   klog_debug("now receiving lapic interrupts!");
 }
 
-internal inline void
-write_apic_register(uintptr_t address, uint32_t value){
-  *(uint32_t *)(address) = value;
-  uint32_t read = *(uint32_t *)address;
-}
-
 #define bochs_magic_breakpoint asm volatile("xchgw %bx, %bx");
 
 static const uint8_t TRAMPOLINE_BINARY[] = {
 #include "trampoline.txt"
 };
 
+static const uint8_t TEST_PROGRAM_ELF[] = { 
+#include "test_program.txt" 
+};
 
-internal void
-initalize_cpu(uintptr_t apic_register_base, uint8_t target_apic_id, uint8_t target_page_number)
-{
+static void
+lapic_enable_timer(uintptr_t lapic_base){
+  static const uint32_t TIMER_IRQ_REGISTER = 0x320;
+  
+  static const uint32_t TIMER_INITAL_COUNT_REGISTER  = 0x380;
+  static const uint32_t TIMER_CURRENT_COUNT_REGISTER = 0x390;
+  static const uint32_t TIMER_DIVIDE_CONFIG_REGISTER = 0x3E0;
+
+  static const uint32_t TIMER_DIVIDE_BY_2 = 0b00;
+  static const uint32_t TIMER_DIVIDE_BY_4 = 0b01;
+  static const uint32_t TIMER_DIVIDE_BY_8 = 0b10;
+  static const uint32_t TIMER_DIVIDE_BY_16 = 0b11;
+
+  //NOTE(Torin) Without this flag the timer is in one-shot mode 
+  static const uint32_t TIMER_PERIODIC_MODE = 0x20000;
+
+  lapic_write_register(lapic_base, TIMER_CURRENT_COUNT_REGISTER, 0x00);
+  lapic_write_register(lapic_base, TIMER_INITAL_COUNT_REGISTER, 0xFFFFFF);
+  lapic_write_register(lapic_base, TIMER_DIVIDE_CONFIG_REGISTER, TIMER_DIVIDE_BY_16);
+  lapic_write_register(lapic_base, TIMER_IRQ_REGISTER, 0x20 | TIMER_PERIODIC_MODE);
+}
+
+static void
+initalize_cpu(uintptr_t apic_register_base, uint8_t target_apic_id, uint8_t target_page_number){
   static const uintptr_t APIC_ICR1_OFFSET = 0x300;
   static const uintptr_t APIC_ICR2_OFFSET = 0x310;
 
@@ -141,8 +232,8 @@ initalize_cpu(uintptr_t apic_register_base, uint8_t target_apic_id, uint8_t targ
   klog_debug("icr2_value: %u", icr2_value);
   klog_debug("icr1_value: %u", icr1_value);
 
-  write_apic_register(apic_register_base + APIC_ICR2_OFFSET, *(uint32_t *)&icr2);
-  write_apic_register(apic_register_base + APIC_ICR1_OFFSET, *(uint32_t *)&icr1);
+  lapic_write_register(apic_register_base, APIC_ICR2_OFFSET, *(uint32_t *)&icr2);
+  lapic_write_register(apic_register_base, APIC_ICR1_OFFSET, *(uint32_t *)&icr1);
   while(icr1.delivery_status == 1){
     klog_debug("waiting for icr1 to get delivered!");
   }
@@ -152,16 +243,15 @@ initalize_cpu(uintptr_t apic_register_base, uint8_t target_apic_id, uint8_t targ
   //Setup and send SIPI
   icr1.vector = target_page_number; 
   icr1.delivery_mode = DELIVERY_MODE_SIPI;
-  write_apic_register(apic_register_base + APIC_ICR2_OFFSET, *(uint32_t *)&icr2);
-  write_apic_register(apic_register_base + APIC_ICR1_OFFSET, *(uint32_t *)&icr1);
+  lapic_write_register(apic_register_base, APIC_ICR2_OFFSET, *(uint32_t *)&icr2);
+  lapic_write_register(apic_register_base, APIC_ICR1_OFFSET, *(uint32_t *)&icr1);
   for(size_t i = 0; i < 0xFFFFF; i++) { asm volatile ( "nop" ); }
-  write_apic_register(apic_register_base + APIC_ICR2_OFFSET, *(uint32_t *)&icr2);
-  write_apic_register(apic_register_base + APIC_ICR1_OFFSET, *(uint32_t *)&icr1);
+  lapic_write_register(apic_register_base, APIC_ICR2_OFFSET, *(uint32_t *)&icr2);
+  lapic_write_register(apic_register_base, APIC_ICR1_OFFSET, *(uint32_t *)&icr1);
 }
 
 static void
-legacy_pic8259_initalize(void)
-{ 
+legacy_pic8259_initalize(void) {
 	static const uint8_t PIC1_COMMAND_PORT = 0x20;
 	static const uint8_t PIC2_COMMAND_PORT = 0xA0;
 	static const uint8_t PIC1_DATA_PORT = 0x21;
@@ -192,14 +282,13 @@ legacy_pic8259_initalize(void)
   //Write EndOfInterupt and set interrupt enabled mask 
 	write_port(PIC1_DATA_PORT, 0x20);
 	write_port(PIC2_DATA_PORT, 0x20);
-	write_port(PIC1_DATA_PORT, 0b11111101);
+	write_port(PIC1_DATA_PORT, 0b11111111);
 	write_port(PIC2_DATA_PORT, 0b11111111);
 	klog_info("PIC8259 Initialized");
 }
 
 static void
-legacy_pit_initialize(void)  
-{ //@Initialize @pit @PIT
+legacy_pit_initialize(void){ 
 	//TODO(Torin) This frequency thing is probably bogus and needs to be
 	//fixed so that specific times can be programmed
 	static const uint32_t PIT_COMMAND_REPEATING_MODE = 0x36;
@@ -220,9 +309,8 @@ legacy_pit_initialize(void)
 }
 
 //TODO(Torin) Remove IDT Global variable
-internal void
-idt_install_interrupt(const uint32_t irq_number, const uint64_t irq_handler_addr) 
-{
+static void
+idt_install_interrupt(const uint32_t irq_number, const uint64_t irq_handler_addr) {
 	static const uint64_t PRIVILEGE_LEVEL_0 = 0b00000000;
 	static const uint64_t PRIVILEGE_LEVEL_3 = 0b01100000;
 	static const uint64_t PRESENT_BIT = (1 << 7); 
@@ -241,15 +329,15 @@ idt_install_interrupt(const uint32_t irq_number, const uint64_t irq_handler_addr
 	_idt[irq_number].ist = 0;
 }
 
-extern void asm_double_fault_handler();
-extern void asm_debug_handler();
-
-internal void
-x86_64_idt_initalize() 
-{
+static void
+x86_64_idt_initalize(){
 	//NOTE(Torin) This is a debug mechanisim to insure that 
 	//if a handler is called from the asm stub and the registered interrupt
 	//handler is 0xFFFFFFFF then the interrupt handler was never registered
+  
+  extern void asm_double_fault_handler();
+  extern void asm_debug_handler();
+  
 	for (uint32_t i = 0; i < 256; i++) {
 		idt_install_interrupt(i, (uintptr_t)asm_debug_handler);
 		_interrupt_handlers[i] = 0xFFFFFFFF;
@@ -352,17 +440,22 @@ x86_64_idt_initalize()
 
 extern void
 ap_entry_procedure(void){
+  klog_info("CPU1 booted and initalized");
+
   klog_debug("Grettings CPU0!  CPU1 here. I'm having a fantastic day!  How are you?");
   asm volatile("hlt");
+  klog_debug("wtf mate? who dares awaken me from my slumber?");
 }
 
-export void 
+#include "kernel_process.c"
+
+extern void 
 kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) 
 {
   //klog_disable();
 	serial_debug_init();
 	legacy_pic8259_initalize();
-	legacy_pit_initialize();
+	//legacy_pit_initialize();
 	x86_64_idt_initalize();
   kmem_initalize();
 
@@ -401,6 +494,20 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 				parse_root_system_descriptor(&rsdp->first_part, &sys);
 			} break;
 
+      case MULTIBOOT_TAG_TYPE_FRAMEBUFFER: {
+        struct multiboot_tag_framebuffer *fb = (struct multiboot_tag_framebuffer *)(tag);
+
+        if(fb->common.framebuffer_type != MULTIBOOT_FRAMEBUFFER_TYPE_RGB){
+          klog_info("this is a text buffer");
+        } else {
+          sys.framebuffer_address = fb->common.framebuffer_addr;
+          sys.framebuffer_width = fb->common.framebuffer_width;
+          sys.framebuffer_height = fb->common.framebuffer_height;
+          sys.framebuffer_depth = fb->common.framebuffer_bpp / 8;
+          sys.framebuffer_pitch = fb->common.framebuffer_pitch;        
+        }
+      } break;
+
       case MULTIBOOT_TAG_TYPE_MMAP: {
         #if 0
         klog_debug("found mmap multiboot tag");
@@ -429,39 +536,31 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 
   klog_debug("copying trampoline code to 0x1000");
   memcpy(0x1000, TRAMPOLINE_BINARY, sizeof(TRAMPOLINE_BINARY));
-  uintptr_t *trampoline_exit = (uintptr_t *)0x2000;
+  uintptr_t *p4_table_address = (uintptr_t *)0x2000;
+  uintptr_t *trampoline_exit = (uintptr_t *)0x2008;
+  *p4_table_address = (uintptr_t)&g_p4_table;
   *trampoline_exit = (uintptr_t)ap_entry_procedure;
   
-  klog_debug("system_info:");
-  klog_debug("ioapic_register_base: %lu", sys.ioapic_register_base);
-  klog_debug("lapic_register_base: %lu", sys.lapic_register_base);
-
   //Maping the APIC physical address to 2M for now
-	uintptr_t apic_physical_page, apic_page_offset = 0;
-	uintptr_t apic_virtual_page = silly_page_map(sys.lapic_register_base, true, &apic_physical_page, &apic_page_offset);
-  uintptr_t apic_register_base_address = apic_virtual_page + apic_page_offset;
+	uintptr_t lapic_physical_page, lapic_page_offset = 0;
+	uintptr_t lapic_virtual_page = silly_page_map(sys.lapic_register_base, true, &lapic_physical_page, &lapic_page_offset);
+  uintptr_t lapic_register_base_address = lapic_virtual_page + lapic_page_offset;
+  lapic_initalize(lapic_register_base_address);
+  globals.lapic_address = lapic_register_base_address;
 
-  lapic_initalize(apic_register_base_address);
-  initalize_cpu(apic_register_base_address, 1, 0x01);
-  redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log);
+  uintptr_t ioapic_physical_page, ioapic_page_offset;
+  uintptr_t ioapic_base_address = silly_page_map(sys.ioapic_register_base, true, &ioapic_physical_page, &ioapic_page_offset);
+  ioapic_initalize(ioapic_base_address);
 
-	while (1) { 
-		redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log);
-		asm volatile("hlt");
-	};
+  klog_info("ioapic: physical = %lu, virtual = %lu", sys.ioapic_register_base, ioapic_base_address);
+  klog_info("lapic: physical = %lu, virtual = %lu", sys.lapic_register_base, lapic_register_base_address);
+
+  initalize_cpu(lapic_register_base_address, 1, 0x01);
+  //lapic_enable_timer(lapic_register_base_address);
 
 
-#if 0	
-	uint32_t *module_addr_array = (uint32_t *)((uintptr_t)mb->mods_addr);
-	KFS_Header *kfs = (KFS_Header *)(uintptr_t)module_addr_array[0];
-	bool is_kfs_valid = (kfs->verifier == KFS_HEADER_VERIFIER);
-	klog("KFS Status: %s", is_kfs_valid ? "VALID" : "INVALID");
-	if (is_kfs_valid) {
-		klog("KFS File Count: %u", kfs->node_count);
-	}
+  
+  kprocess_load_elf_executable((uintptr_t)TEST_PROGRAM_ELF);
 
-	_fs.kfs = kfs;
-	_fs.kfs_nodes = (KFS_Node *)(kfs + 1);
-	_fs.base_data = (uint8_t *)(_fs.kfs_nodes + kfs->node_count);
-#endif
+	while(1) { asm volatile("hlt"); };
 }

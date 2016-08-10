@@ -1,10 +1,9 @@
 PIC8259 Initialized
-PIT initialized!
 IDT initialized
-p4_table is at addr: 0x10F000
-p3_table is at addr: 0x110000
-p2_table is at addr: 0x111000
-ap_entry_procedure: 0x102361
+p4_table is at addr: 0x112000
+p3_table is at addr: 0x113000
+p2_table is at addr: 0x114000
+ap_entry_procedure: 0x1044A3
 multiboot_info_size is 0x490
 found mbtag: 0x1
 found mbtag: 0x2
@@ -14,19 +13,27 @@ found mbtag: 0x9
 found mbtag: 0x4
 found mbtag: 0x5
 found mbtag: 0x8
+this is a text buffer
 found mbtag: 0xE
-found acpi old data.  rsp address is 0x116350
+found acpi old data.  rsp address is 0x11B428
 rsdp is valid, rsdt physical address: 0xBFFE1936
 [kmem] page was allocated at physical_address 0xBFE00000 to map to virtual address 0x400000
 found MADT table
+found an IOAPIC
+ioapic id: 0x0
+ioapic physical address: 0xFEC00000
 parsed root_system_descriptor
 copying trampoline code to 0x1000
-system_info:
-ioapic_register_base: 0xFEC00000
-lapic_register_base: 0xFEE00000
 [kmem] page was allocated at physical_address 0xFEE00000 to map to virtual address 0x600000
 lapic initalized for cpu0 is initalized
 now receiving lapic interrupts!
+[kmem] page was allocated at physical_address 0xFEC00000 to map to virtual address 0x800000
+ioapic: physical = 0xFEC00000, virtual = 0x800000
+lapic: physical = 0xFEE00000, virtual = 0x600000
 icr2_value: 0x1000000
 icr1_value: 0x500
+elf file was valid!!!
+program entry address: 0x4000F0
+program_header virtual_address: 0x400000
+CPU1 booted and initalized
 Grettings CPU0!  CPU1 here. I'm having a fantastic day!  How are you?
