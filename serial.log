@@ -1,10 +1,10 @@
 PIC8259 Initialized
 IDT initialized
-p4_table is at addr: 0x112000
-p3_table is at addr: 0x113000
-p2_table is at addr: 0x114000
-ap_entry_procedure: 0x1044A3
-multiboot_info_size is 0x490
+p4_table is at addr: 0x110000
+p3_table is at addr: 0x111000
+p2_table is at addr: 0x112000
+ap_entry_procedure: 0x103310
+multiboot_info_size is 0x828
 found mbtag: 0x1
 found mbtag: 0x2
 found mbtag: 0xA
@@ -12,10 +12,10 @@ found mbtag: 0x6
 found mbtag: 0x9
 found mbtag: 0x4
 found mbtag: 0x5
+found mbtag: 0x7
 found mbtag: 0x8
-this is a text buffer
 found mbtag: 0xE
-found acpi old data.  rsp address is 0x11B428
+found acpi old data.  rsp address is 0x116788
 rsdp is valid, rsdt physical address: 0xBFFE1936
 [kmem] page was allocated at physical_address 0xBFE00000 to map to virtual address 0x400000
 found MADT table
@@ -32,8 +32,10 @@ ioapic: physical = 0xFEC00000, virtual = 0x800000
 lapic: physical = 0xFEE00000, virtual = 0x600000
 icr2_value: 0x1000000
 icr1_value: 0x500
+[kmem] page was allocated at physical_address 0xFD000000 to map to virtual address 0xA00000
+[kmem] page was allocated at physical_address 0xFD200000 to map to virtual address 0xC00000
+CPU1 booted and initalized
+Grettings CPU0!  CPU1 here. I'm having a fantastic day!  How are you?
 elf file was valid!!!
 program entry address: 0x4000F0
 program_header virtual_address: 0x400000
-CPU1 booted and initalized
-Grettings CPU0!  CPU1 here. I'm having a fantastic day!  How are you?

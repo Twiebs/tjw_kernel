@@ -1,1 +1,1 @@
-objdump -S --disassemble bin/kernel > kernel.dump 
+objdump -S -d -Mintel bin/kernel > kernel.dump 

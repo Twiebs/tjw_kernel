@@ -11,7 +11,7 @@ header_start:
 	dd header_end - header_start
 	dd (1 << 32) - (MULTIBOOT2_MAGIC_NUMBER + MULTIBOOT2_ARCHITECTURE + (header_end - header_start))
 
-%if 0
+%if 1
   ;Framebuffer Tag
   dw 5 ;Framebuffer tag type
   dw 0 ;flags

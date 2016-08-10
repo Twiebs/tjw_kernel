@@ -556,9 +556,25 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
   klog_info("lapic: physical = %lu, virtual = %lu", sys.lapic_register_base, lapic_register_base_address);
 
   initalize_cpu(lapic_register_base_address, 1, 0x01);
-  //lapic_enable_timer(lapic_register_base_address);
+  lapic_enable_timer(lapic_register_base_address);
 
+  if(sys.framebuffer_address != 0){
+    uintptr_t framebuffer_physical_page, framebuffer_page_offset;
+    uintptr_t framebuffer_virtual_address = silly_page_map(sys.framebuffer_address, true, &framebuffer_physical_page, &framebuffer_page_offset);
+    silly_page_map(sys.framebuffer_address + 0x200000, true, &framebuffer_physical_page, &framebuffer_page_offset);
+    uint8_t *framebuffer = (uint8_t *)framebuffer_virtual_address;
 
+   #if 1
+    for(size_t y = 0; y < sys.framebuffer_height; y++){
+      for(size_t x = 0; x < sys.framebuffer_width; x++){
+        size_t index = x*sys.framebuffer_depth + y*sys.framebuffer_pitch;
+        framebuffer[index + 0] = 0x00;
+        framebuffer[index + 1] = 0xFF;
+        framebuffer[index + 2] = 0xFF;
+      }
+    }
+    #endif
+  }
   
   kprocess_load_elf_executable((uintptr_t)TEST_PROGRAM_ELF);
 
