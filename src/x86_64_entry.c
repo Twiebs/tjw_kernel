@@ -7,12 +7,6 @@
 // IDT still must be initalized
 
 typedef struct {
-  KFS_Header *kfs;
-  KFS_Node *kfs_nodes;
-  uint8_t *base_data;
-} FileSystem;
-
-typedef struct {
 	uint8_t *framebuffer;
 	uint16_t resolutionX;
 	uint16_t resolutionY;
@@ -34,6 +28,7 @@ typedef struct {
   VGA_Text_Terminal vga_text_term;
   bool is_logging_disabled;
   uintptr_t lapic_address;
+  Framebuffer framebuffer;
 } Kernel_Globals;
 
 static Kernel_Globals globals;
@@ -41,85 +36,70 @@ static Kernel_Globals globals;
 global_variable x86_64_IDT_Entry _idt[256];
 global_variable uintptr_t _interrupt_handlers[256];
 
+#include "kernel_graphics.c"
 #include "kernel_acpi.c"
+#include "kernel_apic.c"
 
 
-static inline
-void ioapic_write_register(const uintptr_t ioapic_base, const uint8_t offset, const uint32_t value){
-  *(uint32_t *)(ioapic_base) = offset;
-  *(uint32_t *)(ioapic_base + 0x10) = value;
-}
+struct IOAPIC_IRQR_LOW_STRUCT {
+  union {
+    struct {
+      uint8_t vector; // 0-7
+      uint8_t delivery_mode : 2; //8-10
+      uint8_t destination_mode : 1; //11
+      uint8_t delivery_status : 1; // 12
+      uint8_t pin_polarity : 1; // 13
+      uint8_t remote_irr : 1; //14
+      uint8_t trigger_mode : 1; //15
+      uint8_t mask : 1; //16
+      uint16_t reserved : 15; 
+    };
+    uint32_t packed;
+  };
+} __attribute__((packed));
 
-static inline
-uint32_t ioapic_read_register(const uintptr_t ioapic_base, const uint8_t offset){
-  *(uint32_t *)(ioapic_base) = offset;
-  return *(uint32_t *)(ioapic_base + 0x10);
-}
+struct IOAPIC_IRQR_HIGH_STRUCT {
+  union {
+    struct {
+      uint32_t reserved    : 24;
+      uint32_t destination :  8;
+    };
+    uint32_t packed;
+  };
+} __attribute__((packed));
 
-static inline
-void lapic_write_register(uintptr_t lapic_base, uintptr_t register_offset, uint32_t value){
-  *(uint32_t *)(lapic_base + register_offset) = value;
-}
+typedef struct IOAPIC_IRQR_LOW_STRUCT IOAPIC_IRQR_LOW;
+typedef struct IOAPIC_IRQR_HIGH_STRUCT IOAPIC_IRQR_HIGH;
 
 static void
 ioapic_initalize(uintptr_t ioapic_register_base) {
-  
-  struct IRQR_LOW_STRUCT {
-    union {
-      struct {
-        uint8_t vector; // 0-7
-        uint8_t delivery_mode : 2; //8-10
-        uint8_t destination_mode : 1; //11
-        uint8_t delivery_status : 1; // 12
-        uint8_t pin_polarity : 1; // 13
-        uint8_t remote_irr : 1; //14
-        uint8_t trigger_mode : 1; //15
-        uint8_t mask : 1; //16
-        uint16_t reserved : 15; 
-      };
-      uint32_t packed;
-    };
-  } __attribute__((packed));
-
-  struct IRQR_HIGH_STRUCT {
-    union {
-      struct {
-        uint32_t reserved    : 24;
-        uint32_t destination :  8;
-      };
-      uint32_t packed;
-    };
-  } __attribute__((packed));
-
-  typedef struct IRQR_LOW_STRUCT IRQR_LOW;
-  typedef struct IRQR_HIGH_STRUCT IRQR_HIGH;
-
-  static const uint8_t DELIVERY_MODE_FIXED = 0x00;
+   static const uint8_t DELIVERY_MODE_FIXED = 0x00;
 
   { //Keyboard
-    IRQR_LOW low = {};
-    IRQR_HIGH high = {};
+    IOAPIC_IRQR_LOW low = {};
+    IOAPIC_IRQR_HIGH high = {};
     low.vector = 0x21;
     ioapic_write_register(ioapic_register_base, 0x12, low.packed);
     ioapic_write_register(ioapic_register_base, 0x13, high.packed);
   }
 
 
-#if 0
+#if 1
+  #endif
+}
+
+static void
+ioapic_print_irq_map(uintptr_t ioapic_base){
   for(size_t i = 0; i < 8; i++){
-    IRQR_LOW irqr_low = {};
-    IRQR_HIGH irqr_high = {};
-    irqr_low.packed = ioapic_read_register(ioapic_register_base, 0x10 + (i * 2));
-    irqr_high.packed = ioapic_read_register(ioapic_register_base, 0x10 + (i * 2) + 1);
+    IOAPIC_IRQR_LOW irqr_low = {};
+    IOAPIC_IRQR_HIGH irqr_high = {};
+    irqr_low.packed = ioapic_read_register(ioapic_base, 0x10 + (i * 2));
+    irqr_high.packed = ioapic_read_register(ioapic_base, 0x10 + (i * 2) + 1);
     klog_debug("IRQ %u", (uint32_t)i);
     klog_debug("vector: %u", (uint32_t)irqr_low.vector);
     klog_debug("mask %u", (uint32_t)irqr_low.mask);
   }
-#endif
-
 }
-
-
 
 static void
 lapic_initalize(uintptr_t apic_register_base) {
@@ -282,11 +262,12 @@ legacy_pic8259_initalize(void) {
   //Write EndOfInterupt and set interrupt enabled mask 
 	write_port(PIC1_DATA_PORT, 0x20);
 	write_port(PIC2_DATA_PORT, 0x20);
-	write_port(PIC1_DATA_PORT, 0b11111111);
+	write_port(PIC1_DATA_PORT, 0b11111101);
 	write_port(PIC2_DATA_PORT, 0b11111111);
 	klog_info("PIC8259 Initialized");
 }
 
+#if 0
 static void
 legacy_pit_initialize(void){ 
 	//TODO(Torin) This frequency thing is probably bogus and needs to be
@@ -307,6 +288,7 @@ legacy_pit_initialize(void){
 	write_port(PIT_DATA_PORT0, divisor_high);
 	klog_info("PIT initialized!");
 }
+#endif
 
 //TODO(Torin) Remove IDT Global variable
 static void
@@ -449,6 +431,8 @@ ap_entry_procedure(void){
 
 #include "kernel_process.c"
 
+
+
 extern void 
 kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) 
 {
@@ -555,7 +539,7 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
   klog_info("ioapic: physical = %lu, virtual = %lu", sys.ioapic_register_base, ioapic_base_address);
   klog_info("lapic: physical = %lu, virtual = %lu", sys.lapic_register_base, lapic_register_base_address);
 
-  initalize_cpu(lapic_register_base_address, 1, 0x01);
+  //initalize_cpu(lapic_register_base_address, 1, 0x01);
   lapic_enable_timer(lapic_register_base_address);
 
   if(sys.framebuffer_address != 0){
@@ -564,16 +548,23 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     silly_page_map(sys.framebuffer_address + 0x200000, true, &framebuffer_physical_page, &framebuffer_page_offset);
     uint8_t *framebuffer = (uint8_t *)framebuffer_virtual_address;
 
-   #if 1
+    Framebuffer *fb = &globals.framebuffer;
+    fb->width = sys.framebuffer_width;
+    fb->height = sys.framebuffer_height;
+    fb->buffer = framebuffer;
+    fb->depth = sys.framebuffer_depth;
+    fb->pitch = sys.framebuffer_pitch;
+
+    klog_debug("framebuffer: width: %u, height: %u", fb->width, fb->height);
+
     for(size_t y = 0; y < sys.framebuffer_height; y++){
       for(size_t x = 0; x < sys.framebuffer_width; x++){
         size_t index = x*sys.framebuffer_depth + y*sys.framebuffer_pitch;
-        framebuffer[index + 0] = 0x00;
-        framebuffer[index + 1] = 0xFF;
-        framebuffer[index + 2] = 0xFF;
+        framebuffer[index + 0] = 0x10;
+        framebuffer[index + 1] = 0x10;
+        framebuffer[index + 2] = 0x10;
       }
     }
-    #endif
   }
   
   kprocess_load_elf_executable((uintptr_t)TEST_PROGRAM_ELF);

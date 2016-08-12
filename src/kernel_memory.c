@@ -42,7 +42,8 @@ log_page_info() {
 }
 
 static void
-print_page_table_entry_info(const uintptr_t entry){
+print_page_table_entry_info(const uintptr_t entry)
+{
   uintptr_t physical_address = entry & ~0xFFF;
   bool is_present = entry & PAGE_PRESENT_BIT;
   bool is_writeable = entry & PAGE_WRITEABLE_BIT;

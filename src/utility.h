@@ -28,7 +28,7 @@ void __memcpy(uint8_t *dest, uint8_t *src, size_t size) {
 	}
 }
 
-internal inline
+static inline
 size_t strlen(const char *str) {
 	size_t result = 0;
 	while (str[result] != 0)
@@ -37,13 +37,13 @@ size_t strlen(const char *str) {
 }
 
 #define min(a,b) (a < b ? a : b)
+#define max(a,b) (a > b ? a : b)
 
 #define LITERAL_STRLEN(literal) (sizeof(literal) - 1)
 #define string_matches_literal(string, len, lit) strings_match(string,len, lit, LITERAL_STRLEN(lit))
 
-internal int 
-strings_match(const char *stringA, size_t lengthA, 
-		const char *stringB, size_t lengthB) {
+static int 
+string_equals_string(const char *stringA, size_t lengthA, const char *stringB, size_t lengthB) {
 	if (lengthA != lengthB) return 0;
 	for (size_t i = 0; i < lengthA; i++) {
 		if (stringA[i] != stringB[i]) {
@@ -51,6 +51,13 @@ strings_match(const char *stringA, size_t lengthA,
 		}
 	}
 	return 1;
+}
+
+static int
+string_matches_string(const char *str0, size_t length, const char *str1){
+  for(size_t i = 0; i < length; i++) 
+    if(str0[i] != str1[i]) return 0;
+  return 1;
 }
 
 

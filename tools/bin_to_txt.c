@@ -29,7 +29,6 @@ int main(int argc, char **argv) {
 
   size_t result_buffer_size = file_size * 5;
   uint8_t *result_buffer = (uint8_t *)malloc(result_buffer_size);
-  
   for(size_t i = 0; i < file_size; i++){
     uint8_t value = file_data[i];
     sprintf((char*)result_buffer + (i*5), "0x%02X,", (uint32_t)value); 

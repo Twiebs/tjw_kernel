@@ -152,10 +152,43 @@ void klog_write_fmt(Circular_Log *log, const char *fmt, ...){
   //console output if a cpu core formats a sufficantly small message and aquires
   //the spin lock before the first core finishes formating the message
   spinlock_aquire(&log->spinlock);
+  log->is_dirty = true;
   write_serial(entry->message, entry->length);
   write_serial("\n", 1);
   spinlock_release(&log->spinlock);
 }
+
+void klog_add_input_character(Circular_Log *log, const char c){
+  if(c < ' ' || c > '~') return;
+  spinlock_aquire(&log->spinlock);
+  if(log->input_buffer_count > sizeof(log->input_buffer)) {
+    spinlock_release(&log->spinlock);
+    return;
+  }
+  log->input_buffer[log->input_buffer_count++] = c;
+  log->is_dirty = true;
+  spinlock_release(&log->spinlock);
+}
+
+void klog_remove_last_input_character(Circular_Log *log){
+  spinlock_aquire(&log->spinlock);
+  if(log->input_buffer_count > 0) {
+    log->input_buffer[log->input_buffer_count] = 0;
+    log->input_buffer_count -= 1;
+  }
+  log->is_dirty = true;
+  spinlock_release(&log->spinlock);
+}
+
+void klog_submit_input_to_shell(Circular_Log *log){
+  if(log->input_buffer_count > 0){
+    kshell_process_command(log->input_buffer, log->input_buffer_count);
+    log->input_buffer_count = 0;
+    log->is_dirty = true;
+  } 
+}
+
+	
 
 void klog_disable(){
   globals.is_logging_disabled = true;

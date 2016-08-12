@@ -1,4 +1,3 @@
-
 typedef enum {
   VGAColor_BLACK = 0,
   VGAColor_BLUE  = 1,
@@ -16,4 +15,15 @@ typedef struct {
 	uint32_t last_entry_count;
 } VGA_Text_Terminal; 
 
-void redraw_vga_text_terminal_if_log_is_dirty(VGA_Text_Terminal *kterm, Circular_Log *log);
+typedef struct {
+  uint32_t width;
+  uint32_t height;
+  uint32_t pitch;
+  uint8_t  depth;
+  uint8_t *buffer; 
+} Framebuffer;
+
+void redraw_log_if_dirty(Circular_Log *log);
+
+void kgfx_draw_log(Circular_Log *log);
+void kgfx_draw_character(char c, size_t x_orign, size_t y_origin, Framebuffer *fb);

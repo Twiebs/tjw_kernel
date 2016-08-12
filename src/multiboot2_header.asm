@@ -21,11 +21,11 @@ header_start:
   dd 24   ;depth
 %endif
 
-%if 0
+%if 1
 	;End Tag
 	dw 0
 	dw 0
-	dd 8
+	dd 0
 %endif
 
 

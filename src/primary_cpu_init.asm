@@ -41,6 +41,7 @@ start:
 	call setup_paging_tables
 	call enable_paging
 
+%if 0
   ;Enable SSE2
   mov eax, cr0
   and ax, 0xFFFB
@@ -49,6 +50,7 @@ start:
   mov eax, cr4
   or ax, 3 << 9
   mov cr4, eax
+%endif
 
 	lgdt [GDT64.Pointer]
 	mov ax, 0x10

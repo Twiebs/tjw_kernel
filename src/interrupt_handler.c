@@ -35,9 +35,8 @@ typedef struct {
 
 typedef void(*InterruptHandlerProc)(void);
 
-internal inline 
-void isr_handler_page_fault(ISRRegisterState register_state) 
-{
+static void 
+isr_handler_page_fault(ISRRegisterState register_state) {
 	static const uint64_t CAUSE_PROTECTION_VIOLATION_OR_NOT_PRESENT = (1 << 0);
 	static const uint64_t CAUSE_WRITE_OR_READ = (1 << 1);
 	static const uint64_t CAUSE_USER_OR_KERNEL = (1 << 2);
@@ -68,12 +67,12 @@ void isr_handler_page_fault(ISRRegisterState register_state)
 		//does a blue-screen of death type of deal to insure that the error is reported properly
 
     log_page_info();
-		redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log);
+		redraw_log_if_dirty(&globals.log);
 		asm volatile ("hlt");
 	} else {
 		//TODO(TORIN) This was the userspace application lets kill it
     klog_error("UNHANDLED USERSPACE VIOLATION!!!");
-		redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log);
+		redraw_log_if_dirty(&globals.log);
 		asm volatile ("hlt");
 	}
 }
@@ -90,9 +89,8 @@ export void isr_common_handler(ISRRegisterState regstate) {
 	}
 }
 
-export void irq_common_handler(IRQRegisterState regstate) {
-	//kdebug("interrupt recieved: %u", regstate.interrupt_number);
-
+extern void 
+irq_common_handler(IRQRegisterState regstate) {
 	if (_interrupt_handlers[regstate.interrupt_number] != 0) {
 	  InterruptHandlerProc proc = (InterruptHandlerProc)_interrupt_handlers[regstate.interrupt_number];
 		proc();
@@ -102,26 +100,10 @@ export void irq_common_handler(IRQRegisterState regstate) {
 	} else {
 		klog_error("Uninialized interrupt handler!");
 	}
-
-	 static const uint8_t PIC1_COMMAND_PORT = 0x20;
-	 static const uint8_t PIC2_COMMAND_PORT = 0xA0;
-	 static const uint8_t PIC_EOI_CODE = 0x20;
-
-   lapic_write_register(globals.lapic_address, 0xB0, 0x00);
-   lapic_write_register(globals.lapic_address, 0xB0, 0x00);
-
-
-#if 0
-	 //TODO(Torin) This might be wrong
-	 if (regstate.interrupt_number < 8) {
-		 write_port(PIC1_COMMAND_PORT, PIC_EOI_CODE);
-	 } else {
-			write_port(PIC2_COMMAND_PORT, PIC_EOI_CODE);
-	 }
-#endif
+  lapic_write_register(globals.lapic_address, 0xB0, 0x00);
 }
 
-internal void 
+static void 
 irq_handler_keyboard(void) {
   static const uint32_t KEYBOARD_STATUS_PORT = 0x64;
   static const uint32_t KEYBOARD_DATA_PORT   = 0x60;
@@ -130,28 +112,22 @@ irq_handler_keyboard(void) {
 		int8_t keycode = read_port(KEYBOARD_DATA_PORT);
 		if (keycode < 0) return;
 
-    
 		if(keycode == KEYCODE_BACKSPACE_PRESSED){
-			if(globals.log.input_buffer_count > 0) {
-				globals.log.input_buffer[globals.log.input_buffer_count] = 0;
-				globals.log.input_buffer_count -= 1;
-			}
-		} else if (keycode == KEYCODE_ENTER_PRESSED) {
-			//_iostate.is_command_ready = true;
+      klog_remove_last_input_character(&globals.log);
+		} else if (keycode == KEYCODE_ENTER_PRESSED){
+      klog_submit_input_to_shell(&globals.log);
 		} else if (keycode == KEYCODE_UP_PRESSED) {
 			//_kterm.scroll_count = -1;
 		} else if (keycode == KEYCODE_DOWN_PRESSED) {
 			//_kterm.scroll_count = 1;
 		} else {
-      if(globals.log.input_buffer_count > sizeof(globals.log.input_buffer)) return;
-      globals.log.input_buffer[globals.log.input_buffer_count++] = keyboard_map[(uint32_t)keycode];
+      klog_add_input_character(&globals.log, keyboard_map[keycode]);
 		}
   }
-
-  redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log);
 }
 
-internal void 
+static void 
 irq_handler_pit(void) {
-	redraw_vga_text_terminal_if_log_is_dirty(&globals.vga_text_term, &globals.log);
+  //klog_debug("local APIC timer interupt");
+	redraw_log_if_dirty(&globals.log);
 }

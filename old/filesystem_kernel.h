@@ -20,4 +20,3 @@ kfs_find_file_with_cstr_name(const char *filename);
 
 internal uint8_t 
 *kfs_get_node_data(const KFS_Node *node);
-
