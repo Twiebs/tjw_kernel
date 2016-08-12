@@ -112,6 +112,9 @@ irq_handler_keyboard(void) {
 		int8_t keycode = read_port(KEYBOARD_DATA_PORT);
 		if (keycode < 0) return;
 
+    //TODO(Torin) Need to store keymap and event processing system
+    //to deferr processing of keyboard events to when the aplication 
+    //is actualy running independent of the interrupt handler
 		if(keycode == KEYCODE_BACKSPACE_PRESSED){
       klog_remove_last_input_character(&globals.log);
 		} else if (keycode == KEYCODE_ENTER_PRESSED){

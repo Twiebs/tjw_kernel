@@ -7,7 +7,8 @@
 #define KShell_Command_Metalist \
 _(help, kshell_help) \
 _(hardware_info, kshell_hardware_info)\
-_(time, kshell_unimplemented_command)
+_(time, kshell_unimplemented_command)\
+_(ioapic_irq_map, kshell_ioapic_irq_map)
 
 typedef enum {
   KShell_Command_Invalid,
@@ -26,6 +27,7 @@ KShell_Command_Metalist
 static void kshell_help(const char *text, size_t length);
 static void kshell_hardware_info(const char *text, size_t length);
 static void kshell_unimplemented_command(const char *text, size_t length);
+static void kshell_ioapic_irq_map(const char *text, size_t length);
 
 typedef void(*KShell_Command_Proc)(const char *, size_t);
 static const KShell_Command_Proc KShell_Command_Handler[] = {
@@ -41,6 +43,11 @@ kshell_help(const char *input, size_t length){
   klog_info("  %s", #name);
   KShell_Command_Metalist
   #undef _
+}
+
+static void
+kshell_ioapic_irq_map(const char *text, size_t length){
+  ioapic_log_irq_map(globals.ioapic_virtual_address);
 }
 
 static void

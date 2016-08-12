@@ -1,9 +1,9 @@
 PIC8259 Initialized
 IDT initialized
-p4_table is at addr: 0x117000
-p3_table is at addr: 0x118000
-p2_table is at addr: 0x119000
-ap_entry_procedure: 0x109900
+p4_table is at addr: 0x118000
+p3_table is at addr: 0x119000
+p2_table is at addr: 0x11A000
+ap_entry_procedure: 0x10A900
 multiboot_info_size is 0x828
 found mbtag: 0x1
 found mbtag: 0x2
@@ -15,7 +15,7 @@ found mbtag: 0x5
 found mbtag: 0x7
 found mbtag: 0x8
 found mbtag: 0xE
-found acpi old data.  rsp address is 0x11D8A0
+found acpi old data.  rsp address is 0x11E8A0
 rsdp is valid, rsdt physical address: 0xBFFE17AB
 [kmem] page was allocated at physical_address 0xBFE00000 to map to virtual address 0x400000
 found MADT table
@@ -28,30 +28,6 @@ copying trampoline code to 0x1000
 lapic initalized for cpu0 is initalized
 now receiving lapic interrupts!
 [kmem] page was allocated at physical_address 0xFEC00000 to map to virtual address 0x800000
-IRQ 0x0
-vector: 0x0
-mask 0x0
-IRQ 0x1
-vector: 0x21
-mask 0x0
-IRQ 0x2
-vector: 0x0
-mask 0x0
-IRQ 0x3
-vector: 0x0
-mask 0x0
-IRQ 0x4
-vector: 0x0
-mask 0x0
-IRQ 0x5
-vector: 0x0
-mask 0x0
-IRQ 0x6
-vector: 0x0
-mask 0x0
-IRQ 0x7
-vector: 0x0
-mask 0x0
 ioapic: physical = 0xFEC00000, virtual = 0x800000
 lapic: physical = 0xFEE00000, virtual = 0x600000
 [kmem] page was allocated at physical_address 0xFD000000 to map to virtual address 0xA00000
@@ -64,3 +40,11 @@ kshell command list:
   help
   hardware_info
   time
+  ioapic_irq_map
+time is an unimplemented command!
+kshell command list:
+  help
+  hardware_info
+  time
+  ioapic_irq_map
+hardware-info is not a shell command
