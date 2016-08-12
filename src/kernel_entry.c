@@ -243,7 +243,7 @@ x86_64_idt_initalize(){
 }
 
 #include "multiboot2.h"
-#include "hardware_serial.cpp"
+#include "hardware_serial.c"
 #include "kernel_memory.c"
 
 extern void

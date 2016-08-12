@@ -51,9 +51,8 @@ exit
 #include "src/hardware_keyboard.h"
 #include "src/interrupt_handler.h"
 
-#include "src/x86_64_entry.c"
+#include "src/kernel_entry.c"
 #include "src/interrupt_handler.c"
-
 #include "src/kernel_log.c"
 #include "src/kernel_shell.c"
 

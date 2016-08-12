@@ -4,9 +4,7 @@
 *.bin
 *.o
 
-.vscode
+.vscode/*
 
-/build
-/bin
-.*
+bin/*
 
