@@ -15,7 +15,7 @@ found mbtag: 0x5
 found mbtag: 0x7
 found mbtag: 0x8
 found mbtag: 0xE
-found acpi old data.  rsp address is 0x11E8A0
+found acpi old data.  rsp address is 0x11E908
 rsdp is valid, rsdt physical address: 0xBFFE17AB
 [kmem] page was allocated at physical_address 0xBFE00000 to map to virtual address 0x400000
 found MADT table
@@ -36,15 +36,15 @@ framebuffer: width: 0x500, height: 0x2D0
 elf file was valid!!!
 program entry address: 0x4000F0
 program_header virtual_address: 0x400000
+this is not a shell command
 kshell command list:
   help
   hardware_info
   time
   ioapic_irq_map
-time is an unimplemented command!
 kshell command list:
   help
   hardware_info
   time
   ioapic_irq_map
-hardware-info is not a shell command
+timeware_info is an unimplemented command!

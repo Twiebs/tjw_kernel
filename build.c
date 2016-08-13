@@ -21,7 +21,7 @@ exit
 
 #if defined(BUILD_IS_RUNNING)
   nasm -fbin src/secondary_cpu_init.asm -o trampoline.bin
-  tools/bin_to_txt trampoline.bin src/trampoline.txt
+  bin/bin_to_txt trampoline.bin src/trampoline.txt
 
 	gcc COMPILER_FLAGS -m64 -mno-red-zone -nostdlib -fforward-propagate -fmerge-constants -ffreestanding -I../tjw_kernel/src -c build.c -o build.c.o
 	nasm -felf64 src/primary_cpu_init.asm -isrc/ -o primary_cpu_init.asm.o

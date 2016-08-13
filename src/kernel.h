@@ -16,8 +16,9 @@
 #else//KLOG_VERBOSITY >= KLOG_DEBUG
 #define klog_debug(...)
 #endif//KLOG_VERBOSITY >= KLOG_DEBUG
-#define klog_info(...)  klog_write_fmt(&globals.log, __VA_ARGS__)
-#define klog_error(...) klog_write_fmt(&globals.log, __VA_ARGS__)
+#define klog_warning(...) klog_write_fmt(&globals.log, __VA_ARGS__)
+#define klog_info(...)    klog_write_fmt(&globals.log, __VA_ARGS__)
+#define klog_error(...)   klog_write_fmt(&globals.log, __VA_ARGS__)
 
 #define kpanic() redraw_log_if_dirty(&globals.log); \
 	asm volatile ("cli"); \

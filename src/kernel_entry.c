@@ -26,12 +26,14 @@ typedef struct {
 typedef struct {
   Circular_Log log;
   VGA_Text_Terminal vga_text_term;
-  bool is_logging_disabled;
+  Keyboard_State keyboard;
   uintptr_t lapic_address;
-
   uintptr_t ioapic_virtual_address;
-
   Framebuffer framebuffer;
+
+  bool is_logging_disabled;
+  bool log_keyboard_events;
+
 } Kernel_Globals;
 
 static Kernel_Globals globals;
@@ -268,6 +270,9 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 	//legacy_pit_initialize();
 	x86_64_idt_initalize();
   kmem_initalize();
+
+  //NOTE(Torin) Setupt keyboard event stack
+  globals.keyboard.scancode_event_stack = globals.keyboard.scancode_event_stack0;
 
   klog_debug("ap_entry_procedure: %lu", ap_entry_procedure);
 

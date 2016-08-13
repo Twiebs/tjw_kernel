@@ -1,3 +1,8 @@
+#if 0
+clang bin_to_txt.c -o ../bin/bin_to_txt
+exit
+#endif
+
 #include <stdint.h>
 #include <stdio.h>
 #include <malloc.h>

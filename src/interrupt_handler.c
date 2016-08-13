@@ -77,9 +77,8 @@ isr_handler_page_fault(ISRRegisterState register_state) {
 	}
 }
 
-
-
-export void isr_common_handler(ISRRegisterState regstate) {
+extern void 
+isr_common_handler(ISRRegisterState regstate) {
 	klog_debug("software interrupt recieved: %u", regstate.interrupt_number);
 	klog_debug("error_code: %u", regstate.error_code);
 	klog_debug("rip: %u", regstate.return_rip);
@@ -103,34 +102,95 @@ irq_common_handler(IRQRegisterState regstate) {
   lapic_write_register(globals.lapic_address, 0xB0, 0x00);
 }
 
+
+#define KEYBOARD_SCANCODE1_LSHIFT 0x2A
+#define KEYBOARD_SCANCODE1_RSHIFT 0x36
+
+static const char SCANCODE_TO_LOWERCASE_ACII[] = {
+  0, 0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 0, 
+  0,  'q', 'w', 'e', 'r',	't', 'y', 'u', 'i', 'o', 'p', '[', ']', 0,	
+  0,	'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0,	'\\', 
+  'z', 'x', 'c', 'v', 'b', 'n',	'm', ',', '.', '/',  0, 0, 0,	' ',	
+};
+
+static const char SCANCODE_TO_UPERCASE_ACII[] = {
+  0, 0, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', 0, 
+  0,  'Q', 'W', 'E', 'R',	'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', 0,	
+  0,	'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0,	'|', 
+  'Z', 'X', 'C', 'V', 'B', 'N',	'M', '<', '>', '?',  0, 0, 0,	' ',	
+};
+
+//TODO(Torin) This will not handle modifiers correctly
+//if the modifier key is pressed after the original key
+//was already down it will still register that the key was
+//pressed with the modifier.  Does this event matter?  Would this be better?
+//Should store keycode + extra btye saying (isdown, shiftdown?, ctrldow?, altdown?)
+
 static void 
 irq_handler_keyboard(void) {
   static const uint32_t KEYBOARD_STATUS_PORT = 0x64;
   static const uint32_t KEYBOARD_DATA_PORT   = 0x60;
 	uint8_t keyboard_status = read_port(KEYBOARD_STATUS_PORT);
-  if(keyboard_status & 0x01) {
-		int8_t keycode = read_port(KEYBOARD_DATA_PORT);
-		if (keycode < 0) return;
+  if(keyboard_status & 0x01){
+		uint8_t scancode = read_port(KEYBOARD_DATA_PORT);
+    if(globals.log_keyboard_events){
+      klog_debug("[keyboard_event] scancode %u", scancode);
+    }
 
-    //TODO(Torin) Need to store keymap and event processing system
-    //to deferr processing of keyboard events to when the aplication 
-    //is actualy running independent of the interrupt handler
-		if(keycode == KEYCODE_BACKSPACE_PRESSED){
-      klog_remove_last_input_character(&globals.log);
-		} else if (keycode == KEYCODE_ENTER_PRESSED){
-      klog_submit_input_to_shell(&globals.log);
-		} else if (keycode == KEYCODE_UP_PRESSED) {
-			//_kterm.scroll_count = -1;
-		} else if (keycode == KEYCODE_DOWN_PRESSED) {
-			//_kterm.scroll_count = 1;
-		} else {
-      klog_add_input_character(&globals.log, keyboard_map[keycode]);
+    //TODO(Torin) How should this case be handled?  Is it even possbile to occur in practice?
+    //What if the user has a stupidly slow computer?
+    if(globals.keyboard.scancode_event_stack_count >= sizeof(globals.keyboard.scancode_event_stack)) {
+      klog_warning("[keyboard_event] keyboard event stack reached maximum size before events were processed");
+      return;
+    }
+
+    if (scancode > 0x80) {  //NOTE(Torin)key release event 
+      uint8_t base_scancode = scancode - 0x80;
+      globals.keyboard.keystate[base_scancode] = 0;
+    } else { //NOTE(Torin)Key press event
+      globals.keyboard.keystate[scancode] = 1;
+    }
+    
+    //TODO(Torin) we would be saving some subtractions cost in userspace by storing the keycode here instead of the
+    //scanconde and adding an extra byte to store information about the isDown state and keyboard modifiers!
+    globals.keyboard.scancode_event_stack[globals.keyboard.scancode_event_stack_count++] = scancode;
+  }
+}
+
+static void 
+klog_process_keyevents(Keyboard_State *keyboard, Circular_Log *log){
+  for(size_t i = 0; i < keyboard->scancode_event_stack_count; i++){
+    uint8_t scancode = keyboard->scancode_event_stack[i];
+
+    if(scancode == KEYCODE_BACKSPACE_PRESSED){
+      klog_remove_last_input_character(log);
+		} else if(scancode == KEYCODE_ENTER_PRESSED){
+      klog_submit_input_to_shell(log);
 		}
+
+    if(scancode < (int)sizeof(SCANCODE_TO_LOWERCASE_ACII)){
+      char ascii_character = 0;
+      if(keyboard->keystate[KEYBOARD_SCANCODE1_LSHIFT] ||
+        keyboard->keystate[KEYBOARD_SCANCODE1_RSHIFT]){
+        ascii_character = SCANCODE_TO_UPERCASE_ACII[scancode];
+      } else { ascii_character = SCANCODE_TO_LOWERCASE_ACII[scancode]; }
+      if(ascii_character == 0) return;
+      klog_add_input_character(log, ascii_character);
+    }
   }
 }
 
 static void 
 irq_handler_pit(void) {
-  //klog_debug("local APIC timer interupt");
+  Keyboard_State *keyboard = &globals.keyboard;
+  if(globals.keyboard.scancode_event_stack_count > 0){
+    klog_process_keyevents(keyboard, &globals.log); 
+    if(keyboard->scancode_event_stack == keyboard->scancode_event_stack0){
+      keyboard->scancode_event_stack = keyboard->scancode_event_stack1;
+    } else { keyboard->scancode_event_stack = keyboard->scancode_event_stack0; }
+    memset(keyboard->scancode_event_stack, 0x00, sizeof(keyboard->scancode_event_stack0));
+    keyboard->scancode_event_stack_count = 0;
+  }
+
 	redraw_log_if_dirty(&globals.log);
 }

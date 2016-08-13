@@ -114,7 +114,7 @@ void redraw_log_if_dirty(Circular_Log *log){
   if(globals.framebuffer.buffer != 0){
     static const uint32_t FONT_SIZE = 16;
     static const uint32_t ROW_SPACING = 0;
-    static const uint32_t CHARACTER_SPACING = 10;
+    static const uint32_t CHARACTER_SPACING = 8;
     Framebuffer *fb = &globals.framebuffer;
     kgfx_clear_framebuffer(fb);
     const uint32_t total_column_count = fb->width / FONT_SIZE;

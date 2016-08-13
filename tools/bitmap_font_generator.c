@@ -1,5 +1,5 @@
 #if 0
-clang -g -O0 -lm bitmap_font_generator.c -o bitmap_font_generator
+clang -g -O0 -lm bitmap_font_generator.c -o ../bin/bitmap_font_generator
 exit
 #endif
 
@@ -63,16 +63,29 @@ int main() {
   uint8_t *buffer = (uint8_t *)malloc(buffer_width * buffer_height);
   memset(buffer, 0x00, buffer_width * buffer_height);
 
-  size_t row_index = 0; size_t column_index = 0;
+  float font_scale = stbtt_ScaleForPixelHeight(&font, 16);
+
+  int minX = 0, minY = 0;
+  int maxX = 0, maxY = 0;
+  stbtt_GetFontBoundingBox(&font, &minX, &minY, &maxX, &maxY);
+  printf("minX:%d, minY:%d, maxX:%d, maxY:%d", minX, minY, maxX, maxY);
+  return 0;
+
+
+
+
+#if 1
   int glyph_width = 0, glyph_height = 0;
+  int glyph_xoffset = 0, glyph_yoffset = 0;
 
   for(size_t i = ' ';  i <= '~'; i++){
-    uint8_t *glyph_data = stbtt_GetCodepointBitmap(&font, 0, stbtt_ScaleForPixelHeight(&font, 16), i, &glyph_width, &glyph_height, 0, 0);
+    uint8_t *glyph_data = stbtt_GetCodepointBitmap(&font, 0, stbtt_ScaleForPixelHeight(&font, 16), i, &glyph_width, &glyph_height, &glyph_xoffset, &glyph_yoffset);
+    int glyph_y_offset = 16 - glyph_height;
 
     for(size_t y = 0; y < glyph_height; y++){
       for(size_t x = 0; x < glyph_width; x++){
         size_t glyph_index = x + y*glyph_width;
-        size_t buffer_index = ((i - ' ')*256) + (x + y*16);
+        size_t buffer_index = ((i - ' ')*256) + (x + (y+glyph_y_offset)*16);
         buffer[buffer_index] = glyph_data[glyph_index];
       }
     }
@@ -87,13 +100,13 @@ int main() {
         buffer[buffer_index] = glyph_data[glyph_index]; 
       }
     }
-    #endif
 
     column_index++;
     if(column_index >= 16){
       column_index = 0;
       row_index++;
     }
+    #endif
   }
 
   size_t text_size = 0;
@@ -102,4 +115,5 @@ int main() {
 
   stbi_write_png("font.png", buffer_width, buffer_height, 1, buffer, buffer_width);
   return 0;
+  #endif
 }
