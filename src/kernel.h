@@ -3,7 +3,7 @@
 #define internal static 
 #define global_variable static 
 
-#define kassert(expr) if(!(expr)) { klog_error("ASSERTION FAILED!!!"); kpanic(); }
+#define kassert(expr) if(!(expr)) { klog_error("ASSERTION FAILED(%s) on line %u of file %s", #expr, (uint32_t)(__LINE__), __FILE__); kpanic(); }
 
 #define KLOG_ERROR 0
 #define KLOG_INFO  1
@@ -24,15 +24,29 @@
 	asm volatile ("cli"); \
 	asm volatile ("hlt")
 
-internal inline 
-void write_port(uint16_t port, uint8_t value) {
+
+static inline 
+void write_port_uint8(uint16_t port, uint8_t value) {
 	asm volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
 }
 
-internal inline
-uint8_t read_port(uint16_t port) {
+static inline
+void write_port_uint32(uint16_t port, uint32_t value){
+  asm volatile ("outl %0, %1" : : "a"(value), "Nd"(port));
+}
+
+
+static inline
+uint8_t read_port_uint8(uint16_t port) {
 	uint8_t result;
 	asm volatile ("inb %1, %0" : "=a"(result) : "Nd"(port));
+	return result;
+}
+
+static inline
+uint32_t read_port_uint32(uint16_t port){
+	uint32_t result;
+	asm volatile ("inl %1, %0" : "=a"(result) : "Nd"(port));
 	return result;
 }
 
@@ -50,14 +64,19 @@ kernel_reboot() {
 
 
 typedef struct {
-  uintptr_t ioapic_register_base;
-  uintptr_t lapic_register_base;
+  uintptr_t lapic_physical_address;
+  uintptr_t ioapic_physical_address;
+  uintptr_t lapic_virtual_address;
+  uintptr_t ioapic_virtual_address;
+
   uint32_t processor_count;
 
+#if 0
   uintptr_t framebuffer_address;
   uint32_t framebuffer_width;
   uint32_t framebuffer_height;
   uint8_t framebuffer_depth;
   uintptr_t framebuffer_pitch;
+#endif
 } System_Info;
 

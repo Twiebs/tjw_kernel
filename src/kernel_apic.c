@@ -85,10 +85,10 @@ lapic_initalize(uintptr_t apic_register_base) {
   //Disable the legacy PIC first
   static const uint8_t PIC1_DATA_PORT = 0x21;
   static const uint8_t PIC2_DATA_PORT = 0xA1;
-  write_port(PIC1_DATA_PORT, 0x20);
-  write_port(PIC2_DATA_PORT, 0x20);
-  write_port(PIC1_DATA_PORT, 0b11111111);
-  write_port(PIC2_DATA_PORT, 0b11111111);
+  write_port_uint8(PIC1_DATA_PORT, 0x20);
+  write_port_uint8(PIC2_DATA_PORT, 0x20);
+  write_port_uint8(PIC1_DATA_PORT, 0b11111111);
+  write_port_uint8(PIC2_DATA_PORT, 0b11111111);
 	
   //APIC Spuritous interput vector
   //TODO(Torin) I dont think that this is configured correctly

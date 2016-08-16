@@ -139,7 +139,6 @@ void klog_write_fmt(Circular_Log *log, const char *fmt, ...){
   size_t entry_index = log->entry_write_position % CIRCULAR_LOG_ENTRY_COUNT;
   Circular_Log_Entry *entry = &log->entries[entry_index];
   log->entry_write_position++;
-  log->current_scroll_position++;
   if(log->current_entry_count < CIRCULAR_LOG_ENTRY_COUNT){ log->current_entry_count++; }
   spinlock_release(&log->spinlock);
   

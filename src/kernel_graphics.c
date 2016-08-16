@@ -1,8 +1,11 @@
 
 static const uint8_t INCONSOLATA16[] = {
-#include "inconsolata16.txt"
+#include "bitmapfont.txt"
 };
 
+#include <xmmintrin.h>
+
+#if 0
 void kgfx_draw_character(char c, size_t x_orign, size_t y_origin, Framebuffer *fb) {
   const uint8_t *character_data = &INCONSOLATA16[(c - ' ') * 256];
   for(size_t i = 0; i < 16; i++){
@@ -18,11 +21,32 @@ void kgfx_draw_character(char c, size_t x_orign, size_t y_origin, Framebuffer *f
   }
 }
 
-void kgfx_clear_framebuffer(Framebuffer *fb){
-  memset(fb->buffer, 0x00, fb->width * fb->height * fb->depth);
+#else
+void kgfx_draw_character(char c, size_t x_orign, size_t y_origin, Framebuffer *fb) {
+  const uint8_t *character_data = &INCONSOLATA16[(c - ' ') * 256];
+  for(size_t i = 0; i < 16; i++){
+    for(size_t j = 0; j < 16; j++){
+      size_t char_index = j + i*16; 
+      if(character_data[char_index] > 0){
+        size_t fb_index = ((j+x_orign)*fb->depth) + ((i+y_origin)*fb->pitch);
+        fb->buffer[fb_index + 0] = 0x00;
+        fb->buffer[fb_index + 1] = character_data[char_index];
+        fb->buffer[fb_index + 2] = 0x00;
+      }
+    }
+  }
 }
+#endif
 
-
+void kgfx_clear_framebuffer(Framebuffer *fb){
+  size_t step_count = (fb->width * fb->height * fb->depth) / 16;
+  __m128i *write_ptr = (__m128i *)fb->buffer; 
+  __m128i clear_value = _mm_setzero_si128();
+  for(size_t i = 0; i < step_count; i++){
+    _mm_store_si128(write_ptr, clear_value);
+    write_ptr = (__m128i *)((uintptr_t)write_ptr + 16);
+  }
+}
 
 #if 0
 void kgfx_draw_character(char c, size_t x_orign, size_t y_origin, Framebuffer *fb) {
@@ -52,6 +76,41 @@ void kgfx_draw_character(char c, size_t x_orign, size_t y_origin, Framebuffer *f
 #endif
 
 static inline
+void vga_set_char(char c, uint8_t color, int x, int y){
+  static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
+	static const uint8_t VGA_TEXT_ROW_COUNT = 25;
+	static uint8_t *VGA_TEXT_BUFFER = (uint8_t*)(0xB8000);
+  size_t vga_index = ((y * VGA_TEXT_COLUMN_COUNT) + x) * 2;
+  VGA_TEXT_BUFFER[vga_index+0] = c;
+  VGA_TEXT_BUFFER[vga_index+1] = color;
+}
+
+static inline
+void draw_vga_text_terminal(Circular_Log *log){
+  static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
+	static const uint8_t VGA_TEXT_ROW_COUNT = 25;
+	static uint8_t *VGA_TEXT_BUFFER = (uint8_t*)(0xB8000);
+  memset(VGA_TEXT_BUFFER, 0x00, VGA_TEXT_COLUMN_COUNT*VGA_TEXT_ROW_COUNT*2);
+
+  size_t entries_to_draw = min(VGA_TEXT_ROW_COUNT - 1, log->current_entry_count);
+  for(size_t i = 0; i < entries_to_draw; i++){
+    size_t entry_offset = entries_to_draw - i; 
+    size_t entry_index = (log->entry_write_position - entry_offset - log->scroll_offset) % CIRCULAR_LOG_ENTRY_COUNT;
+    Circular_Log_Entry *entry = &log->entries[entry_index];  
+    size_t chars_to_write = min(entry->length, VGA_TEXT_COLUMN_COUNT);
+    for(size_t j = 0; j < chars_to_write; j++){
+      vga_set_char(entry->message[j], VGAColor_GREEN, j, i);
+    }
+  }
+
+  size_t input_buffer_to_write = min(VGA_TEXT_COLUMN_COUNT, log->input_buffer_count);
+  for(size_t i = 0; i < input_buffer_to_write; i++){
+    vga_set_char(log->input_buffer[i], VGAColor_RED, i, VGA_TEXT_ROW_COUNT - 1); 
+  } 
+}
+
+#if 0
+static inline
 void redraw_vga_text_terminal(VGA_Text_Terminal *kterm, Circular_Log *log) {
 	static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
 	static const uint8_t VGA_TEXT_ROW_COUNT = 25;
@@ -70,8 +129,9 @@ void redraw_vga_text_terminal(VGA_Text_Terminal *kterm, Circular_Log *log) {
     }
   } else {
     size_t row_index = 0;
+
     for(int i = VGA_TEXT_ROW_COUNT - 1; i >= 0; i--){
-      size_t entry_index = (log->current_scroll_position - i) % CIRCULAR_LOG_ENTRY_COUNT;
+      size_t entry_index = (log->entry_write_position - log->scroll_offset - i) % CIRCULAR_LOG_ENTRY_COUNT;
       Circular_Log_Entry *entry = &log->entries[entry_index];
       size_t chars_to_write = min(VGA_TEXT_COLUMN_COUNT, entry->length);
       for(size_t j = 0; j < chars_to_write; j++){
@@ -91,7 +151,6 @@ void redraw_vga_text_terminal(VGA_Text_Terminal *kterm, Circular_Log *log) {
     }
   }
 
-
   size_t chars_to_write = min(log->input_buffer_count, VGA_TEXT_COLUMN_COUNT);
   for(size_t i = 0; i < chars_to_write; i++){
     size_t vga_index = ((24 * VGA_TEXT_COLUMN_COUNT) + i) * 2;    
@@ -106,6 +165,7 @@ void redraw_vga_text_terminal(VGA_Text_Terminal *kterm, Circular_Log *log) {
     VGA_TEXT_BUFFER[vga_index+1] = 0x00; 
   }
 }
+#endif
 
 void redraw_log_if_dirty(Circular_Log *log){
   if(log->is_dirty == false) return;
@@ -114,15 +174,15 @@ void redraw_log_if_dirty(Circular_Log *log){
   if(globals.framebuffer.buffer != 0){
     static const uint32_t FONT_SIZE = 16;
     static const uint32_t ROW_SPACING = 0;
-    static const uint32_t CHARACTER_SPACING = 8;
+    static const uint32_t CHARACTER_SPACING = 10;
     Framebuffer *fb = &globals.framebuffer;
     kgfx_clear_framebuffer(fb);
-    const uint32_t total_column_count = fb->width / FONT_SIZE;
+    const uint32_t total_column_count = fb->width / CHARACTER_SPACING;
     const uint32_t max_row_count = fb->height / (FONT_SIZE + ROW_SPACING);
     const uint32_t total_lines_to_draw = min(log->current_entry_count, max_row_count - 1); 
     for(size_t i = 0; i < total_lines_to_draw; i++){
       size_t entry_offset = total_lines_to_draw - i; 
-      size_t entry_index = (log->current_scroll_position - entry_offset) % CIRCULAR_LOG_ENTRY_COUNT;
+      size_t entry_index = (log->entry_write_position - entry_offset - log->scroll_offset) % CIRCULAR_LOG_ENTRY_COUNT;
       Circular_Log_Entry *entry = &log->entries[entry_index];  
       size_t chars_to_write = min(entry->length, total_column_count);
       for(size_t j = 0; j < chars_to_write; j++){
@@ -133,9 +193,9 @@ void redraw_log_if_dirty(Circular_Log *log){
     size_t input_buffer_to_write = min(total_column_count, log->input_buffer_count);
     for(size_t i = 0; i < input_buffer_to_write; i++){
       kgfx_draw_character(log->input_buffer[i], i*CHARACTER_SPACING, (FONT_SIZE+ROW_SPACING)*(max_row_count - 1), fb); 
-    } 
+    }
 
   } else {
-    redraw_vga_text_terminal(&globals.vga_text_term, log);
+    draw_vga_text_terminal(log);
   }
 }

@@ -99,7 +99,7 @@ irq_common_handler(IRQRegisterState regstate) {
 	} else {
 		klog_error("Uninialized interrupt handler!");
 	}
-  lapic_write_register(globals.lapic_address, 0xB0, 0x00);
+  lapic_write_register(globals.system_info.lapic_virtual_address, 0xB0, 0x00);
 }
 
 
@@ -128,11 +128,11 @@ static const char SCANCODE_TO_UPERCASE_ACII[] = {
 
 static void 
 irq_handler_keyboard(void) {
-  static const uint32_t KEYBOARD_STATUS_PORT = 0x64;
   static const uint32_t KEYBOARD_DATA_PORT   = 0x60;
-	uint8_t keyboard_status = read_port(KEYBOARD_STATUS_PORT);
+  static const uint32_t KEYBOARD_STATUS_PORT = 0x64;
+	uint8_t keyboard_status = read_port_uint8(KEYBOARD_STATUS_PORT);
   if(keyboard_status & 0x01){
-		uint8_t scancode = read_port(KEYBOARD_DATA_PORT);
+		uint8_t scancode = read_port_uint8(KEYBOARD_DATA_PORT);
     if(globals.log_keyboard_events){
       klog_debug("[keyboard_event] scancode %u", scancode);
     }
@@ -166,7 +166,19 @@ klog_process_keyevents(Keyboard_State *keyboard, Circular_Log *log){
       klog_remove_last_input_character(log);
 		} else if(scancode == KEYCODE_ENTER_PRESSED){
       klog_submit_input_to_shell(log);
-		}
+		} else if (scancode == KEYCODE_UP_PRESSED){
+      if(log->scroll_offset < log->current_entry_count - 1){
+        log->scroll_offset += 1;
+      }
+
+
+      log->is_dirty = true;
+    } else if (scancode == KEYCODE_DOWN_PRESSED){
+      if(log->scroll_offset > 0){
+        log->scroll_offset -= 1;
+        log->is_dirty = true;
+      }
+    }
 
     if(scancode < (int)sizeof(SCANCODE_TO_LOWERCASE_ACII)){
       char ascii_character = 0;
@@ -191,6 +203,5 @@ irq_handler_pit(void) {
     memset(keyboard->scancode_event_stack, 0x00, sizeof(keyboard->scancode_event_stack0));
     keyboard->scancode_event_stack_count = 0;
   }
-
 	redraw_log_if_dirty(&globals.log);
 }

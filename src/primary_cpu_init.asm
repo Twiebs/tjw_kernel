@@ -41,7 +41,7 @@ start:
 	call setup_paging_tables
 	call enable_paging
 
-%if 0
+%if 1
   ;Enable SSE2
   mov eax, cr0
   and ax, 0xFFFB

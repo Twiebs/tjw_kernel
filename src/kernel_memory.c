@@ -31,19 +31,40 @@ static const uint64_t PAGE_DIRY_BIT               = 1 << 6;
 static const uint64_t PAGE_HUGE_BIT 			        = 1 << 7;
 static const uint64_t PAGE_GLOBAL_BIT             = 1 << 8;
 
-static void
-log_page_info() {
-  for(size_t i = 0; i < g_current_page_index; i++){
-    bool is_present = g_p2_table.entries[i] & 0b01;
-    uintptr_t physical_address = g_p2_table.entries[i] & ~(0b111111111111);
-    uintptr_t virtual_address = i * 1024 * 1024 * 2;
-    klog_debug("page_entry: virtual %lu mapped to %lu", virtual_address, physical_address);
-  }
+//=============================================================================================
+
+void kmem_map_physical_to_virtual_2MB(uintptr_t physical_address, uintptr_t virtual_address){
+  kassert((virtual_address & 0x1FFFFF) == 0);
+  kassert((physical_address & 0x1FFFFF) == 0);
+  uintptr_t p4_index = (virtual_address >> 39) & 0x1FF;
+  uintptr_t p3_index = (virtual_address >> 30) & 0x1FF;
+  uintptr_t p2_index = (virtual_address >> 21) & 0x1FF;
+  kassert(p4_index == 0 && p3_index == 0);
+  kassert(g_p2_table.entries[p2_index] == 0);
+  g_p2_table.entries[p2_index] = physical_address | PAGE_PRESENT_BIT | PAGE_HUGE_BIT | PAGE_WRITEABLE_BIT;
 }
 
+uintptr_t kmem_map_unaligned_physical_to_aligned_virtual_2MB(uintptr_t requested_physical_address, uintptr_t virtual_address){
+  uint64_t physical_address_to_map = requested_physical_address;
+	uint64_t displacement_from_page_boundray = requested_physical_address & 0x1FFFFF;
+  physical_address_to_map -= displacement_from_page_boundray;
+  kmem_map_physical_to_virtual_2MB(physical_address_to_map, virtual_address);
+  return displacement_from_page_boundray;
+}
+
+void kmem_initalize(){
+  g_p2_table.entries[1] = (uintptr_t)&g_p1_table.entries[0] | PAGE_WRITEABLE_BIT | PAGE_PRESENT_BIT;
+	g_current_page_index = 2;
+	
+  klog_debug("p4_table is at addr: %lu", &g_p4_table);
+	klog_debug("p3_table is at addr: %lu", &g_p3_table);
+	klog_debug("p2_table is at addr: %lu", &g_p2_table);
+}
+
+//=============================================================================================
+
 static void
-print_page_table_entry_info(const uintptr_t entry)
-{
+print_page_table_entry_info(const uintptr_t entry){
   uintptr_t physical_address = entry & ~0xFFF;
   bool is_present = entry & PAGE_PRESENT_BIT;
   bool is_writeable = entry & PAGE_WRITEABLE_BIT;
@@ -51,7 +72,6 @@ print_page_table_entry_info(const uintptr_t entry)
   bool is_write_through_caching = entry & PAGE_WRITE_TROUGH_CACHE_BIT;
   bool is_caching_disabled = entry & PAGE_DISABLE_CACHE_BIT;
   bool is_huge_page = entry & PAGE_HUGE_BIT;
-
   klog_debug("physical_address: %lu", physical_address);
   klog_debug("present: %s", is_present ? "true" : "false");
   klog_debug("writeable: %s", is_writeable ? "true" : "false");
@@ -83,7 +103,18 @@ print_virtual_address_info_2MB(const uintptr_t virtual_address)
   print_page_table_entry_info(g_p2_table.entries[p2_index]);
 }
 
-internal uintptr_t //virtual_page_address
+static void
+log_page_info() {
+  for(size_t i = 0; i < g_current_page_index; i++){
+    bool is_present = g_p2_table.entries[i] & 0b01;
+    uintptr_t physical_address = g_p2_table.entries[i] & ~(0b111111111111);
+    uintptr_t virtual_address = i * 1024 * 1024 * 2;
+    klog_debug("page_entry: virtual %lu mapped to %lu", virtual_address, physical_address);
+  }
+}
+
+#if 0
+static uintptr_t //virtual_page_address
 silly_page_map_4KB(uintptr_t physical_page_address){
   g_p1_table.entries[g_p1_table_count] = physical_page_address | PAGE_PRESENT_BIT | PAGE_WRITEABLE_BIT; 
   uintptr_t result = (1024*1024*2) + (g_p1_table_count * 4096);
@@ -124,13 +155,4 @@ silly_page_map(const uintptr_t requested_physical_address, const bool is_writeab
     *page_offset, g_p2_table.entries[g_current_page_index]);
 	return mapped_virtual_address;
 }
-
-static inline
-void kmem_initalize(){
-  g_p2_table.entries[1] = (uintptr_t)&g_p1_table.entries[0] | PAGE_WRITEABLE_BIT | PAGE_PRESENT_BIT;
-	g_current_page_index = 2;
-	
-  klog_debug("p4_table is at addr: %lu", &g_p4_table);
-	klog_debug("p3_table is at addr: %lu", &g_p3_table);
-	klog_debug("p2_table is at addr: %lu", &g_p2_table);
-}
+#endif

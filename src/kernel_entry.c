@@ -7,13 +7,6 @@
 // IDT still must be initalized
 
 typedef struct {
-	uint8_t *framebuffer;
-	uint16_t resolutionX;
-	uint16_t resolutionY;
-	uint16_t depth;
-} VideoState;
-
-typedef struct {
 	uint16_t offset_0_15;
 	uint16_t code_segment_selector;
 	uint8_t ist;
@@ -27,13 +20,12 @@ typedef struct {
   Circular_Log log;
   VGA_Text_Terminal vga_text_term;
   Keyboard_State keyboard;
-  uintptr_t lapic_address;
-  uintptr_t ioapic_virtual_address;
+
+  System_Info system_info;
   Framebuffer framebuffer;
 
   bool is_logging_disabled;
   bool log_keyboard_events;
-
 } Kernel_Globals;
 
 static Kernel_Globals globals;
@@ -74,24 +66,24 @@ legacy_pic8259_initalize(void) {
 	static const uint8_t ICW4_8068 = 0x01;
 
 	//ICW1 Tells PIC to wait for 3 more words
-	write_port(PIC1_COMMAND_PORT, ICW1_INIT_CASCADED);
-	write_port(PIC2_COMMAND_PORT, ICW1_INIT_CASCADED);
+	write_port_uint8(PIC1_COMMAND_PORT, ICW1_INIT_CASCADED);
+	write_port_uint8(PIC2_COMMAND_PORT, ICW1_INIT_CASCADED);
 	//ICW2 Set PIC Offset Values
-	write_port(PIC1_DATA_PORT, ICW2_PIC1_IRQ_NUMBER_BEGIN);
-	write_port(PIC2_DATA_PORT, ICW2_PIC2_IRQ_NUMBER_BEGIN);
+	write_port_uint8(PIC1_DATA_PORT, ICW2_PIC1_IRQ_NUMBER_BEGIN);
+	write_port_uint8(PIC2_DATA_PORT, ICW2_PIC2_IRQ_NUMBER_BEGIN);
 	//ICW3 PIC Cascading Info
-	write_port(PIC1_DATA_PORT, ICW3_PIC1_IRQ_LINE_2);
-	write_port(PIC2_DATA_PORT, ICW3_PIC2_IRQ_LINE_2);
+	write_port_uint8(PIC1_DATA_PORT, ICW3_PIC1_IRQ_LINE_2);
+	write_port_uint8(PIC2_DATA_PORT, ICW3_PIC2_IRQ_LINE_2);
 	//ICW4 Additional Enviroment Info
 	//NOTE(Torin) Currently set to 80x86
-	write_port(PIC1_DATA_PORT, ICW4_8068);
-	write_port(PIC2_DATA_PORT, ICW4_8068);
+	write_port_uint8(PIC1_DATA_PORT, ICW4_8068);
+	write_port_uint8(PIC2_DATA_PORT, ICW4_8068);
 
   //Write EndOfInterupt and set interrupt enabled mask 
-	write_port(PIC1_DATA_PORT, 0x20);
-	write_port(PIC2_DATA_PORT, 0x20);
-	write_port(PIC1_DATA_PORT, 0b11111101);
-	write_port(PIC2_DATA_PORT, 0b11111111);
+	write_port_uint8(PIC1_DATA_PORT, 0x20);
+	write_port_uint8(PIC2_DATA_PORT, 0x20);
+	write_port_uint8(PIC1_DATA_PORT, 0b11111101);
+	write_port_uint8(PIC2_DATA_PORT, 0b11111111);
 	klog_info("PIC8259 Initialized");
 }
 
@@ -248,26 +240,24 @@ x86_64_idt_initalize(){
 #include "hardware_serial.c"
 #include "kernel_memory.c"
 
+
+
 extern void
 ap_entry_procedure(void){
-  klog_info("CPU1 booted and initalized");
 
-  klog_debug("Grettings CPU0!  CPU1 here. I'm having a fantastic day!  How are you?");
   asm volatile("hlt");
-  klog_debug("wtf mate? who dares awaken me from my slumber?");
 }
 
 #include "kernel_process.c"
+#include "kernel_pci.c"
 
 
 
 extern void 
 kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) 
 {
-  //klog_disable();
 	serial_debug_init();
 	legacy_pic8259_initalize();
-	//legacy_pit_initialize();
 	x86_64_idt_initalize();
   kmem_initalize();
 
@@ -275,8 +265,6 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
   globals.keyboard.scancode_event_stack = globals.keyboard.scancode_event_stack0;
 
   klog_debug("ap_entry_procedure: %lu", ap_entry_procedure);
-
-  System_Info sys = {};
 
 	if (multiboot2_magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
 		klog_error("the kernel was not booted with a multiboot2 compliant bootloader!");
@@ -288,39 +276,22 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 		kpanic();
 	}
 
-	uint32_t multiboot_info_size = *(uint32_t *)multiboot2_address;
-	klog_debug("multiboot_info_size is %u", multiboot_info_size);
-	
+  struct multiboot_tag_framebuffer *fb_mbtag = 0; 
+  uintptr_t rsdp_physical_address = 0;
 	struct multiboot_tag *tag = (struct multiboot_tag *)(multiboot2_address + 8);
 	while (tag->type != MULTIBOOT_TAG_TYPE_END) {
-		klog_debug("found mbtag: %u", tag->type);
 		switch (tag->type) {
-
 			case MULTIBOOT_TAG_TYPE_ACPI_OLD: {
-				struct multiboot_tag_old_acpi *acpi_info = (struct multiboot_tag_old_acpi *)(tag);
-				klog_debug("found acpi old data.  rsp address is %lu", acpi_info->rsdp);
-				parse_root_system_descriptor((RSDP_Descriptor_1*)acpi_info->rsdp, &sys);
+		    struct multiboot_tag_old_acpi *acpi_info = (struct multiboot_tag_old_acpi *)(tag);
+        rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
 			} break;
-
 			case MULTIBOOT_TAG_TYPE_ACPI_NEW: {
-			  klog_debug("found acpi new data");
 				struct multiboot_tag_new_acpi *acpi_info = (struct multiboot_tag_new_acpi *)(tag);
-				RSDP_Descriptor_2 *rsdp = (RSDP_Descriptor_2 *)acpi_info->rsdp;
-				parse_root_system_descriptor(&rsdp->first_part, &sys);
+        rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
 			} break;
 
       case MULTIBOOT_TAG_TYPE_FRAMEBUFFER: {
-        struct multiboot_tag_framebuffer *fb = (struct multiboot_tag_framebuffer *)(tag);
-
-        if(fb->common.framebuffer_type != MULTIBOOT_FRAMEBUFFER_TYPE_RGB){
-          klog_info("this is a text buffer");
-        } else {
-          sys.framebuffer_address = fb->common.framebuffer_addr;
-          sys.framebuffer_width = fb->common.framebuffer_width;
-          sys.framebuffer_height = fb->common.framebuffer_height;
-          sys.framebuffer_depth = fb->common.framebuffer_bpp / 8;
-          sys.framebuffer_pitch = fb->common.framebuffer_pitch;        
-        }
+        fb_mbtag = (struct multiboot_tag_framebuffer *)(tag);
       } break;
 
       case MULTIBOOT_TAG_TYPE_MMAP: {
@@ -344,62 +315,75 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
       };
 
 		}
-
-		//kterm_redraw_if_required(&_kterm, &_iostate);
 		tag = (struct multiboot_tag *)(((uint8_t *)tag) + ((tag->size + 7) & ~7));
 	}
 
+  //NOTE(Torin) Initalize the framebuffer
+  if(fb_mbtag == 0) {
+    kassert(0 && "MULTIBOOT FAILED TO PROVIDE FRAMEBUFFER TAG");
+  }
+
+  if(fb_mbtag->common.framebuffer_type != MULTIBOOT_FRAMEBUFFER_TYPE_RGB){
+    klog_info("this is a text buffer");
+  } else {
+    uintptr_t framebuffer_virtual_address = 0x0A000000;
+    uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_2MB(fb_mbtag->common.framebuffer_addr, framebuffer_virtual_address);
+    kmem_map_physical_to_virtual_2MB(fb_mbtag->common.framebuffer_addr - page_offset + 0x200000, framebuffer_virtual_address + 0x200000);
+
+    Framebuffer *fb = &globals.framebuffer;
+    fb->width = fb_mbtag->common.framebuffer_width; 
+    fb->height = fb_mbtag->common.framebuffer_height;
+    fb->buffer = (uint8_t *)framebuffer_virtual_address;
+    fb->depth = fb_mbtag->common.framebuffer_bpp / 8; 
+    fb->pitch = fb_mbtag->common.framebuffer_pitch; 
+    klog_debug("framebuffer: width: %u, height: %u", fb->width, fb->height);
+    klog_debug("framebuffer was memory mapped just fine!");
+  }
+
+  klog_debug("[debug] initalized framebuffer");
+
+  if(rsdp_physical_address == 0){
+    kassert(0 && "MULTIBOOT FAILED TO PROVIDE LOCATION OF RSDP");
+  }
+
+  System_Info *sys = &globals.system_info;
+  parse_root_system_descriptor((RSDP_Descriptor_1*)rsdp_physical_address, sys);
+
+
+  //TODO(Torin)Real page allocator
+  uintptr_t lapic_virtual_address  = 0x0C200000;
+  uintptr_t ioapic_virtual_address = 0x0C400000;
+  kmem_map_physical_to_virtual_2MB(sys->lapic_physical_address, lapic_virtual_address);
+  kmem_map_physical_to_virtual_2MB(sys->ioapic_physical_address, ioapic_virtual_address);
+  klog_debug("ioapic: physical = %lu, virtual = %lu", sys->ioapic_physical_address, lapic_virtual_address);
+  klog_debug("lapic: physical = %lu, virtual = %lu", sys->lapic_physical_address, ioapic_virtual_address);
+  sys->lapic_virtual_address = lapic_virtual_address;
+  sys->ioapic_virtual_address = ioapic_virtual_address;
+  lapic_initalize(lapic_virtual_address);
+  ioapic_initalize(ioapic_virtual_address);
+
+  //NOTE(Torin) Setup tramponline code and startup SMP processors
   klog_debug("copying trampoline code to 0x1000");
   memcpy(0x1000, TRAMPOLINE_BINARY, sizeof(TRAMPOLINE_BINARY));
   uintptr_t *p4_table_address = (uintptr_t *)0x2000;
   uintptr_t *trampoline_exit = (uintptr_t *)0x2008;
   *p4_table_address = (uintptr_t)&g_p4_table;
   *trampoline_exit = (uintptr_t)ap_entry_procedure;
-  
-  //Maping the APIC physical address to 2M for now
-	uintptr_t lapic_physical_page, lapic_page_offset = 0;
-	uintptr_t lapic_virtual_page = silly_page_map(sys.lapic_register_base, true, &lapic_physical_page, &lapic_page_offset);
-  uintptr_t lapic_register_base_address = lapic_virtual_page + lapic_page_offset;
-  lapic_initalize(lapic_register_base_address);
-  globals.lapic_address = lapic_register_base_address;
-
-  uintptr_t ioapic_physical_page, ioapic_page_offset;
-  uintptr_t ioapic_base_address = silly_page_map(sys.ioapic_register_base, true, &ioapic_physical_page, &ioapic_page_offset);
-  globals.ioapic_virtual_address = ioapic_base_address;
-  ioapic_initalize(ioapic_base_address);
-
-  klog_info("ioapic: physical = %lu, virtual = %lu", sys.ioapic_register_base, ioapic_base_address);
-  klog_info("lapic: physical = %lu, virtual = %lu", sys.lapic_register_base, lapic_register_base_address);
-
-  //initalize_cpu(lapic_register_base_address, 1, 0x01);
-  lapic_enable_timer(lapic_register_base_address);
-
-  if(sys.framebuffer_address != 0){
-    uintptr_t framebuffer_physical_page, framebuffer_page_offset;
-    uintptr_t framebuffer_virtual_address = silly_page_map(sys.framebuffer_address, true, &framebuffer_physical_page, &framebuffer_page_offset);
-    silly_page_map(sys.framebuffer_address + 0x200000, true, &framebuffer_physical_page, &framebuffer_page_offset);
-    uint8_t *framebuffer = (uint8_t *)framebuffer_virtual_address;
-
-    Framebuffer *fb = &globals.framebuffer;
-    fb->width = sys.framebuffer_width;
-    fb->height = sys.framebuffer_height;
-    fb->buffer = framebuffer;
-    fb->depth = sys.framebuffer_depth;
-    fb->pitch = sys.framebuffer_pitch;
-
-    klog_debug("framebuffer: width: %u, height: %u", fb->width, fb->height);
-
-    for(size_t y = 0; y < sys.framebuffer_height; y++){
-      for(size_t x = 0; x < sys.framebuffer_width; x++){
-        size_t index = x*sys.framebuffer_depth + y*sys.framebuffer_pitch;
-        framebuffer[index + 0] = 0x10;
-        framebuffer[index + 1] = 0x10;
-        framebuffer[index + 2] = 0x10;
-      }
-    }
+#if 0
+  for(size_t i = 0; i < sys.cpu_count; i++){
+    //initalize_cpu(lapic_register_base_address, 1, 0x01);
   }
+#endif
   
-  kprocess_load_elf_executable((uintptr_t)TEST_PROGRAM_ELF);
+  lapic_enable_timer(lapic_virtual_address);
+
+
+  //pci_enumerate_devices();
+
+ 
+  //kprocess_load_elf_executable((uintptr_t)TEST_PROGRAM_ELF);
+
+  //kmem_map_physical_to_virtual_2MB(0x00400000, 0x00400000);
 
 	while(1) { asm volatile("hlt"); };
 }

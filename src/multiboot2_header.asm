@@ -17,8 +17,8 @@ header_start:
   dw 0 ;flags
   dd 20 ;size
   dd 1280 ;width
-  dd 720  ;height
-  dd 24   ;depth
+  dd 720 ;height
+  dd 4 ;depth
 %endif
 
 %if 1

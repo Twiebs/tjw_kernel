@@ -20,7 +20,7 @@ typedef struct {
 } Console_Buffer;
 #endif
 
-#define CIRCULAR_LOG_MESSAGE_SIZE 128
+#define CIRCULAR_LOG_MESSAGE_SIZE 256 
 #define CIRCULAR_LOG_ENTRY_COUNT 256
 
 typedef struct {
@@ -33,7 +33,7 @@ typedef struct {
   Circular_Log_Entry entries[CIRCULAR_LOG_ENTRY_COUNT];
   size_t entry_write_position;
   size_t current_entry_count;
-  size_t current_scroll_position;
+  size_t scroll_offset;
   char input_buffer[256];
   size_t input_buffer_count;
   Spin_Lock spinlock;

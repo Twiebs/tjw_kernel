@@ -30,6 +30,7 @@ exit
   objcopy --only-keep-debug bin/kernel bin/debug_symbols
 	objcopy --strip-debug bin/kernel bin/kernel
 	rm *.o
+  rm *.bin
 	exit
 #endif
 

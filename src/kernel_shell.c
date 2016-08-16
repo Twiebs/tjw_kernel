@@ -47,7 +47,7 @@ kshell_help(const char *input, size_t length){
 
 static void
 kshell_ioapic_irq_map(const char *text, size_t length){
-  ioapic_log_irq_map(globals.ioapic_virtual_address);
+  ioapic_log_irq_map(globals.system_info.ioapic_virtual_address);
 }
 
 static void
