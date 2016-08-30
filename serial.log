@@ -1,28 +1,10 @@
 PIC8259 Initialized
 IDT initialized
-p4_table is at addr: 0x11F000
-p3_table is at addr: 0x120000
-p2_table is at addr: 0x121000
-ap_entry_procedure: 0x108000
-framebuffer: width: 0x500, height: 0x2D0
-framebuffer was memory mapped just fine!
-[debug] initalized framebuffer
-rsdp is valid, rsdt physical address: 0xBFFE17AB
-found MADT table
-[acpi] lapic: processor_id: 0x0 apic_id: 0x0 is enabled
-[acpi] lapic: processor_id: 0x1 apic_id: 0x1 is enabled
-[acpi] lapic: processor_id: 0x2 apic_id: 0x2 is enabled
-[acpi] lapic: processor_id: 0x3 apic_id: 0x3 is enabled
-[acpi] lapic: processor_id: 0x4 apic_id: 0x4 is enabled
-[acpi] lapic: processor_id: 0x5 apic_id: 0x5 is enabled
-[acpi] lapic: processor_id: 0x6 apic_id: 0x6 is enabled
-[acpi] lapic: processor_id: 0x7 apic_id: 0x7 is enabled
-found an IOAPIC
-ioapic id: 0x0
-ioapic physical address: 0xFEC00000
-parsed root_system_descriptor
+framebuffer: width: 1280, height: 720, depth: 4
+tss rsp0: 0x127002
+tss base address: 0x11E780
+tss limit: 0xFF
+task_register selector_index: 0x28
 ioapic: physical = 0xFEC00000, virtual = 0xC200000
 lapic: physical = 0xFEE00000, virtual = 0xC400000
-lapic initalized for cpu0 is initalized
-now receiving lapic interrupts!
-copying trampoline code to 0x1000
+apic initalized

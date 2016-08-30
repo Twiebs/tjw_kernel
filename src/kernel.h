@@ -20,7 +20,7 @@
 #define klog_info(...)    klog_write_fmt(&globals.log, __VA_ARGS__)
 #define klog_error(...)   klog_write_fmt(&globals.log, __VA_ARGS__)
 
-#define kpanic() redraw_log_if_dirty(&globals.log); \
+#define kpanic() kgfx_draw_log_if_dirty(&globals.log); \
 	asm volatile ("cli"); \
 	asm volatile ("hlt")
 
@@ -51,7 +51,7 @@ uint32_t read_port_uint32(uint16_t port){
 }
 
 //TODO(Torin) Proper rebooting with ACPI
-internal void
+static void
 kernel_reboot() {
 	struct {
 			uint16_t size;
@@ -61,7 +61,7 @@ kernel_reboot() {
 	asm volatile ("int $0x3");
 }
 
-
+#define bochs_magic_breakpoint asm volatile("xchgw %bx, %bx")
 
 typedef struct {
   uintptr_t lapic_physical_address;
@@ -69,14 +69,12 @@ typedef struct {
   uintptr_t lapic_virtual_address;
   uintptr_t ioapic_virtual_address;
 
-  uint32_t processor_count;
+  //TODO(Torin 2016-08-29) Set for each core
+  uintptr_t kernel_stack_address;
 
-#if 0
-  uintptr_t framebuffer_address;
-  uint32_t framebuffer_width;
-  uint32_t framebuffer_height;
-  uint8_t framebuffer_depth;
-  uintptr_t framebuffer_pitch;
-#endif
+  uint32_t cpu_lapic_ids[32];
+  uint32_t cpu_count;
+  uint32_t running_cpu_count;
+  Spin_Lock smp_lock;
 } System_Info;
 

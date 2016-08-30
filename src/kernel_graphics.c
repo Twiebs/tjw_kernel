@@ -92,7 +92,7 @@ void draw_vga_text_terminal(Circular_Log *log){
 	static uint8_t *VGA_TEXT_BUFFER = (uint8_t*)(0xB8000);
   memset(VGA_TEXT_BUFFER, 0x00, VGA_TEXT_COLUMN_COUNT*VGA_TEXT_ROW_COUNT*2);
 
-  size_t entries_to_draw = min(VGA_TEXT_ROW_COUNT - 1, log->current_entry_count);
+  size_t entries_to_draw = min((VGA_TEXT_ROW_COUNT - 1), log->current_entry_count);
   for(size_t i = 0; i < entries_to_draw; i++){
     size_t entry_offset = entries_to_draw - i; 
     size_t entry_index = (log->entry_write_position - entry_offset - log->scroll_offset) % CIRCULAR_LOG_ENTRY_COUNT;
@@ -167,7 +167,7 @@ void redraw_vga_text_terminal(VGA_Text_Terminal *kterm, Circular_Log *log) {
 }
 #endif
 
-void redraw_log_if_dirty(Circular_Log *log){
+void kgfx_draw_log_if_dirty(Circular_Log *log){
   if(log->is_dirty == false) return;
   log->is_dirty = false;
 

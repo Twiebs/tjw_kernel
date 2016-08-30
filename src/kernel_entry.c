@@ -7,16 +7,6 @@
 // IDT still must be initalized
 
 typedef struct {
-	uint16_t offset_0_15;
-	uint16_t code_segment_selector;
-	uint8_t ist;
-	uint8_t type_and_attributes;
-	uint16_t offset_16_31;
-	uint32_t offset_32_63;
-	uint32_t null_uint32;
-} x86_64_IDT_Entry;
-
-typedef struct {
   Circular_Log log;
   VGA_Text_Terminal vga_text_term;
   Keyboard_State keyboard;
@@ -28,19 +18,23 @@ typedef struct {
   bool log_keyboard_events;
 } Kernel_Globals;
 
+
 static Kernel_Globals globals;
 
-global_variable x86_64_IDT_Entry _idt[256];
-global_variable uintptr_t _interrupt_handlers[256];
+#define GDT_RING0_DATA 0x08
+#define GDT_RING3_DATA 0x10
+#define GDT_RING0_CODE 0x18
+#define GDT_RING3_CODE 0x20
+#define GDT_TSS 0x28
 
 #include "kernel_graphics.c"
 #include "kernel_acpi.c"
 #include "kernel_apic.c"
+#include "kernel_descriptor.c"
+#include "kernel_exceptions.c"
 
-
-
-
-#define bochs_magic_breakpoint asm volatile("xchgw %bx, %bx");
+static IDT_Entry _idt[256];
+static uintptr_t _interrupt_handlers[256];
 
 static const uint8_t TRAMPOLINE_BINARY[] = {
 #include "trampoline.txt"
@@ -121,30 +115,23 @@ idt_install_interrupt(const uint32_t irq_number, const uint64_t irq_handler_addr
 	static const uint64_t TYPE_INTERRUPT_GATE_64 = 0xE;
 	static const uint64_t TYPE_TRAP_GATE_64 = 0xF;
 
-	static const uint8_t GDT_CODE_SEGMENT_OFFSET = 0x08;
-	
 	_idt[irq_number].offset_0_15 = (uint16_t)(irq_handler_addr & 0xFFFF);
 	_idt[irq_number].offset_16_31 = (uint16_t)((irq_handler_addr >> 16) & 0xFFFF);
 	_idt[irq_number].offset_32_63 = (uint32_t)((irq_handler_addr >> 32) & 0xFFFFFFFF);
 	_idt[irq_number].type_and_attributes = PRESENT_BIT | TYPE_INTERRUPT_GATE_64 | PRIVILEGE_LEVEL_0; 
-	_idt[irq_number].code_segment_selector = GDT_CODE_SEGMENT_OFFSET;
+	_idt[irq_number].code_segment_selector = GDT_RING0_CODE;
 	_idt[irq_number].ist = 0;
 }
 
 static void
 x86_64_idt_initalize(){
-	//NOTE(Torin) This is a debug mechanisim to insure that 
-	//if a handler is called from the asm stub and the registered interrupt
-	//handler is 0xFFFFFFFF then the interrupt handler was never registered
-  
   extern void asm_double_fault_handler();
   extern void asm_debug_handler();
   
 	for (uint32_t i = 0; i < 256; i++) {
 		idt_install_interrupt(i, (uintptr_t)asm_debug_handler);
-		_interrupt_handlers[i] = 0xFFFFFFFF;
+		_interrupt_handlers[i] = 0x00;
 	}
-	
 
 	{ //Software Exceptions
 		extern void asm_isr0(void);
@@ -219,11 +206,15 @@ x86_64_idt_initalize(){
 		static const uint32_t IRQ_KEYBOARD = 0x21;
 		extern void asm_irq0(void);
 		extern void asm_irq1(void);
+    extern void asm_irq128(void);
+
+    extern void asm_syscall_handler(void);
 
 		_interrupt_handlers[0] = (uintptr_t)irq_handler_pit;
 		_interrupt_handlers[1] = (uintptr_t)irq_handler_keyboard;
 		idt_install_interrupt(IRQ_PIT, (uintptr_t)asm_irq0);
 		idt_install_interrupt(IRQ_KEYBOARD, (uintptr_t)asm_irq1);
+    idt_encode_entry((uintptr_t)&_idt[0x80], (uintptr_t)asm_syscall_handler, true);
 	}
 #endif
 
@@ -240,31 +231,27 @@ x86_64_idt_initalize(){
 #include "hardware_serial.c"
 #include "kernel_memory.c"
 
-
-
 extern void
 ap_entry_procedure(void){
-
   asm volatile("hlt");
 }
 
 #include "kernel_process.c"
 #include "kernel_pci.c"
+#include "kernel_debug.c"
 
-
+extern void asm_enter_usermode(uintptr_t address_to_execute, uintptr_t stack_pointer);
 
 extern void 
-kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) 
-{
+kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
 	serial_debug_init();
 	legacy_pic8259_initalize();
 	x86_64_idt_initalize();
   kmem_initalize();
 
-  //NOTE(Torin) Setupt keyboard event stack
+  //NOTE(Torin) Setup keyboard event stack
   globals.keyboard.scancode_event_stack = globals.keyboard.scancode_event_stack0;
 
-  klog_debug("ap_entry_procedure: %lu", ap_entry_procedure);
 
 	if (multiboot2_magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
 		klog_error("the kernel was not booted with a multiboot2 compliant bootloader!");
@@ -336,11 +323,9 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     fb->buffer = (uint8_t *)framebuffer_virtual_address;
     fb->depth = fb_mbtag->common.framebuffer_bpp / 8; 
     fb->pitch = fb_mbtag->common.framebuffer_pitch; 
-    klog_debug("framebuffer: width: %u, height: %u", fb->width, fb->height);
-    klog_debug("framebuffer was memory mapped just fine!");
+    klog_debug("framebuffer: width: %u, height: %u, depth: %u", fb->width, fb->height, (uint32_t)fb->depth);
   }
 
-  klog_debug("[debug] initalized framebuffer");
 
   if(rsdp_physical_address == 0){
     kassert(0 && "MULTIBOOT FAILED TO PROVIDE LOCATION OF RSDP");
@@ -349,41 +334,72 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
   System_Info *sys = &globals.system_info;
   parse_root_system_descriptor((RSDP_Descriptor_1*)rsdp_physical_address, sys);
 
+  //NOTE(Torin) Tasking relating thingy-things
 
-  //TODO(Torin)Real page allocator
-  uintptr_t lapic_virtual_address  = 0x0C200000;
-  uintptr_t ioapic_virtual_address = 0x0C400000;
-  kmem_map_physical_to_virtual_2MB(sys->lapic_physical_address, lapic_virtual_address);
-  kmem_map_physical_to_virtual_2MB(sys->ioapic_physical_address, ioapic_virtual_address);
-  klog_debug("ioapic: physical = %lu, virtual = %lu", sys->ioapic_physical_address, lapic_virtual_address);
-  klog_debug("lapic: physical = %lu, virtual = %lu", sys->lapic_physical_address, ioapic_virtual_address);
-  sys->lapic_virtual_address = lapic_virtual_address;
-  sys->ioapic_virtual_address = ioapic_virtual_address;
-  lapic_initalize(lapic_virtual_address);
-  ioapic_initalize(ioapic_virtual_address);
+  //TODO(Torin 2016-08-29) This should probably be established after
+  //the other cpus are initalized
+  extern uintptr_t stack_top;
+  uintptr_t stack_top_ptr = (uintptr_t)&stack_top;
+  sys->kernel_stack_address = stack_top_ptr;
+  memset(&g_tss_entry, 0x00, sizeof(g_tss_entry));
+  g_tss_entry.rsp0 = stack_top_ptr;
+  g_tss_entry.ist1 = stack_top_ptr;
+  klog_debug("tss rsp0: 0x%X", g_tss_entry.rsp0);
+  uint8_t *gdt = (uint8_t *)&GDT64;
+  gdt_encode_system_descriptor((uintptr_t)&g_tss_entry, 0xFF, GDT_DESCRIPTOR_TYPE_TSS, 3, (uintptr_t)(gdt + GDT_TSS));
+  tss_ldr(GDT_TSS);
+  
+  //TODO(Torin) Real page allocator
+  //NOTE(Torin) Arbitrarly maps the lapic and ioapic into the kernels virtual addresss space
+  //And initalizes the iopapic and lapic
+  sys->lapic_virtual_address = 0x0C200000;
+  sys->ioapic_virtual_address = 0x0C400000;
+  kmem_map_physical_to_virtual_2MB(sys->lapic_physical_address, sys->lapic_virtual_address);
+  kmem_map_physical_to_virtual_2MB(sys->ioapic_physical_address, sys->ioapic_virtual_address);
+  klog_debug("ioapic: physical = 0x%X, virtual = 0x%X", sys->ioapic_physical_address, sys->lapic_virtual_address);
+  klog_debug("lapic: physical = 0x%X, virtual = 0x%X", sys->lapic_physical_address, sys->ioapic_virtual_address);
+  lapic_initalize(sys->lapic_virtual_address);
+  ioapic_initalize(sys->ioapic_virtual_address);
+  klog_debug("apic initalized");
 
-  //NOTE(Torin) Setup tramponline code and startup SMP processors
+#if 0 //NOTE(Torin) Setup tramponline code and startup SMP processors
   klog_debug("copying trampoline code to 0x1000");
   memcpy(0x1000, TRAMPOLINE_BINARY, sizeof(TRAMPOLINE_BINARY));
   uintptr_t *p4_table_address = (uintptr_t *)0x2000;
   uintptr_t *trampoline_exit = (uintptr_t *)0x2008;
+  uintptr_t *cpu_id = (uintptr_t *)0x2010;
   *p4_table_address = (uintptr_t)&g_p4_table;
   *trampoline_exit = (uintptr_t)ap_entry_procedure;
-#if 0
-  for(size_t i = 0; i < sys.cpu_count; i++){
-    //initalize_cpu(lapic_register_base_address, 1, 0x01);
+  for(size_t i = 0; i < sys->cpu_count; i++){
+    *cpu_id = i;
+    //lapic_startup_ap(lapic_virtual_address, sys->cpu_lapic_ids[i], 0x01);
+    //TODO(Torin) For now this assumes that the CPU will initalize correctly which is bad
+    while(1) {
+      spinlock_aquire(&sys->smp_lock);
+      if(sys->cpu_count > i) {
+        spinlock_release(&sys->smp_lock);
+      }
+    }
   }
-#endif
-  
-  lapic_enable_timer(lapic_virtual_address);
+  #endif
 
+#if 0
+  uintptr_t executable_virtual_address = 0x00400000;
+  uintptr_t executable_virtual_stack = 0x00600000;
+  kmem_map_physical_to_virtual_2MB_ext(0x00A00000, executable_virtual_address, PAGE_USER_ACCESS_BIT);
+  kmem_map_physical_to_virtual_2MB_ext(0x00C00000, executable_virtual_stack, PAGE_USER_ACCESS_BIT);
+  memcpy(executable_virtual_address, TEST_PROGRAM_ELF, sizeof(TEST_PROGRAM_ELF));
+  uintptr_t start_address = kprocess_load_elf_executable(executable_virtual_address);
+  uintptr_t stack_address = executable_virtual_stack + 0x1FFFFF;
+  klog_debug("start_address: 0x%X", start_address);
+  asm_enter_usermode((uintptr_t)start_address, stack_address);
+#endif
+
+  //kgfx_draw_log_if_dirty(&globals.log);
 
   //pci_enumerate_devices();
 
- 
-  //kprocess_load_elf_executable((uintptr_t)TEST_PROGRAM_ELF);
-
-  //kmem_map_physical_to_virtual_2MB(0x00400000, 0x00400000);
+  lapic_enable_timer(sys->lapic_virtual_address);
 
 	while(1) { asm volatile("hlt"); };
 }

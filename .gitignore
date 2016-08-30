@@ -5,6 +5,8 @@
 *.o
 
 .vscode/*
-
+debug/*
 bin/*
+kfs/*
+
 

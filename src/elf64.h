@@ -79,7 +79,7 @@ typedef struct {
 typedef struct {
   uint32_t segment_type;
   uint32_t flags;
-  uint64_t offset; 
+  uint64_t offset_in_file; 
   uint64_t virtual_address;
   uint64_t undefined;
   uint64_t segment_file_size;

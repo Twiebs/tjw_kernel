@@ -44,6 +44,25 @@ void string_inplace_reverse(char *str, size_t length){
 } 
 
 static inline 
+size_t uint64_to_string(char *dest, uint64_t value, uint8_t base){
+  size_t bytes_written = 0;
+  if(value == 0) {
+    dest[0] = '0';
+    bytes_written = 1;
+  } else {
+    while(value > 0){
+      static const char LOOKUP[] = "0123456789ABCDEF";
+      dest[bytes_written++] = LOOKUP[value % base];
+      value /= base;
+    }
+    string_inplace_reverse(dest, bytes_written);
+  }
+  return bytes_written;
+}
+
+
+
+static inline 
 size_t uint64_to_string_base16(char *dest, uint64_t value){
   size_t bytes_written = 0;
   if(value == 0) {
@@ -73,11 +92,8 @@ kernel_vsnprintf(char *buffer, size_t capacity, const char *fmt, va_list args)
 				fmt_index++;
 				if(fmt[fmt_index] == 'u') {
 					uint64_t value = va_arg(args, uint64_t);
-          if(bytes_written + 18 > capacity) return bytes_written;
-          buffer[bytes_written + 0] = '0';
-          buffer[bytes_written + 1] = 'x';
-          bytes_written += 2;
-          bytes_written += uint64_to_string_base16(buffer + bytes_written, value);
+          if(bytes_written + 20 > capacity) return bytes_written;
+          bytes_written += uint64_to_string(buffer + bytes_written, value, 10);
           fmt_index++;
 				}
 			}
@@ -86,10 +102,7 @@ kernel_vsnprintf(char *buffer, size_t capacity, const char *fmt, va_list args)
 			else if (fmt[fmt_index] == 'u') {
 				uint32_t value = va_arg(args, uint32_t);
         if(bytes_written + 10 > capacity) return bytes_written;
-        buffer[bytes_written + 0] = '0';
-        buffer[bytes_written + 1] = 'x';
-        bytes_written += 2;
-				bytes_written += uint64_to_string_base16(buffer + bytes_written, (uint64_t)value);
+				bytes_written += uint64_to_string(buffer + bytes_written, (uint64_t)value, 10);
         fmt_index++;
 			}
 
@@ -103,17 +116,26 @@ kernel_vsnprintf(char *buffer, size_t capacity, const char *fmt, va_list args)
 				fmt_index++;
 			}
 
+      else if(fmt[fmt_index] == 'X'){
+        uint64_t value = va_arg(args, uint64_t);
+        if(bytes_written + 16 > capacity) return bytes_written;
+        bytes_written += uint64_to_string(buffer + bytes_written, value, 16);
+        fmt_index++;
+      }
+
 			else if (fmt[fmt_index] == '.') {
 				fmt_index++;
 				if(fmt[fmt_index] == '*'){
 					fmt_index++;
-					size_t str_length = (size_t)va_arg(args, uintptr_t);
-					const char *str = (const char *)va_arg(args, uintptr_t);
-          if(bytes_written + str_length > capacity) return bytes_written;
-          memcpy(buffer + bytes_written, str, str_length);
-          bytes_written += str_length;
-					fmt_index++;
-				}
+          if(fmt[fmt_index] == 's'){
+            fmt_index++;
+            size_t str_length = (size_t)va_arg(args, uintptr_t);
+            const char *str = (const char *)va_arg(args, uintptr_t);
+            if(bytes_written + str_length > capacity) return bytes_written;
+            memcpy(buffer + bytes_written, str, str_length);
+            bytes_written += str_length;
+          }
+        }
 			}
 		}
 
@@ -130,6 +152,37 @@ kernel_vsnprintf(char *buffer, size_t capacity, const char *fmt, va_list args)
 		}
   } 
   return bytes_written;
+}
+
+Circular_Log_Entry *klog_get_next_available_entry(Circular_Log *log){
+  spinlock_aquire(&log->spinlock);
+  size_t entry_index = log->entry_write_position % CIRCULAR_LOG_ENTRY_COUNT; 
+  Circular_Log_Entry *entry = &log->entries[entry_index];
+  log->entry_write_position++;
+  if(log->current_entry_count < CIRCULAR_LOG_ENTRY_COUNT) {
+    log->current_entry_count++; 
+  }
+  spinlock_release(&log->spinlock);
+  return entry;
+}
+
+void klog_write_string(Circular_Log *log, const char *string, size_t length){
+  if(length > CIRCULAR_LOG_MESSAGE_SIZE){
+    klog_error("failed to print string of length: %u", length);
+    klog_error("string: %.*s", 30, string);
+    return;
+  }
+
+  if(globals.is_logging_disabled) return;
+  Circular_Log_Entry *entry = klog_get_next_available_entry(log);
+  memcpy(entry->message, string, length);
+  entry->length = length;
+
+  spinlock_aquire(&log->spinlock);
+  log->is_dirty = true;
+  write_serial(entry->message, entry->length);
+  write_serial("\n", 1);
+  spinlock_release(&log->spinlock);
 }
 
 void klog_write_fmt(Circular_Log *log, const char *fmt, ...){

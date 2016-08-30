@@ -55,54 +55,41 @@ void lapic_write_register(uintptr_t lapic_base, uintptr_t register_offset, uint3
 
 static void
 ioapic_initalize(uintptr_t ioapic_register_base) {
+  asm volatile("cli");
   static const uint8_t DELIVERY_MODE_FIXED = 0x00;
-
   //NOTE(Torin) Keyboard
   IOAPIC_IRQR_LOW low = {};
   IOAPIC_IRQR_HIGH high = {};
   low.vector = 0x21;
   ioapic_write_register(ioapic_register_base, 0x12, low.packed);
   ioapic_write_register(ioapic_register_base, 0x13, high.packed);
-}
-
-//TODO(Torin) Keep these debug loging functions in a seperate file
-static void
-ioapic_log_irq_map(uintptr_t ioapic_base){
-  for(size_t i = 0; i < 8; i++){
-    IOAPIC_IRQR_LOW irqr_low = {};
-    IOAPIC_IRQR_HIGH irqr_high = {};
-    irqr_low.packed = ioapic_read_register(ioapic_base, 0x10 + (i * 2));
-    irqr_high.packed = ioapic_read_register(ioapic_base, 0x10 + (i * 2) + 1);
-    klog_debug("IRQ %u", (uint32_t)i);
-    klog_debug("  vector: %u", (uint32_t)irqr_low.vector);
-    klog_debug("  mask %u", (uint32_t)irqr_low.mask);
-  }
+  asm volatile("sti");
 }
 
 static void
 lapic_initalize(uintptr_t apic_register_base) {
 	asm volatile ("cli");
-  //Disable the legacy PIC first
+  
+  //NOTE(Torin) Disable the legacy PIC first
+  //TODO(Torin 2016-08-28) Consider remapping the PIT here and never
+  //enable it fully using the other legacy routine.  Should simplify code
+  //and keep everything nice an compact since we will never support a cpu
+  //that does not have an APIC
   static const uint8_t PIC1_DATA_PORT = 0x21;
   static const uint8_t PIC2_DATA_PORT = 0xA1;
-  write_port_uint8(PIC1_DATA_PORT, 0x20);
-  write_port_uint8(PIC2_DATA_PORT, 0x20);
   write_port_uint8(PIC1_DATA_PORT, 0b11111111);
   write_port_uint8(PIC2_DATA_PORT, 0b11111111);
-	
-  //APIC Spuritous interput vector
+
+  //NOTE(Torin) Configure lapic spuritous interput vector
   //TODO(Torin) I dont think that this is configured correctly
   static const uint64_t APIC_SIVR_OFFSET = 0xF0;
   static const uint32_t SIVR_ENABLE = 1 << 8;
   static const uint32_t SIVR_FOCUS_CHECKING = 1 << 9;
-  uint32_t *sivr = (uint32_t *)(apic_register_base + APIC_SIVR_OFFSET);
-  *sivr = (31 | SIVR_ENABLE); 
-
-  klog_debug("lapic initalized for cpu0 is initalized");
+  lapic_write_register(apic_register_base, APIC_SIVR_OFFSET, 0xFF);
 	asm volatile("sti");
-  klog_debug("now receiving lapic interrupts!");
 }
 
+//TODO(Torin 2016-08-29) Change this to an lapic_configure_timer procedure
 static void
 lapic_enable_timer(uintptr_t lapic_base){
   static const uint32_t TIMER_IRQ_REGISTER = 0x320;
@@ -119,10 +106,10 @@ lapic_enable_timer(uintptr_t lapic_base){
   //NOTE(Torin) Without this flag the timer is in one-shot mode 
   static const uint32_t TIMER_PERIODIC_MODE = 0x20000;
 
-  lapic_write_register(lapic_base, TIMER_CURRENT_COUNT_REGISTER, 0x00);
   lapic_write_register(lapic_base, TIMER_INITAL_COUNT_REGISTER, 0xFFFFF);
   lapic_write_register(lapic_base, TIMER_DIVIDE_CONFIG_REGISTER, TIMER_DIVIDE_BY_16);
   lapic_write_register(lapic_base, TIMER_IRQ_REGISTER, 0x20 | TIMER_PERIODIC_MODE);
+  bochs_magic_breakpoint;
 }
 
 //NOTE(Torin) Called from the bootstrap processor to send A SIPI signal to the target application processor 

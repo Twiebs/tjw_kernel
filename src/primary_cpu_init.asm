@@ -7,33 +7,53 @@ extern kernel_end
 
 %include "multiboot2_header.asm"
 
-global GDT64
+%define ERROR_CODE_NO_MULTIBOOT "0"
+%define ERROR_CODE_NO_CPUID "7"
+%define ERROR_CODE_NO_LONGMODE "2"
 
+%define GDT_RING0_DATA 0x08
+%define GDT_RING3_DATA 0x10
+%define GDT_RING0_CODE 0x18
+%define GDT_RING3_CODE 0x20
+%define GDT_TSS 0x28
+
+global GDT64
 section .gdt
 GDT64:                         
-.null:
-	dq 0
-.code:
-	dq 0x0020980000000000 
-.data:
-  dq 0x0000900000000000 
+	dq 0x0000000000000000 ; 0x00 Null
+  dq 0x0000920000000000 ; 0x08 Ring0 Data
+  dq 0x0000F20000000000 ; 0x10 Ring3 Data
+	dq 0x0020980000000000 ; 0x18 Ring0 Code
+  dq 0x0020F80000000000 ; 0x20 Ring3 Code
+  dq 0x0000000000000000 ; 0x28 TSS High Placeholder
+  dq 0x0000000000000000 ; 0x30 TSS Low Placeholder
 .Pointer:                    ; The GDT-pointer.
 	dw $ - GDT64 - 1             ; Limit.
 	dd GDT64                     ; Base.
 
 section .text
-
 start:
-  xchg bx, bx
 	cli
 	mov esp, stack_top
-	push 0x0
-	push ebx
-	push 0x0
-	push eax
-	mov edi, ebx
 
-	call is_multiboot2_bootloader
+  ;Ensure kernel was booted with a multiboot2 compliant bootloader
+  cmp eax, 0x36D76289
+	jne .no_multiboot
+  jmp .valid_multiboot
+.no_multiboot:
+  mov al, ERROR_CODE_NO_MULTIBOOT 
+	jmp error_handler
+.valid_multiboot:
+
+  ;Multiboot is valid
+  ;Save multiboot info on the stack and extend to 64 bits
+	push 0x00
+	push ebx
+	push 0x00
+	push eax
+
+  ;CPUID is required to check if the processor is 
+  ;capable of supporting long mode
 	call is_cpuid_supported
 	call is_longmode_supported
 	
@@ -41,7 +61,6 @@ start:
 	call setup_paging_tables
 	call enable_paging
 
-%if 1
   ;Enable SSE2
   mov eax, cr0
   and ax, 0xFFFB
@@ -50,15 +69,10 @@ start:
   mov eax, cr4
   or ax, 3 << 9
   mov cr4, eax
-%endif
+  ;SSE2 is enabled
 
 	lgdt [GDT64.Pointer]
-	mov ax, 0x10
-	mov ds, ax
-	mov es, ax
-	mov fs, ax
-	mov gs, ax
-	jmp 0x8:asm_longmode_entry
+	jmp GDT_RING0_CODE:asm_longmode_entry
 
 setup_paging_tables:
 	%define PAGING_PRESENT_BIT 			(1 << 0)
@@ -69,11 +83,11 @@ setup_paging_tables:
 	%define PAGING_HUGE_BIT 				(1 << 7)
 
 	mov eax, g_p3_table
-	or eax, (PAGING_PRESENT_BIT | PAGING_WRITEABLE_BIT) 
+	or eax, (PAGING_PRESENT_BIT | PAGING_WRITEABLE_BIT | PAGING_USER_ACCESSIBLE) 
 	mov [g_p4_table], eax
 
 	mov eax, g_p2_table
-	or eax, (PAGING_PRESENT_BIT | PAGING_WRITEABLE_BIT)
+	or eax, (PAGING_PRESENT_BIT | PAGING_WRITEABLE_BIT | PAGING_USER_ACCESSIBLE)
 	mov [g_p3_table], eax
 
 	;Identity map the bottom 2MB for the kernels use
@@ -108,18 +122,6 @@ enable_paging:
 	
 ; System Feature Checks
 ;============================================
-
-%define ERROR_CODE_NO_MULTIBOOT "0"
-%define ERROR_CODE_NO_CPUID "7"
-%define ERROR_CODE_NO_LONGMODE "2"
-
-is_multiboot2_bootloader:
-  cmp eax, 0x36D76289
-	jne .no_multiboot
-	ret
-.no_multiboot:
-  mov al, ERROR_CODE_NO_MULTIBOOT 
-	jmp error_handler
 
 ;CPUID Support
 is_cpuid_supported: 
@@ -181,6 +183,7 @@ error_handler:
 global g_p4_table
 global g_p3_table
 global g_p2_table
+global stack_top
 
 section .bss
 align 4096

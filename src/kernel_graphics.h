@@ -23,7 +23,5 @@ typedef struct {
   uint8_t *buffer; 
 } Framebuffer;
 
-void redraw_log_if_dirty(Circular_Log *log);
-
-void kgfx_draw_log(Circular_Log *log);
+void kgfx_draw_log_if_dirty(Circular_Log *log);
 void kgfx_draw_character(char c, size_t x_orign, size_t y_origin, Framebuffer *fb);

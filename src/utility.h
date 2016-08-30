@@ -1,4 +1,5 @@
 #define LITERAL_STRLEN(literal) (sizeof(literal) - 1)
+#define ARRAY_COUNT(array) (sizeof(array)/sizeof(*array))
 
 #define pow(base, exponent) __builtin_pow(base, exponent)
 #define strcmp(a, b) __builtin_strcmp(a, b)
@@ -39,7 +40,7 @@ size_t strlen(const char *str) {
 #define min(a,b) (a < b ? a : b)
 #define max(a,b) (a > b ? a : b)
 
-#define LITERAL_STRLEN(literal) (sizeof(literal) - 1)
+
 #define string_matches_literal(string, len, lit) strings_match(string,len, lit, LITERAL_STRLEN(lit))
 
 static int 

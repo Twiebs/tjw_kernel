@@ -25,6 +25,7 @@ int main(int argc, char **argv) {
     printf("could not open input file: %s\n", filename);
     return 2;
   }
+  
   fseek(file, 0, SEEK_END);
   size_t file_size = ftell(file);
   fseek(file, 0, SEEK_SET);  

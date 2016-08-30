@@ -8,7 +8,8 @@
 _(help, kshell_help) \
 _(hardware_info, kshell_hardware_info)\
 _(time, kshell_unimplemented_command)\
-_(ioapic_irq_map, kshell_ioapic_irq_map)
+_(ioapic_irq_map, kshell_ioapic_irq_map)\
+_(run_test, kshell_run_test)
 
 typedef enum {
   KShell_Command_Invalid,
@@ -24,6 +25,7 @@ KShell_Command_Metalist
 #undef _
 };
 
+static void kshell_run_test(const char *text, size_t length);
 static void kshell_help(const char *text, size_t length);
 static void kshell_hardware_info(const char *text, size_t length);
 static void kshell_unimplemented_command(const char *text, size_t length);
@@ -46,8 +48,20 @@ kshell_help(const char *input, size_t length){
 }
 
 static void
+kshell_run_test(const char *text, size_t length){
+  uintptr_t executable_virtual_address = 0x00400000;
+  uintptr_t executable_virtual_stack = 0x00600000;
+  kmem_map_physical_to_virtual_2MB_ext(0x00A00000, executable_virtual_address, PAGE_USER_ACCESS_BIT);
+  kmem_map_physical_to_virtual_2MB_ext(0x00C00000, executable_virtual_stack, PAGE_USER_ACCESS_BIT);
+  memcpy(executable_virtual_address, TEST_PROGRAM_ELF, sizeof(TEST_PROGRAM_ELF));
+  uintptr_t start_address = kprocess_load_elf_executable(executable_virtual_address);
+  uintptr_t stack_address = executable_virtual_stack + 0x1FFFFF;
+  asm_enter_usermode((uintptr_t)start_address, stack_address);
+}
+
+static void
 kshell_ioapic_irq_map(const char *text, size_t length){
-  ioapic_log_irq_map(globals.system_info.ioapic_virtual_address);
+  kdebug_ioapic_log_irq_map(globals.system_info.ioapic_virtual_address);
 }
 
 static void

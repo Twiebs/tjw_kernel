@@ -36,11 +36,10 @@ void write_serial(char a) {
 }
 #endif
 
-void write_serial(void *src, size_t length){
-  uint8_t *read = (uint8_t *)src;
+void write_serial(const char *src, size_t length){
   for(size_t i = 0; i < length; i++){
     while(is_transmit_empty() == 0) {}
-    write_port_uint8(PORT, read[i]);
+    write_port_uint8(PORT, src[i]);
   }
 }
 

@@ -41,6 +41,7 @@ typedef struct {
 } Circular_Log;
 
 void klog_write_fmt(Circular_Log *log, const char *fmt, ...);
+void klog_write_string(Circular_Log *log, const char *string, size_t length);
 void klog_add_input_character(Circular_Log *log, const char c);
 void klog_remove_last_input_character(Circular_Log *log);
 void klog_submit_input_to_shell(Circular_Log *log);

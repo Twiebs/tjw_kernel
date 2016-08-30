@@ -16,22 +16,35 @@ extern PageTable g_p4_table;
 extern PageTable g_p3_table;
 extern PageTable g_p2_table;
 
-global_variable uint32_t g_current_page_index;
-global_variable uint32_t g_p1_table_count;
-global_variable PageTable g_p1_table __attribute__((aligned(4096)));
+static uint32_t g_current_page_index;
+static uint32_t g_p1_table_count;
+static PageTable g_p1_table __attribute__((aligned(4096)));
 
-//static const uint64_t PAGE_NO_EXECUTE_BIT         = 1 << 63;
-static const uint64_t PAGE_PRESENT_BIT 		        = 1 << 0;
-static const uint64_t PAGE_WRITEABLE_BIT 	        = 1 << 1;
-static const uint64_t PAGE_USER_ACCESS_BIT        = 1 << 2;
-static const uint64_t PAGE_WRITE_TROUGH_CACHE_BIT = 1 << 3;
-static const uint64_t PAGE_DISABLE_CACHE_BIT      = 1 << 4;
-static const uint64_t PAGE_ACCESSED_BIT           = 1 << 5;
-static const uint64_t PAGE_DIRY_BIT               = 1 << 6;
-static const uint64_t PAGE_HUGE_BIT 			        = 1 << 7;
-static const uint64_t PAGE_GLOBAL_BIT             = 1 << 8;
+//Page table entry configuration bits
+static const uint64_t PAGE_PRESENT_BIT 		        = 1L << 0;
+static const uint64_t PAGE_WRITEABLE_BIT 	        = 1L << 1;
+static const uint64_t PAGE_USER_ACCESS_BIT        = 1L << 2;
+static const uint64_t PAGE_WRITE_TROUGH_CACHE_BIT = 1L << 3;
+static const uint64_t PAGE_DISABLE_CACHE_BIT      = 1L << 4;
+static const uint64_t PAGE_ACCESSED_BIT           = 1L << 5;
+static const uint64_t PAGE_DIRY_BIT               = 1L << 6;
+static const uint64_t PAGE_HUGE_BIT 			        = 1L << 7;
+static const uint64_t PAGE_GLOBAL_BIT             = 1L << 8;
+static const uint64_t PAGE_NO_EXECUTE_BIT         = 1L << 63;
 
 //=============================================================================================
+
+void kmem_map_physical_to_virtual_2MB_ext(uintptr_t physical_address, uintptr_t virtual_address, uint64_t flags){
+  kassert((virtual_address & 0x1FFFFF) == 0);
+  kassert((physical_address & 0x1FFFFF) == 0);
+  uintptr_t p4_index = (virtual_address >> 39) & 0x1FF;
+  uintptr_t p3_index = (virtual_address >> 30) & 0x1FF;
+  uintptr_t p2_index = (virtual_address >> 21) & 0x1FF;
+  PageTable *p4_table = (PageTable *)&g_p4_table;
+  PageTable *p3_table = (PageTable *)p4_table->entries[p4_index]; 
+  PageTable *p2_table = (PageTable *)p3_table->entries[p3_index];
+  g_p2_table.entries[p2_index] = physical_address | PAGE_PRESENT_BIT | PAGE_HUGE_BIT | PAGE_WRITEABLE_BIT | flags;
+}
 
 void kmem_map_physical_to_virtual_2MB(uintptr_t physical_address, uintptr_t virtual_address){
   kassert((virtual_address & 0x1FFFFF) == 0);
@@ -55,63 +68,9 @@ uintptr_t kmem_map_unaligned_physical_to_aligned_virtual_2MB(uintptr_t requested
 void kmem_initalize(){
   g_p2_table.entries[1] = (uintptr_t)&g_p1_table.entries[0] | PAGE_WRITEABLE_BIT | PAGE_PRESENT_BIT;
 	g_current_page_index = 2;
-	
-  klog_debug("p4_table is at addr: %lu", &g_p4_table);
-	klog_debug("p3_table is at addr: %lu", &g_p3_table);
-	klog_debug("p2_table is at addr: %lu", &g_p2_table);
 }
 
 //=============================================================================================
-
-static void
-print_page_table_entry_info(const uintptr_t entry){
-  uintptr_t physical_address = entry & ~0xFFF;
-  bool is_present = entry & PAGE_PRESENT_BIT;
-  bool is_writeable = entry & PAGE_WRITEABLE_BIT;
-  bool access_mode = entry & PAGE_USER_ACCESS_BIT;
-  bool is_write_through_caching = entry & PAGE_WRITE_TROUGH_CACHE_BIT;
-  bool is_caching_disabled = entry & PAGE_DISABLE_CACHE_BIT;
-  bool is_huge_page = entry & PAGE_HUGE_BIT;
-  klog_debug("physical_address: %lu", physical_address);
-  klog_debug("present: %s", is_present ? "true" : "false");
-  klog_debug("writeable: %s", is_writeable ? "true" : "false");
-  klog_debug("user accessiable: %s", access_mode ? "true" : "false");
-  klog_debug("write through caching: %s", is_write_through_caching ? "true" : "false");
-  klog_debug("caching disabled: %s", is_caching_disabled ? "true" : "false");
-  klog_debug("huge page: %s", is_huge_page ? "true" : "false"); 
-}
-
-static void 
-print_virtual_address_info_2MB(const uintptr_t virtual_address)
-{
-  uint64_t p4_index = (virtual_address >> 39) & 0x1FF;
-  uint64_t p3_index = (virtual_address >> 30) & 0x1FF;
-  uint64_t p2_index = (virtual_address >> 21) & 0x1FF;
-  uint64_t offset   = (virtual_address >> 0)  & 0xFFFFF;
-
-  klog_debug("virtual_address: %lu", virtual_address);
-  klog_debug("p4_index: %lu", p4_index);
-  klog_debug("p3_index: %lu", p3_index);
-  klog_debug("p2_index: %lu", p2_index);
-  klog_debug("offset: %lu", offset);
-
-  klog_debug("p4_entry_info:");
-  print_page_table_entry_info(g_p4_table.entries[p4_index]);
-  klog_debug("p3_entry_info:");
-  print_page_table_entry_info(g_p3_table.entries[p3_index]);
-  klog_debug("p2_entry_info:");
-  print_page_table_entry_info(g_p2_table.entries[p2_index]);
-}
-
-static void
-log_page_info() {
-  for(size_t i = 0; i < g_current_page_index; i++){
-    bool is_present = g_p2_table.entries[i] & 0b01;
-    uintptr_t physical_address = g_p2_table.entries[i] & ~(0b111111111111);
-    uintptr_t virtual_address = i * 1024 * 1024 * 2;
-    klog_debug("page_entry: virtual %lu mapped to %lu", virtual_address, physical_address);
-  }
-}
 
 #if 0
 static uintptr_t //virtual_page_address

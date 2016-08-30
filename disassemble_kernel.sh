@@ -1,1 +1,1 @@
-objdump -S -d -Mintel bin/kernel > kernel.dump 
+objdump -S -d -Mintel --dwarf=decodedline bin/kernel > kernel.dump 

@@ -6,6 +6,8 @@ global asm_debug_handler
 extern irq_common_handler
 extern isr_common_handler
 
+extern g_syscall_procedures
+
 asm_double_fault_handler:
   cli
 	mov dword [0xb8000], (0x2000 | 'd')
@@ -50,6 +52,15 @@ asm_isr_common_handler:
 	add esp, 0x10 ;ISR error code and ISR Number from marco stub
 	sti
   iretq
+
+global asm_syscall_handler
+asm_syscall_handler:
+  cli
+  mov rax, [g_syscall_procedures + (rax * 0x8)]
+  call rax 
+  sti
+  iretq
+  
 
 ;============================================================================================
 
@@ -113,5 +124,6 @@ DEFINE_ISR_NOERROR 31
 
 DEFINE_IRQ_HANDLER 0
 DEFINE_IRQ_HANDLER 1
+DEFINE_IRQ_HANDLER 128
 
 
