@@ -1,7 +1,5 @@
 bits 64
 
-exit_message db 'exiting program'
-message_length equ $-exit_message
 
 global _start
 global syscall_print_string 

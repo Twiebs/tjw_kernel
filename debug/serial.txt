@@ -1,6 +1,6 @@
 PIC8259 Initialized
 IDT initialized
-framebuffer: width: 1280, height: 720, depth: 4
+this is a text buffer
 tss rsp0: 0x127002
 tss base address: 0x11E780
 tss limit: 0xFF

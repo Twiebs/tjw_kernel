@@ -49,10 +49,13 @@ kshell_help(const char *input, size_t length){
 
 static void
 kshell_run_test(const char *text, size_t length){
+  lapic_configure_timer(globals.system_info.lapic_virtual_address, 0x00, 0x20, 0);
+  uintptr_t executable_physical_address = 0x00A00000;
+  uintptr_t executable_physical_stack = 0x00C00000;
   uintptr_t executable_virtual_address = 0x00400000;
   uintptr_t executable_virtual_stack = 0x00600000;
-  kmem_map_physical_to_virtual_2MB_ext(0x00A00000, executable_virtual_address, PAGE_USER_ACCESS_BIT);
-  kmem_map_physical_to_virtual_2MB_ext(0x00C00000, executable_virtual_stack, PAGE_USER_ACCESS_BIT);
+  kmem_map_physical_to_virtual_2MB_ext(executable_physical_address, executable_virtual_address, PAGE_USER_ACCESS_BIT);
+  kmem_map_physical_to_virtual_2MB_ext(executable_physical_stack, executable_virtual_stack, PAGE_USER_ACCESS_BIT);
   memcpy(executable_virtual_address, TEST_PROGRAM_ELF, sizeof(TEST_PROGRAM_ELF));
   uintptr_t start_address = kprocess_load_elf_executable(executable_virtual_address);
   uintptr_t stack_address = executable_virtual_stack + 0x1FFFFF;

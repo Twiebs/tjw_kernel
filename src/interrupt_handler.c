@@ -1,21 +1,3 @@
-
-typedef struct {
-	uint64_t rcx;
-	uint64_t rbx;
-	uint64_t rax;
-	uint64_t interrupt_number;
-	uint32_t padding_0;
-	uint64_t return_rip;
-	uint16_t return_cs;
-	uint16_t padding_1;
-	uint32_t padding_2;
-	uint64_t return_rflags;
-	uint64_t return_rsp;
-	uint16_t return_ss;
-	uint16_t padding_3;
-	uint32_t padding_4;
-} __attribute__((packed)) IRQRegisterState; 
-
 typedef void(*InterruptHandlerProc)(void);
 typedef void(*ExceptionHandlerProc)(Interrupt_Stack_Frame);
 
@@ -39,21 +21,26 @@ static ExceptionHandlerProc g_exception_handlers[] = {
   0x0,
 };
 
-static void kprocess_destroy(uint64_t pid){
+int non_static_data_array[] = {
+  0,
+};
+
+extern void kprocess_destroy(uint64_t pid){
   klog_debug("destroyed process: %lu", pid);
-  kgfx_draw_log_if_dirty(&globals.log);
-  asm volatile("hlt");
+  lapic_configure_timer(globals.system_info.lapic_virtual_address, 0xFFFF, 0x20, 1);
+  asm volatile("int $0x20");
+  while(1) { asm volatile("hlt"); }
 }
 
 static void syscall_handler_print_string(const char *string, size_t length){
   klog_write_string(&globals.log, string, length);
 }
 
-static void syscall_handler_exit_process(Interrupt_Stack_Frame_No_Error stack){
-  //NOTE(Torin 2016-08-29) Set the stackframe to send us back into the kernel
+static void syscall_handler_exit_process(Interrupt_Stack_Frame_Basic stack){
+  extern void asm_exit_usermode(void);
   stack.ss = GDT_RING0_DATA;
   stack.cs = GDT_RING0_CODE;
-  stack.rip = (uintptr_t)kprocess_destroy;
+  stack.rip = (uintptr_t)asm_exit_usermode;
   stack.rsp = (uintptr_t)globals.system_info.kernel_stack_address;
   asm volatile("mov $0x00, %rdi");
 }
@@ -68,19 +55,17 @@ isr_common_handler(Interrupt_Stack_Frame stack) {
 	klog_debug("Exception Occured:%u %s", stack.interrupt_number, EXCEPTION_NAMES[stack.interrupt_number]);
 	klog_debug("error_code: %u", stack.error_code);
 	klog_debug("rip: 0x%X", stack.rip);
-
-  ExceptionHandlerProc exception_handler = g_exception_handlers[stack.interrupt_number];
-  if(exception_handler != 0){
-    exception_handler(stack);
+  if(g_exception_handlers[stack.interrupt_number] != 0){
+    g_exception_handlers[stack.interrupt_number](stack);
   }
 }
 
 extern void 
-irq_common_handler(IRQRegisterState regstate) {
-  if(_interrupt_handlers[regstate.interrupt_number] == 0x00){
+irq_common_handler(Interrupt_Stack_Frame_No_Error stack) {
+  if(_interrupt_handlers[stack.interrupt_number] == 0x00){
 		klog_error("unregistered interrupt handler");
   } else {
-	  InterruptHandlerProc proc = (InterruptHandlerProc)_interrupt_handlers[regstate.interrupt_number];
+	  InterruptHandlerProc proc = (InterruptHandlerProc)_interrupt_handlers[stack.interrupt_number];
 		proc();
   }
   lapic_write_register(globals.system_info.lapic_virtual_address, 0xB0, 0x00);
@@ -178,7 +163,6 @@ klog_process_keyevents(Keyboard_State *keyboard, Circular_Log *log){
 
 static void 
 irq_handler_pit(void) {
-  bochs_magic_breakpoint;
   Keyboard_State *keyboard = &globals.keyboard;
   if(globals.keyboard.scancode_event_stack_count > 0){
     klog_process_keyevents(keyboard, &globals.log); 

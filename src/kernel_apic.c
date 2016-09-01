@@ -85,13 +85,12 @@ lapic_initalize(uintptr_t apic_register_base) {
   static const uint64_t APIC_SIVR_OFFSET = 0xF0;
   static const uint32_t SIVR_ENABLE = 1 << 8;
   static const uint32_t SIVR_FOCUS_CHECKING = 1 << 9;
-  lapic_write_register(apic_register_base, APIC_SIVR_OFFSET, 0xFF);
+  lapic_write_register(apic_register_base, APIC_SIVR_OFFSET, 0x31 | SIVR_ENABLE);
 	asm volatile("sti");
 }
 
-//TODO(Torin 2016-08-29) Change this to an lapic_configure_timer procedure
 static void
-lapic_enable_timer(uintptr_t lapic_base){
+lapic_configure_timer(uintptr_t lapic_virtual_address, uint32_t inital_count, uint32_t irq_number, uint32_t mode){
   static const uint32_t TIMER_IRQ_REGISTER = 0x320;
   
   static const uint32_t TIMER_INITAL_COUNT_REGISTER  = 0x380;
@@ -103,13 +102,13 @@ lapic_enable_timer(uintptr_t lapic_base){
   static const uint32_t TIMER_DIVIDE_BY_8 = 0b10;
   static const uint32_t TIMER_DIVIDE_BY_16 = 0b11;
 
-  //NOTE(Torin) Without this flag the timer is in one-shot mode 
+  static const uint32_t TIMER_ONE_SHOT_MODE = 0x00000;
   static const uint32_t TIMER_PERIODIC_MODE = 0x20000;
+  const uint32_t mode_mask = mode ? TIMER_PERIODIC_MODE : TIMER_ONE_SHOT_MODE;
 
-  lapic_write_register(lapic_base, TIMER_INITAL_COUNT_REGISTER, 0xFFFFF);
-  lapic_write_register(lapic_base, TIMER_DIVIDE_CONFIG_REGISTER, TIMER_DIVIDE_BY_16);
-  lapic_write_register(lapic_base, TIMER_IRQ_REGISTER, 0x20 | TIMER_PERIODIC_MODE);
-  bochs_magic_breakpoint;
+  lapic_write_register(lapic_virtual_address, TIMER_INITAL_COUNT_REGISTER, inital_count);
+  lapic_write_register(lapic_virtual_address, TIMER_DIVIDE_CONFIG_REGISTER, TIMER_DIVIDE_BY_16);
+  lapic_write_register(lapic_virtual_address, TIMER_IRQ_REGISTER, irq_number | mode_mask);
 }
 
 //NOTE(Torin) Called from the bootstrap processor to send A SIPI signal to the target application processor 

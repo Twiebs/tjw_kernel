@@ -234,9 +234,10 @@ void klog_remove_last_input_character(Circular_Log *log){
 
 void klog_submit_input_to_shell(Circular_Log *log){
   if(log->input_buffer_count > 0){
-    kshell_process_command(log->input_buffer, log->input_buffer_count);
-    log->input_buffer_count = 0;
     log->is_dirty = true;
+    size_t length = log->input_buffer_count;
+    log->input_buffer_count = 0;
+    kshell_process_command(log->input_buffer, length);
   } 
 }
 

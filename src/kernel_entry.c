@@ -209,12 +209,14 @@ x86_64_idt_initalize(){
     extern void asm_irq128(void);
 
     extern void asm_syscall_handler(void);
+    extern void asm_spurious_interrupt_handler(void);
 
 		_interrupt_handlers[0] = (uintptr_t)irq_handler_pit;
 		_interrupt_handlers[1] = (uintptr_t)irq_handler_keyboard;
 		idt_install_interrupt(IRQ_PIT, (uintptr_t)asm_irq0);
 		idt_install_interrupt(IRQ_KEYBOARD, (uintptr_t)asm_irq1);
     idt_encode_entry((uintptr_t)&_idt[0x80], (uintptr_t)asm_syscall_handler, true);
+    idt_encode_entry((uintptr_t)&_idt[0x31], (uintptr_t)asm_spurious_interrupt_handler, true);
 	}
 #endif
 
@@ -397,9 +399,10 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
 
   //kgfx_draw_log_if_dirty(&globals.log);
 
-  //pci_enumerate_devices();
+  lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x20, 1);
 
-  lapic_enable_timer(sys->lapic_virtual_address);
+  //pci_enumerate_devices();
+  //lapic_enable_timer(sys->lapic_virtual_address);
 
 	while(1) { asm volatile("hlt"); };
 }

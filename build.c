@@ -12,7 +12,8 @@ exit
 #pragma GCC diagnostic ignored "-Wunused-function"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wunused-local-typedefs"
-//#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+
 #ifdef BUILD_DEBUG 
 #define COMPILER_FLAGS -g -O0
 #else//BUILD_DEBUG

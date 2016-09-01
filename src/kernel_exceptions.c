@@ -55,6 +55,7 @@ isr_handler_general_protection_fault(Interrupt_Stack_Frame stack_frame) {
         uint32_t is_external_to_cpu : 1;
         uint32_t table_index : 2;
         uint32_t selector_index : 13;
+        uint32_t reserved : 16;
       };
       uint32_t packed;
     };

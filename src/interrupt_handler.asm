@@ -24,6 +24,10 @@ asm_debug_handler:
 	hlt
 	iretq
 
+global asm_spurious_interrupt_handler
+asm_spurious_interrupt_handler:
+  iretq
+
 asm_irq_common_handler:
 	push rax
 	push rbx

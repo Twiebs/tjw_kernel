@@ -52,7 +52,6 @@ struct TSS64_Struct {
 typedef struct TSS64_Struct TSS_64;
 static TSS_64 g_tss_entry;
 
-
 #define GDT_DESCRIPTOR_TYPE_LDT (0b0010)
 #define GDT_DESCRIPTOR_TYPE_TSS (0b1001)
 

@@ -21,7 +21,19 @@ typedef struct {
   uint64_t rflags;
   uint64_t rsp;
   uint64_t ss;
-} Interrupt_Stack_Frame;
+} __attribute((packed)) Interrupt_Stack_Frame;
+
+typedef struct {
+  uint64_t rcx;
+	uint64_t rbx;
+	uint64_t rax; 
+  uint64_t interrupt_number;
+  uint64_t rip;
+  uint64_t cs;  
+  uint64_t rflags;
+  uint64_t rsp;
+  uint64_t ss;
+} __attribute((packed)) Interrupt_Stack_Frame_No_Error;
 
 typedef struct {
   uint64_t rip;
@@ -29,7 +41,8 @@ typedef struct {
   uint64_t rflags;
   uint64_t rsp;
   uint64_t ss;
-} Interrupt_Stack_Frame_No_Error;
+} Interrupt_Stack_Frame_Basic;
+
 
 static void irq_handler_keyboard(void);
 static void irq_handler_pit(void);
