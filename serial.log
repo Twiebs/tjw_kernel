@@ -2,16 +2,44 @@ PIC8259 Initialized
 IDT initialized
 framebuffer: width: 1280, height: 720, depth: 4
 tss rsp0: 0x127002
-tss base address: 0x11E7A0
+tss base address: 0x11F4C0
 tss limit: 0xFF
 task_register selector_index: 0x28
 ioapic: physical = 0xFEC00000, virtual = 0xC200000
 lapic: physical = 0xFEE00000, virtual = 0xC400000
 apic initalized
-destroyed process: 0
+Hello kernel!  This is a message from userspace.
+destroyed pid: 0
 kshell command list:
   help
   hardware_info
   time
   ioapic_irq_map
   run_test
+timeware_info is an unimplemented command!
+IRQ 0
+  vector: 0
+  mask 0
+IRQ 1
+  vector: 33
+  mask 0
+IRQ 2
+  vector: 0
+  mask 0
+IRQ 3
+  vector: 0
+  mask 0
+IRQ 4
+  vector: 0
+  mask 0
+IRQ 5
+  vector: 0
+  mask 0
+IRQ 6
+  vector: 0
+  mask 0
+IRQ 7
+  vector: 0
+  mask 0
+Hello kernel!  This is a message from userspace.
+destroyed pid: 0

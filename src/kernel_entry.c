@@ -14,6 +14,8 @@ typedef struct {
   System_Info system_info;
   Framebuffer framebuffer;
 
+  Task_Info task_info;
+
   bool is_logging_disabled;
   bool log_keyboard_events;
 } Kernel_Globals;
@@ -43,6 +45,17 @@ static const uint8_t TRAMPOLINE_BINARY[] = {
 static const uint8_t TEST_PROGRAM_ELF[] = {
 #include "test_program.txt" 
 };
+
+static inline
+uint32_t get_cpu_id(){
+  uint32_t lapic_id = lapic_get_id(globals.system_info.lapic_virtual_address);
+  for(size_t i = 0; i < globals.system_info.cpu_count; i++){
+    if(globals.system_info.cpu_lapic_ids[0] == lapic_id) return i;
+  }
+  klog_error("UNREGISTER LAPIC ID WAS USED TO GFT CPU ID");
+  kpanic();
+  return 0;
+}
 
 static void
 legacy_pic8259_initalize(void) {
@@ -238,11 +251,10 @@ ap_entry_procedure(void){
   asm volatile("hlt");
 }
 
-#include "kernel_process.c"
+#include "kernel_task.c"
 #include "kernel_pci.c"
 #include "kernel_debug.c"
 
-extern void asm_enter_usermode(uintptr_t address_to_execute, uintptr_t stack_pointer);
 
 extern void 
 kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
@@ -385,24 +397,8 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
   }
   #endif
 
-#if 0
-  uintptr_t executable_virtual_address = 0x00400000;
-  uintptr_t executable_virtual_stack = 0x00600000;
-  kmem_map_physical_to_virtual_2MB_ext(0x00A00000, executable_virtual_address, PAGE_USER_ACCESS_BIT);
-  kmem_map_physical_to_virtual_2MB_ext(0x00C00000, executable_virtual_stack, PAGE_USER_ACCESS_BIT);
-  memcpy(executable_virtual_address, TEST_PROGRAM_ELF, sizeof(TEST_PROGRAM_ELF));
-  uintptr_t start_address = kprocess_load_elf_executable(executable_virtual_address);
-  uintptr_t stack_address = executable_virtual_stack + 0x1FFFFF;
-  klog_debug("start_address: 0x%X", start_address);
-  asm_enter_usermode((uintptr_t)start_address, stack_address);
-#endif
-
-  //kgfx_draw_log_if_dirty(&globals.log);
+  //pci_enumerate_devices();
 
   lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x20, 1);
-
-  //pci_enumerate_devices();
-  //lapic_enable_timer(sys->lapic_virtual_address);
-
 	while(1) { asm volatile("hlt"); };
 }

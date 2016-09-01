@@ -51,6 +51,7 @@ exit
 #include "src/kernel_graphics.h"
 #include "src/kernel_memory.h"
 #include "src/kernel_debug.h"
+#include "src/kernel_task.h"
 
 #include "src/hardware_keyboard.h"
 #include "src/interrupt_handler.h"

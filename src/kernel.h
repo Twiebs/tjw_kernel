@@ -63,6 +63,8 @@ kernel_reboot() {
 
 #define bochs_magic_breakpoint asm volatile("xchgw %bx, %bx")
 
+#define SYSTEM_MAX_CPU_COUNT 16
+
 typedef struct {
   uintptr_t lapic_physical_address;
   uintptr_t ioapic_physical_address;
@@ -72,7 +74,7 @@ typedef struct {
   //TODO(Torin 2016-08-29) Set for each core
   uintptr_t kernel_stack_address;
 
-  uint32_t cpu_lapic_ids[32];
+  uint32_t cpu_lapic_ids[SYSTEM_MAX_CPU_COUNT];
   uint32_t cpu_count;
   uint32_t running_cpu_count;
   Spin_Lock smp_lock;

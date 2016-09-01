@@ -53,6 +53,12 @@ void lapic_write_register(uintptr_t lapic_base, uintptr_t register_offset, uint3
   lapic[0] = value;
 }
 
+static inline
+uint32_t lapic_read_register(uintptr_t lapic_base, uintptr_t register_offset){
+  uint32_t volatile *lapic_register = (uint32_t volatile *)(lapic_base + register_offset);
+  return lapic_register[0];
+}
+
 static void
 ioapic_initalize(uintptr_t ioapic_register_base) {
   asm volatile("cli");
@@ -87,6 +93,13 @@ lapic_initalize(uintptr_t apic_register_base) {
   static const uint32_t SIVR_FOCUS_CHECKING = 1 << 9;
   lapic_write_register(apic_register_base, APIC_SIVR_OFFSET, 0x31 | SIVR_ENABLE);
 	asm volatile("sti");
+}
+
+static inline
+uint32_t lapic_get_id(uintptr_t lapic_virtual_address){
+  static const uint32_t APIC_ID_REGISTER = 0x20;
+  uint32_t result = lapic_read_register(lapic_virtual_address, APIC_ID_REGISTER);
+  return result;
 }
 
 static void

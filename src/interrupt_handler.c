@@ -21,12 +21,12 @@ static ExceptionHandlerProc g_exception_handlers[] = {
   0x0,
 };
 
-int non_static_data_array[] = {
-  0,
-};
-
-extern void kprocess_destroy(uint64_t pid){
-  klog_debug("destroyed process: %lu", pid);
+extern void kprocess_destroy(){
+  uint32_t cpu_id = get_cpu_id();
+  Thread_Context *running_thread = globals.task_info.running_threads[cpu_id];
+  uint64_t pid = running_thread->pid;
+  ktask_destroy_process(pid, &globals.task_info); 
+  klog_debug("destroyed pid: %lu", pid);
   lapic_configure_timer(globals.system_info.lapic_virtual_address, 0xFFFF, 0x20, 1);
   asm volatile("int $0x20");
   while(1) { asm volatile("hlt"); }
