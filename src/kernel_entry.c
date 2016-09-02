@@ -328,8 +328,8 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
     klog_info("this is a text buffer");
   } else {
     uintptr_t framebuffer_virtual_address = 0x0A000000;
-    uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_2MB(fb_mbtag->common.framebuffer_addr, framebuffer_virtual_address);
-    kmem_map_physical_to_virtual_2MB(fb_mbtag->common.framebuffer_addr - page_offset + 0x200000, framebuffer_virtual_address + 0x200000);
+    uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_2MB(fb_mbtag->common.framebuffer_addr, framebuffer_virtual_address, PAGE_USER_ACCESS_BIT);
+    kmem_map_physical_to_virtual_2MB_ext(fb_mbtag->common.framebuffer_addr - page_offset + 0x200000, framebuffer_virtual_address + 0x200000, PAGE_USER_ACCESS_BIT);
 
     Framebuffer *fb = &globals.framebuffer;
     fb->width = fb_mbtag->common.framebuffer_width; 

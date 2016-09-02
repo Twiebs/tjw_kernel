@@ -8,6 +8,42 @@ extern isr_common_handler
 
 extern g_syscall_procedures
 
+%macro PUSH_ALL_REGISTERS 0
+  push r15
+  push r14
+  push r13
+  push r12
+  push r11
+  push r10
+  push r9
+  push r8
+  push rbp
+  push rsi
+  push rdi
+  push rdx
+  push rcx
+  push rbx
+  push rax
+%endmacro
+
+%macro POP_ALL_REGISTERS 0
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop r11
+  pop r10
+  pop r9
+  pop r8
+  pop rbp
+  pop rsi
+  pop rdi
+  pop rdx
+  pop rcx
+  pop rbx
+  pop rax
+%endmacro
+
 asm_double_fault_handler:
   cli
 	mov dword [0xb8000], (0x2000 | 'd')
@@ -29,30 +65,17 @@ asm_spurious_interrupt_handler:
   iretq
 
 asm_irq_common_handler:
-	push rax
-	push rbx
-	push rcx
-  
-	call irq_common_handler 
- 	
-	pop rcx
-	pop rbx
-	pop rax
+  PUSH_ALL_REGISTERS
+  call irq_common_handler 
+  POP_ALL_REGISTERS
 	add esp, 0x8 ;IRQ number pushed in the macro stub
 	sti
   iretq
 
 asm_isr_common_handler:
-  push rax
-	push rbx
-	push rcx
-
+  PUSH_ALL_REGISTERS
 	call isr_common_handler 
-	
-	pop rcx
-	pop rbx
-	pop rax
-
+  POP_ALL_REGISTERS
 	add esp, 0x10 ;ISR error code and ISR Number from marco stub
 	sti
   iretq
@@ -64,7 +87,8 @@ asm_syscall_handler:
   call rax 
   sti
   iretq
-  
+
+
 
 ;============================================================================================
 

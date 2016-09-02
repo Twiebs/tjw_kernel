@@ -57,11 +57,11 @@ void kmem_map_physical_to_virtual_2MB(uintptr_t physical_address, uintptr_t virt
   g_p2_table.entries[p2_index] = physical_address | PAGE_PRESENT_BIT | PAGE_HUGE_BIT | PAGE_WRITEABLE_BIT;
 }
 
-uintptr_t kmem_map_unaligned_physical_to_aligned_virtual_2MB(uintptr_t requested_physical_address, uintptr_t virtual_address){
+uintptr_t kmem_map_unaligned_physical_to_aligned_virtual_2MB(uintptr_t requested_physical_address, uintptr_t virtual_address, uint64_t flags){
   uint64_t physical_address_to_map = requested_physical_address;
 	uint64_t displacement_from_page_boundray = requested_physical_address & 0x1FFFFF;
   physical_address_to_map -= displacement_from_page_boundray;
-  kmem_map_physical_to_virtual_2MB(physical_address_to_map, virtual_address);
+  kmem_map_physical_to_virtual_2MB_ext(physical_address_to_map, virtual_address, flags);
   return displacement_from_page_boundray;
 }
 

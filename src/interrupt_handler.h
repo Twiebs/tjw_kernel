@@ -9,11 +9,7 @@ typedef struct {
 //NOTE(Torin: 2016-08-24) An error_code is always pushed
 //on to the stack in our execption and interrupt handling model
 typedef struct {
-  //TODO(Torin) These should be treated seperatly
- 	uint64_t rcx;
-	uint64_t rbx;
-	uint64_t rax; 
-
+  Register_State register_state;
   uint64_t interrupt_number;
   uint64_t error_code;
   uint64_t rip;
@@ -24,9 +20,7 @@ typedef struct {
 } __attribute((packed)) Interrupt_Stack_Frame;
 
 typedef struct {
-  uint64_t rcx;
-	uint64_t rbx;
-	uint64_t rax; 
+  Register_State register_state;
   uint64_t interrupt_number;
   uint64_t rip;
   uint64_t cs;  

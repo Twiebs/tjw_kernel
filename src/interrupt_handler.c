@@ -32,22 +32,29 @@ extern void kprocess_destroy(){
   while(1) { asm volatile("hlt"); }
 }
 
-static void syscall_handler_print_string(const char *string, size_t length){
+static uint64_t syscall_handler_print_string(const char *string, size_t length){
   klog_write_string(&globals.log, string, length);
+  return 0;
 }
 
-static void syscall_handler_exit_process(Interrupt_Stack_Frame_Basic stack){
+static uint64_t syscall_handler_exit_process(Interrupt_Stack_Frame_Basic stack){
   extern void asm_exit_usermode(void);
   stack.ss = GDT_RING0_DATA;
   stack.cs = GDT_RING0_CODE;
   stack.rip = (uintptr_t)asm_exit_usermode;
   stack.rsp = (uintptr_t)globals.system_info.kernel_stack_address;
   asm volatile("mov $0x00, %rdi");
+  return 0;
+}
+
+static void syscall_handler_get_framebuffer(Framebuffer *fb){
+  *fb = globals.framebuffer;
 }
 
 const uintptr_t g_syscall_procedures[] = {
   (uintptr_t)syscall_handler_print_string,
   (uintptr_t)syscall_handler_exit_process,
+  (uintptr_t)syscall_handler_get_framebuffer,
 };
 
 extern void 

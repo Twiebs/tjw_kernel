@@ -176,7 +176,7 @@ void kgfx_draw_log_if_dirty(Circular_Log *log){
     static const uint32_t ROW_SPACING = 0;
     static const uint32_t CHARACTER_SPACING = 10;
     Framebuffer *fb = &globals.framebuffer;
-    kgfx_clear_framebuffer(fb);
+    //kgfx_clear_framebuffer(fb);
     const uint32_t total_column_count = fb->width / CHARACTER_SPACING;
     const uint32_t max_row_count = fb->height / (FONT_SIZE + ROW_SPACING);
     const uint32_t total_lines_to_draw = min(log->current_entry_count, max_row_count - 1); 

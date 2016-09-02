@@ -49,7 +49,7 @@ void parse_root_system_descriptor(const RSDP_Descriptor_1 *rsdp, System_Info *sy
 
   //TODO(Torin) This should be a temporary page!
   uintptr_t virtual_address = 0x0C600000;
-  uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_2MB(rsdp->rsdt_address, virtual_address); 
+  uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_2MB(rsdp->rsdt_address, virtual_address, 0); 
   ACPI_SDT_Header *rsdt = (ACPI_SDT_Header *)(virtual_address + page_offset);
   uint32_t entry_count = (rsdt->length - sizeof(ACPI_SDT_Header)) / 4;
   uint32_t *entries = (uint32_t *)(rsdt + 1);
