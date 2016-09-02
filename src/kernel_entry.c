@@ -57,43 +57,6 @@ uint32_t get_cpu_id(){
   return 0;
 }
 
-static void
-legacy_pic8259_initalize(void) {
-	static const uint8_t PIC1_COMMAND_PORT = 0x20;
-	static const uint8_t PIC2_COMMAND_PORT = 0xA0;
-	static const uint8_t PIC1_DATA_PORT = 0x21;
-	static const uint8_t PIC2_DATA_PORT = 0xA1;
-
-	//Initalization Command Words (ICW)
-	static const uint8_t ICW1_INIT_CASCADED = 0x11;
-	static const uint8_t ICW2_PIC1_IRQ_NUMBER_BEGIN = 0x20;
-	static const uint8_t ICW2_PIC2_IRQ_NUMBER_BEGIN = 0x28;
-	static const uint8_t ICW3_PIC1_IRQ_LINE_2 = 0x4;
-	static const uint8_t ICW3_PIC2_IRQ_LINE_2 = 0x2;
-	static const uint8_t ICW4_8068 = 0x01;
-
-	//ICW1 Tells PIC to wait for 3 more words
-	write_port_uint8(PIC1_COMMAND_PORT, ICW1_INIT_CASCADED);
-	write_port_uint8(PIC2_COMMAND_PORT, ICW1_INIT_CASCADED);
-	//ICW2 Set PIC Offset Values
-	write_port_uint8(PIC1_DATA_PORT, ICW2_PIC1_IRQ_NUMBER_BEGIN);
-	write_port_uint8(PIC2_DATA_PORT, ICW2_PIC2_IRQ_NUMBER_BEGIN);
-	//ICW3 PIC Cascading Info
-	write_port_uint8(PIC1_DATA_PORT, ICW3_PIC1_IRQ_LINE_2);
-	write_port_uint8(PIC2_DATA_PORT, ICW3_PIC2_IRQ_LINE_2);
-	//ICW4 Additional Enviroment Info
-	//NOTE(Torin) Currently set to 80x86
-	write_port_uint8(PIC1_DATA_PORT, ICW4_8068);
-	write_port_uint8(PIC2_DATA_PORT, ICW4_8068);
-
-  //Write EndOfInterupt and set interrupt enabled mask 
-	write_port_uint8(PIC1_DATA_PORT, 0x20);
-	write_port_uint8(PIC2_DATA_PORT, 0x20);
-	write_port_uint8(PIC1_DATA_PORT, 0b11111101);
-	write_port_uint8(PIC2_DATA_PORT, 0b11111111);
-	klog_info("PIC8259 Initialized");
-}
-
 #if 0
 static void
 legacy_pit_initialize(void){ 
@@ -137,7 +100,7 @@ idt_install_interrupt(const uint32_t irq_number, const uint64_t irq_handler_addr
 }
 
 static void
-x86_64_idt_initalize(){
+idt_install_all_interrupts(){
   extern void asm_double_fault_handler();
   extern void asm_debug_handler();
   
@@ -213,7 +176,6 @@ x86_64_idt_initalize(){
 		idt_install_interrupt(31, (uintptr_t)asm_isr31);
 	}
 
-#if 1
 	{ //Hardware Interrupts
 		static const uint32_t IRQ_PIT = 0x20; 
 		static const uint32_t IRQ_KEYBOARD = 0x21;
@@ -231,15 +193,6 @@ x86_64_idt_initalize(){
     idt_encode_entry((uintptr_t)&_idt[0x80], (uintptr_t)asm_syscall_handler, true);
     idt_encode_entry((uintptr_t)&_idt[0x31], (uintptr_t)asm_spurious_interrupt_handler, true);
 	}
-#endif
-
-	struct {
-			uint16_t limit;
-			uintptr_t address;
-	} __attribute__((packed)) idtr = { sizeof(_idt) - 1, (uintptr_t)_idt };
-	asm volatile ("lidt %0" : : "m"(idtr));
-	asm volatile ("sti");
-  klog_info("IDT initialized");
 }
 
 #include "multiboot2.h"
@@ -259,8 +212,57 @@ ap_entry_procedure(void){
 extern void 
 kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
 	serial_debug_init();
-	legacy_pic8259_initalize();
-	x86_64_idt_initalize();
+
+  //NOTE(Torin 2016-09-02) At this point the kernel has been called into by our
+  //bootstrap assembly and interrupts are disabled.  A Longmode GDT has been loaded
+  //but the IDT and interrupts still need to be configured
+  
+  { //Remap the legacy PIC 8259 to handle spiriotuous interrupts properly 
+    static const uint8_t PIC1_COMMAND_PORT = 0x20;
+    static const uint8_t PIC2_COMMAND_PORT = 0xA0;
+    static const uint8_t PIC1_DATA_PORT = 0x21;
+    static const uint8_t PIC2_DATA_PORT = 0xA1;
+    //Initalization Command Words (ICW)
+    static const uint8_t ICW1_INIT_CASCADED = 0x11;
+    static const uint8_t ICW2_PIC1_IRQ_NUMBER_BEGIN = 0x20;
+    static const uint8_t ICW2_PIC2_IRQ_NUMBER_BEGIN = 0x28;
+    static const uint8_t ICW3_PIC1_IRQ_LINE_2 = 0x4;
+    static const uint8_t ICW3_PIC2_IRQ_LINE_2 = 0x2;
+    static const uint8_t ICW4_8068 = 0x01;
+    //ICW1 Tells PIC to wait for 3 more words
+    write_port_uint8(PIC1_COMMAND_PORT, ICW1_INIT_CASCADED);
+    write_port_uint8(PIC2_COMMAND_PORT, ICW1_INIT_CASCADED);
+    //ICW2 Set PIC Offset Values
+    write_port_uint8(PIC1_DATA_PORT, ICW2_PIC1_IRQ_NUMBER_BEGIN);
+    write_port_uint8(PIC2_DATA_PORT, ICW2_PIC2_IRQ_NUMBER_BEGIN);
+    //ICW3 PIC Cascading Info
+    write_port_uint8(PIC1_DATA_PORT, ICW3_PIC1_IRQ_LINE_2);
+    write_port_uint8(PIC2_DATA_PORT, ICW3_PIC2_IRQ_LINE_2);
+    //ICW4 Additional Enviroment Info
+    //NOTE(Torin) Currently set to 80x86
+    write_port_uint8(PIC1_DATA_PORT, ICW4_8068);
+    write_port_uint8(PIC2_DATA_PORT, ICW4_8068);
+    //Write EndOfInterupt and set interrupt enabled mask 
+    write_port_uint8(PIC1_DATA_PORT, 0x20);
+    write_port_uint8(PIC2_DATA_PORT, 0x20);
+    write_port_uint8(PIC1_DATA_PORT, 0b11111111);
+    write_port_uint8(PIC2_DATA_PORT, 0b11111111);
+  }
+
+  { //Initalize the IDT
+    //NOTE(Torin 2016-09-02) At some point in the future this should just be 
+    //A simple load on the staticly baked IDT table that will be created with an
+    //Ofline tool.  For now it is just done a runtime for simplicity
+    idt_install_all_interrupts();
+    struct {
+      uint16_t limit;
+      uintptr_t address;
+    } __attribute__((packed)) idtr = { sizeof(_idt) - 1, (uintptr_t)_idt };
+    asm volatile ("lidt %0" : : "m"(idtr));
+    asm volatile ("sti");
+  }
+
+  
   kmem_initalize();
 
   //NOTE(Torin) Setup keyboard event stack
@@ -293,6 +295,7 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
 
       case MULTIBOOT_TAG_TYPE_FRAMEBUFFER: {
         fb_mbtag = (struct multiboot_tag_framebuffer *)(tag);
+
       } break;
 
       case MULTIBOOT_TAG_TYPE_MMAP: {

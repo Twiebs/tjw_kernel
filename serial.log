@@ -1,8 +1,6 @@
-PIC8259 Initialized
-IDT initialized
 framebuffer: width: 1280, height: 720, depth: 4
-tss rsp0: 0x128002
-tss base address: 0x1204C0
+tss rsp0: 0x127002
+tss base address: 0x11F4C0
 tss limit: 0xFF
 task_register selector_index: 0x28
 ioapic: physical = 0xFEC00000, virtual = 0xC200000
