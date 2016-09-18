@@ -16,6 +16,8 @@ typedef struct {
 
   Task_Info task_info;
 
+  uint64_t pit_timer_ticks;
+
   bool is_logging_disabled;
   bool log_keyboard_events;
 } Kernel_Globals;
@@ -34,6 +36,9 @@ static Kernel_Globals globals;
 #include "kernel_apic.c"
 #include "kernel_descriptor.c"
 #include "kernel_exceptions.c"
+
+#include "usb_protocol.c"
+#include "usb_ehci.c"
 
 static IDT_Entry _idt[256];
 static uintptr_t _interrupt_handlers[256];
@@ -57,28 +62,37 @@ uint32_t get_cpu_id(){
   return 0;
 }
 
-#if 0
 static void
-legacy_pit_initialize(void){ 
-	//TODO(Torin) This frequency thing is probably bogus and needs to be
-	//fixed so that specific times can be programmed
-	static const uint32_t PIT_COMMAND_REPEATING_MODE = 0x36;
-	static const uint32_t PIT_DIVISOR = 1193180 / 100;
+pit_configure_timer(uint32_t hz){
+  static const uint8_t PIT_CHANNEL0_DATA_PORT = 0x40;
+  static const uint8_t PIT_CHANNEL1_DATA_PORT = 0x41;
+  static const uint8_t PIT_CHANNEL2_DATA_PORT = 0x42; 
+  static const uint8_t PIT_COMMAND_PORT = 0x43;
 
-	static const uint8_t PIT_DATA_PORT0 = 0x40;
-	static const uint8_t PIT_DATA_PORT1 = 0x41;
-	static const uint8_t PIT_DATA_PORT2 = 0x42;
-	static const uint8_t PIT_COMMAND_PORT = 0x43;
+  static const uint8_t COMMAND_CHANNEL0 = (0b00) << 6;
+  static const uint8_t COMMAND_CHANNEL1 = (0b01) << 6;
+  static const uint8_t COMMAND_CHANNEL2 = (0b11) << 6;
+  static const uint8_t COMMAND_ACCESS_LOW_AND_HIGH = (0b11) << 4;
+  static const uint8_t COMMAND_MODE_RATE_GENERATOR = (0b010) << 1;
+  static const uint8_t COMMAND_MODE_SQUARE_WAVE = (0b011) << 1;
 
-	const uint8_t divisor_low = (uint8_t)(PIT_DIVISOR & 0xFF);
-	const uint8_t divisor_high = (uint8_t)((PIT_DIVISOR >> 8) & 0xFF);
+  static const uint32_t PIT_BASE_FREQUENCY = 1193182;
+  uint32_t divisor = PIT_BASE_FREQUENCY / hz;
+  uint8_t divisor_low = (uint8_t)(divisor & 0xFF);
+  uint8_t divisor_high = (uint8_t)((divisor >> 8) & 0xFF);
 
-	write_port(PIT_COMMAND_PORT, PIT_COMMAND_REPEATING_MODE);
-	write_port(PIT_DATA_PORT0, divisor_low);
-	write_port(PIT_DATA_PORT0, divisor_high);
-	klog_info("PIT initialized!");
+  write_port_uint8(PIT_COMMAND_PORT, COMMAND_CHANNEL0 | COMMAND_ACCESS_LOW_AND_HIGH | COMMAND_MODE_SQUARE_WAVE);
+  write_port_uint8(PIT_CHANNEL0_DATA_PORT, divisor_low);
+  write_port_uint8(PIT_CHANNEL0_DATA_PORT, divisor_high);
 }
-#endif
+
+static void
+pit_wait_milliseconds(const uint32_t ms){
+  uint64_t start_pit_ticks_value = globals.pit_timer_ticks; 
+  while((globals.pit_timer_ticks - start_pit_ticks_value) < ms){ }
+  klog_debug("finished waiting");
+  kgfx_draw_log_if_dirty(&globals.log);
+}
 
 //TODO(Torin) Remove IDT Global variable
 static void
@@ -210,14 +224,14 @@ ap_entry_procedure(void){
 
 
 extern void 
-kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
+kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
+{
 	serial_debug_init();
-
   //NOTE(Torin 2016-09-02) At this point the kernel has been called into by our
   //bootstrap assembly and interrupts are disabled.  A Longmode GDT has been loaded
   //but the IDT and interrupts still need to be configured
-  
-  { //Remap the legacy PIC 8259 to handle spiriotuous interrupts properly 
+
+  { //NOTE(Torin) Remap the legacy PIC 8259 to handle spiriotuous interrupts properly 
     static const uint8_t PIC1_COMMAND_PORT = 0x20;
     static const uint8_t PIC2_COMMAND_PORT = 0xA0;
     static const uint8_t PIC1_DATA_PORT = 0x21;
@@ -243,9 +257,9 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
     write_port_uint8(PIC1_DATA_PORT, ICW4_8068);
     write_port_uint8(PIC2_DATA_PORT, ICW4_8068);
     //Write EndOfInterupt and set interrupt enabled mask 
-    write_port_uint8(PIC1_DATA_PORT, 0x20);
-    write_port_uint8(PIC2_DATA_PORT, 0x20);
-    write_port_uint8(PIC1_DATA_PORT, 0b11111111);
+    //write_port_uint8(PIC1_DATA_PORT, 0x20);
+    //write_port_uint8(PIC2_DATA_PORT, 0x20);
+    write_port_uint8(PIC1_DATA_PORT, 0b11111110);
     write_port_uint8(PIC2_DATA_PORT, 0b11111111);
   }
 
@@ -262,7 +276,7 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
     asm volatile ("sti");
   }
 
-  
+
   kmem_initalize();
 
   //NOTE(Torin) Setup keyboard event stack
@@ -351,33 +365,34 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
   System_Info *sys = &globals.system_info;
   parse_root_system_descriptor((RSDP_Descriptor_1*)rsdp_physical_address, sys);
 
-  //NOTE(Torin) Tasking relating thingy-things
+  {
+    //TODO(Torin 2016-08-29) This should probably be established after
+    //the other cpus are initalized
+    extern uintptr_t stack_top;
+    uintptr_t stack_top_ptr = (uintptr_t)&stack_top;
+    sys->kernel_stack_address = stack_top_ptr;
+    memset(&g_tss_entry, 0x00, sizeof(g_tss_entry));
+    g_tss_entry.rsp0 = stack_top_ptr;
+    g_tss_entry.ist1 = stack_top_ptr;
+    klog_debug("tss rsp0: 0x%X", g_tss_entry.rsp0);
+    uint8_t *gdt = (uint8_t *)&GDT64;
+    gdt_encode_system_descriptor((uintptr_t)&g_tss_entry, 0xFF, GDT_DESCRIPTOR_TYPE_TSS, 3, (uintptr_t)(gdt + GDT_TSS));
+    tss_ldr(GDT_TSS);
+  }
 
-  //TODO(Torin 2016-08-29) This should probably be established after
-  //the other cpus are initalized
-  extern uintptr_t stack_top;
-  uintptr_t stack_top_ptr = (uintptr_t)&stack_top;
-  sys->kernel_stack_address = stack_top_ptr;
-  memset(&g_tss_entry, 0x00, sizeof(g_tss_entry));
-  g_tss_entry.rsp0 = stack_top_ptr;
-  g_tss_entry.ist1 = stack_top_ptr;
-  klog_debug("tss rsp0: 0x%X", g_tss_entry.rsp0);
-  uint8_t *gdt = (uint8_t *)&GDT64;
-  gdt_encode_system_descriptor((uintptr_t)&g_tss_entry, 0xFF, GDT_DESCRIPTOR_TYPE_TSS, 3, (uintptr_t)(gdt + GDT_TSS));
-  tss_ldr(GDT_TSS);
-  
-  //TODO(Torin) Real page allocator
-  //NOTE(Torin) Arbitrarly maps the lapic and ioapic into the kernels virtual addresss space
-  //And initalizes the iopapic and lapic
-  sys->lapic_virtual_address = 0x0C200000;
-  sys->ioapic_virtual_address = 0x0C400000;
-  kmem_map_physical_to_virtual_2MB(sys->lapic_physical_address, sys->lapic_virtual_address);
-  kmem_map_physical_to_virtual_2MB(sys->ioapic_physical_address, sys->ioapic_virtual_address);
-  klog_debug("ioapic: physical = 0x%X, virtual = 0x%X", sys->ioapic_physical_address, sys->lapic_virtual_address);
-  klog_debug("lapic: physical = 0x%X, virtual = 0x%X", sys->lapic_physical_address, sys->ioapic_virtual_address);
-  lapic_initalize(sys->lapic_virtual_address);
-  ioapic_initalize(sys->ioapic_virtual_address);
-  klog_debug("apic initalized");
+  {
+    //TODO(Torin) Real page allocator
+    //NOTE(Torin) Arbitrarly maps the lapic and ioapic into the kernels virtual addresss space
+    //And initalizes the iopapic and lapic
+    sys->lapic_virtual_address = 0x0C200000;
+    sys->ioapic_virtual_address = 0x0C400000;
+    kmem_map_physical_to_virtual_2MB(sys->lapic_physical_address, sys->lapic_virtual_address);
+    kmem_map_physical_to_virtual_2MB(sys->ioapic_physical_address, sys->ioapic_virtual_address);
+    lapic_initalize(sys->lapic_virtual_address);
+    ioapic_initalize(sys->ioapic_virtual_address);
+    klog_debug("apic initalized");
+  }
+
 
 #if 0 //NOTE(Torin) Setup tramponline code and startup SMP processors
   klog_debug("copying trampoline code to 0x1000");
@@ -399,9 +414,11 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
     }
   }
   #endif
+  kgfx_draw_log_if_dirty(&globals.log);
+  pci_scan_devices();
+  kgfx_draw_log_if_dirty(&globals.log);
 
-  //pci_enumerate_devices();
+  //lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x20, 1);
 
-  lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x20, 1);
 	while(1) { asm volatile("hlt"); };
 }

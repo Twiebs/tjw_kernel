@@ -24,7 +24,6 @@
 	asm volatile ("cli"); \
 	asm volatile ("hlt")
 
-
 static inline 
 void write_port_uint8(uint16_t port, uint8_t value) {
 	asm volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
@@ -98,3 +97,5 @@ typedef struct {
   uint64_t r15;
 } Register_State;
 
+static inline
+void pit_wait_milliseconds(const uint32_t ms);

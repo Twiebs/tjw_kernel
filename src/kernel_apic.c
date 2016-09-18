@@ -83,7 +83,7 @@ lapic_initalize(uintptr_t apic_register_base) {
   //that does not have an APIC
   static const uint8_t PIC1_DATA_PORT = 0x21;
   static const uint8_t PIC2_DATA_PORT = 0xA1;
-  write_port_uint8(PIC1_DATA_PORT, 0b11111111);
+  write_port_uint8(PIC1_DATA_PORT, 0b11111110);
   write_port_uint8(PIC2_DATA_PORT, 0b11111111);
 
   //NOTE(Torin) Configure lapic spuritous interput vector

@@ -4,7 +4,7 @@ gcc -DBUILD_IS_RUNNING -E build.c | sh
 exit
 #endif
 
-#define BUILD_DEBUG
+//#define BUILD_DEBUG
 
 #pragma GCC diagnostic warning "-Wall"
 #pragma GCC diagnostic warning "-Wextra"
@@ -15,7 +15,7 @@ exit
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 
 #ifdef BUILD_DEBUG 
-#define COMPILER_FLAGS -g -O0
+#define COMPILER_FLAGS -g -O0 
 #else//BUILD_DEBUG
 #define COMPILER_FLAGS -g -O2
 #endif//BUILD_DEBUG
@@ -36,7 +36,6 @@ exit
 	exit
 #endif
 
-#ifndef DBUILD_IS_RUNNING
 #include <stdint.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -60,6 +59,3 @@ exit
 #include "src/interrupt_handler.c"
 #include "src/kernel_log.c"
 #include "src/kernel_shell.c"
-
-
-#endif
