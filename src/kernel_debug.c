@@ -31,6 +31,19 @@ kdebug_ioapic_log_irq_map(uintptr_t ioapic_base){
   }
 }
 
+static void 
+kdebug_log_interrupt_stack_frame(Interrupt_Stack_Frame *frame){
+  Register_State *state = &frame->register_state;
+  klog_debug("rax: 0x%X, r8: 0x%X", state->rax, state->r8);
+  klog_debug("rbx: 0x%X, r9: 0x%X", state->rbx, state->r9);
+  klog_debug("rcx: 0x%X, r10: 0x%X", state->rcx, state->r10);
+  klog_debug("rdx: 0x%X, r11: 0x%X", state->rdx, state->r11);
+  klog_debug("rdi: 0x%X, r12: 0x%X", state->rdi, state->r12);
+  klog_debug("rsi: 0x%X, r13: 0x%X", state->rsi, state->r13);
+  klog_debug("rbp: 0x%X, r14: 0x%X", state->rbp, state->r14);
+  klog_debug("rsp: 0x%X, r15: 0x%X", frame->rsp, state->r15);
+  klog_debug("rip: 0x%X", frame->rip);
+}
 
 static void
 kdebug_log_page_table_entry_info(const uintptr_t entry){

@@ -2,12 +2,7 @@
 #define ELF64_IMPLEMENTATION
 #include "elf64.h"
 
-
-
-
-
 //===============================================================================
-
 //TODO(Torin 2016-09-01) Make this take sizes for the data section
 //and executable section of the process that is to be created but for now
 //It will simply be hardcoded for elf values

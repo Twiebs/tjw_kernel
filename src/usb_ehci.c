@@ -9,15 +9,16 @@ typedef struct {
 } EHCI_Capability_Registers;
 
 typedef struct {
-  uint32_t usb_command;
-  uint32_t usb_status;
-  uint32_t usb_interrupt;
-  uint32_t frame_index;
-  uint32_t ctrl_ds_segment;
-  uint32_t perodic_list_base;
-  uint32_t async_list_address;
-  uint32_t config_flag;
-  uint32_t ports[0];
+  volatile uint32_t usb_command;
+  volatile uint32_t usb_status;
+  volatile uint32_t usb_interrupt;
+  volatile uint32_t frame_index;
+  volatile uint32_t ctrl_ds_segment;
+  volatile uint32_t perodic_list_base;
+  volatile uint32_t async_list_address;
+  volatile uint32_t reserved[9];
+  volatile uint32_t config_flag;
+  volatile uint32_t ports[0];
 } __attribute((packed)) EHCI_Operational_Registers;
 
 //32 bytes
@@ -52,6 +53,16 @@ static EHCI_Controller g_ehci __attribute((aligned(4096)));
 
 //====================================================================================
 
+static inline
+void kdebug_log_ehci_operational_registers(EHCI_Operational_Registers *opregs){
+  klog_debug("usbcmd: 0x%X", (uint64_t)opregs->usb_command);
+  klog_debug("usbstd: 0x%X", (uint64_t)opregs->usb_status);
+  klog_debug("usbintr: 0x%X", (uint64_t)opregs->usb_interrupt);
+  klog_debug("frindex: 0x%X", (uint64_t)opregs->frame_index);
+}
+
+//====================================================================================
+
 static int 
 ehci_check_qh_status(EHCI_Queue_Head *qh){
   static const uint32_t STATUS_ERROR_MASK = 0b01111100;
@@ -78,8 +89,7 @@ void ehci_port_set(volatile uint32_t *port, uint32_t data){
   #define PORT_CHANGE_MASK (PORT_CONNECT_STATUS_CHANGE | PORT_ENABLE_DISABLE_CHANGE | PORT_OVER_CURRENT_CHANGE)
   uint32_t status = *port;
   status |= data;
-  status &= ~PORT_CHANGE_MASK;
-  *port = status;
+  status &= ~PORT_CHANGE_MASK; *port = status;
   #undef PORT_CHANGE_MASK
 }
 
@@ -97,7 +107,31 @@ void ehci_port_clear(volatile uint32_t *port, uint32_t data){
   #undef PORT_CHANGE_MASK
 }
 
-void ehci_initalize(uintptr_t ehci_physical_address){
+static bool 
+ehci_reset_port(volatile uint32_t *port){
+  static const uint32_t EHCI_PORT_RESET_BIT = 1 << 8;
+  static const uint32_t EHCI_PORT_ENABLED_BIT = 1 << 2;
+  static const uint32_t EHCI_PORT_ENABLED_CHANGED_BIT = 1 << 3;
+
+  *port = *port | EHCI_PORT_RESET_BIT;
+  pit_wait_milliseconds(50); //NOTE(Torin 2016-09-17) Must Wait Max 50ms (USB2.0 spec 10.2.8.1)
+  *port = *port & ~EHCI_PORT_RESET_BIT;
+  while(*port & EHCI_PORT_RESET_BIT) {}
+  pit_wait_milliseconds(2);
+
+  if(*port & EHCI_PORT_ENABLED_BIT) return true;
+  if(*port & EHCI_PORT_ENABLED_CHANGED_BIT){
+    *port = *port & EHCI_PORT_ENABLED_CHANGED_BIT; 
+    if(*port & EHCI_PORT_ENABLED_BIT) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  return false;
+}
+
+void ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
   klog_debug("starting ehci initalization...");
 
   //TODO(Torin 2016-09-16) Idealy this memory_map should occur in a different location
@@ -111,20 +145,40 @@ void ehci_initalize(uintptr_t ehci_physical_address){
   EHCI_Operational_Registers *op_regs = (EHCI_Operational_Registers *)operational_register_base;
   
   { //NOTE(Torin 2016-09-04) Extract information from hhcparams register
-    static const uint32_t HHCPARAMS_EXT_CAPS_MASK = (0xFF00);
+    static const uint32_t HHCPARAMS_EXT_CAPS_MASK = 0xFF00;
     static const uint32_t HHCPARAMS_ADDRESSING_BIT = (1 << 0);
     static const uint32_t ADDRESSING_CAPABILITY_32 = 0b00;
     static const uint32_t ADDRESSING_CAPABILITY_64 = 0b01;
     uint32_t addressing_capability = cap_regs->hcc_params & HHCPARAMS_ADDRESSING_BIT;
-    uint32_t extended_capabilities = cap_regs->hcc_params & HHCPARAMS_EXT_CAPS_MASK;
-    //NOTE(Torin 2016-09-10) if greater than 0x40 The bios still 
-    //owns this host controler and we need to take control of it
-    if(extended_capabilities >= 0x40){ 
-      //TODO(Torin 2016-09-16) We need to know information about the PCI info
-      //That is relevant to this controller.  In theory we can set the PCI registers to 
-      //contain the value of this device before entering this procedure and have a procedture
-      //that only modifes the reggister offset.  This could prove to be an inadequate solution
-      //if PCIe works as expected
+    uint32_t extended_capabilities = (cap_regs->hcc_params & HHCPARAMS_EXT_CAPS_MASK) >> 8;
+    klog_debug("eecpp: 0x%X", (uint64_t)extended_capabilities);
+    if(extended_capabilities == 0x00){
+      klog_debug("ehci extended_capabilities not implemented");
+    } else if (extended_capabilities < 0x40) {
+      klog_error("inconsistant extended_capabilities pointer!");
+    } else {
+      static const uint32_t EHCI_USBLEGSUP_REGISTER_OFFSET = 0x00;
+      uint32_t legacy_support_register = extended_capabilities + EHCI_USBLEGSUP_REGISTER_OFFSET;
+      pci_set_config_address(pci_device->bus_number, pci_device->device_number, 
+        pci_device->function_number, legacy_support_register);
+
+      uint32_t legacy_support = pci_read_uint32();
+      static const uint32_t USBLEGSUP_OS_OWNERSHIP = 1 << 24;
+      static const uint32_t USBLEGSUP_BIOS_OWNERSHIP = 1 << 16;
+      if(legacy_support & USBLEGSUP_BIOS_OWNERSHIP){
+        klog_debug("taking ownership of usb controller");
+        volatile uint32_t legacy_with_os_ownership = legacy_support | USBLEGSUP_OS_OWNERSHIP;
+        pci_write_uint32(legacy_with_os_ownership);
+        legacy_support = pci_read_uint32();
+        while((legacy_support & USBLEGSUP_OS_OWNERSHIP) == 0)
+          legacy_support = pci_read_uint32();
+        klog_debug("set os owenership bit");
+        legacy_support = pci_read_uint32();
+        kassert(legacy_support & USBLEGSUP_OS_OWNERSHIP);
+        while(legacy_support & USBLEGSUP_BIOS_OWNERSHIP)
+          legacy_support = pci_read_uint32();
+        klog_debug("the kernel now owns this ehci controller");
+      }
     }
 
     //TODO(Torin 2016-09-16) Find out when it is appropiate to use 64bit data structures
@@ -179,6 +233,7 @@ void ehci_initalize(uintptr_t ehci_physical_address){
     
   { //NOTE(Torin 2016-09-13) Set nessecary registers and initalize the controller 
     static const uint32_t USBCMD_RUN_STOP = (1 << 0);
+    static const uint32_t USBCMD_HCRESET = 1 << 1;
     static const uint32_t USBCMD_PERIODIC_SCHEDULE_ENABLE = (1 << 4);
     static const uint32_t USBCMD_ASYNCH_SCHEDULE_ENABLE = (1 << 5);
     static const uint32_t USBCMD_INTERRUPT_THRESHOLD_CONTROL_8 = (0x08 << 16); //1ms
@@ -187,57 +242,52 @@ void ehci_initalize(uintptr_t ehci_physical_address){
     static const uint32_t ROUTE_PORTS_TO_IMPLEMENTATION_DEPENDENT_CONTROLLER = 0b00;
     static const uint32_t ROUTE_PORTS_TO_HOST_EHCI = 0b01;
 
+    op_regs->usb_command = op_regs->usb_command & (~USBCMD_RUN_STOP);
+    while(op_regs->usb_command & USBCMD_RUN_STOP) { asm volatile ("nop"); }
+    op_regs->usb_command = op_regs->usb_command | USBCMD_HCRESET;
+    while(op_regs->usb_command & USBCMD_HCRESET) { asm volatile ("nop"); }
+
     op_regs->ctrl_ds_segment = 0;
     op_regs->usb_interrupt = 0;
     op_regs->perodic_list_base = (uint32_t)(uintptr_t)g_ehci.periodic_frame_list;
     op_regs->async_list_address = (uint32_t)(uintptr_t)&g_ehci.asynch_qh;
     op_regs->frame_index = 0;
+    op_regs->config_flag = ROUTE_PORTS_TO_HOST_EHCI;
     op_regs->usb_command = USBCMD_INTERRUPT_THRESHOLD_CONTROL_8 | 
       USBCMD_PERIODIC_SCHEDULE_ENABLE | USBCMD_ASYNCH_SCHEDULE_ENABLE | USBCMD_RUN_STOP; 
+    while((op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED)) { asm volatile ("nop"); }
+    klog_debug("ehci controller was started");
     op_regs->config_flag = ROUTE_PORTS_TO_HOST_EHCI;
-
-    //TODO(Torin 2016-09-17) More robust waiting mechanisim
-    size_t watchdog = 0x00;
-    while((op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED) && watchdog < 0xFFFFFF) { 
-       watchdog++; 
-    } 
-    if(watchdog == 0xFFFFFF) {
-      klog_debug("ehci controller failed to start");
-    } else {
-      klog_debug("ehci controller was started");
-    }
   }
 
-    
-  
   { //NOTE(Torin 2016-09-06) Probe the ports managed by this controler
     klog_debug("enumerating %lu ports", port_count);
-    uintptr_t port_base = operational_register_base + 0x44;
     for(size_t i = 0; i < port_count; i++){
-      static const uint32_t PORT_RESET_BIT = 1 << 8;
       static const uint32_t PORT_ENABLED_BIT = (1 << 2);
-      static const uint32_t PORT_CONNECT_CURRENT_STATUS = 1 << 0;
-      static const uint32_t PORT_CONNECT_STATUS_CHANGED_BIT = 1 << 1;
       static const uint32_t PORT_POWER_BIT = 1 << 12;
+
+      static const uint32_t PORT_ENABLED_STATUS_CHANGED_BIT = 1 << 3;
+      static const uint32_t PORT_CONNECT_STATUS_CHANGED_BIT = 1 << 1;
+      static const uint32_t PORT_ENALBED_STATUS_BIT = 1 << 2;
+      static const uint32_t PORT_CONNECT_STATUS_BIT = 1 << 0;
+
       uint32_t volatile *port_reg = &op_regs->ports[i];
+      if(*port_reg & PORT_CONNECT_STATUS_CHANGED_BIT){
+        *port_reg = *port_reg | PORT_CONNECT_STATUS_CHANGED_BIT; //clears out connect status change
+        while(*port_reg & PORT_CONNECT_STATUS_CHANGED_BIT) { asm volatile("nop"); } 
+        if(*port_reg & PORT_CONNECT_STATUS_BIT){
+          klog_debug("USB_Device connected on port %lu", i);
+          bool is_port_enabled = *port_reg & PORT_ENABLED_BIT;
+          if(is_port_enabled == false) is_port_enabled = ehci_reset_port(port_reg);
+          if(is_port_enabled == false){
+            klog_debug("Port %lu failed to enable", i);
+          } else {
+            klog_debug("Port %lu enabled sucuessfuly", i);
 
-      *port_reg |= PORT_POWER_BIT;
-      *port_reg &= ~PORT_ENABLED_BIT;
-      *port_reg |= PORT_RESET_BIT;
-      pit_wait_milliseconds(50); //NOTE(Torin 2016-09-17) Must Wait Max 50ms (USB2.0 spec 10.2.8.1)
-      *port_reg &= ~PORT_RESET_BIT;
-      while(*port_reg & PORT_RESET_BIT) {}
+            //DO USB THINGS!!!!
 
-      if(*port_reg & PORT_ENABLED_BIT){
-        klog_debug("port %lu is enabled", i);
-      } else {
-        klog_debug("port %lu is disabled", i);
-      }
-
-      if(*port_reg & PORT_CONNECT_CURRENT_STATUS){
-        klog_debug("device connected on port: %lu", i);
-      } else {
-        klog_debug("no device connected to port %lu", i);
+          }
+        }
       }
     }
   }

@@ -4,7 +4,8 @@ gcc -DBUILD_IS_RUNNING -E build.c | sh
 exit
 #endif
 
-//#define BUILD_DEBUG
+#define BUILD_DEBUG
+#define FORCE_REDRAW_ON_LOG_ENTRY 1
 
 #pragma GCC diagnostic warning "-Wall"
 #pragma GCC diagnostic warning "-Wextra"
@@ -49,11 +50,11 @@ exit
 #include "src/kernel_log.h"
 #include "src/kernel_graphics.h"
 #include "src/kernel_memory.h"
+#include "src/interrupt_handler.h"
 #include "src/kernel_debug.h"
 #include "src/kernel_task.h"
 
 #include "src/hardware_keyboard.h"
-#include "src/interrupt_handler.h"
 
 #include "src/kernel_entry.c"
 #include "src/interrupt_handler.c"

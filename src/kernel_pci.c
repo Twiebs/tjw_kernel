@@ -46,6 +46,7 @@ void pci_set_config_address(uint8_t bus_number, uint8_t device_number, uint8_t f
   static const uint16_t PCI_CONFIG_ADDRESS_PORT = 0x0CF8;  
   write_port_uint32(PCI_CONFIG_ADDRESS_PORT, config_address.packed);
 }
+
 static inline
 uint32_t pci_read_uint32(){
   const uint16_t PCI_CONFIG_DATA_PORT = 0x0CFC;
@@ -63,6 +64,12 @@ static inline
 void pci_read_4x8(uint8_t *a, uint8_t *b, uint8_t *c, uint8_t *d){
   uint32_t value = pci_read_uint32();
   unpack_32_4x8(value, a, b, c, d);
+}
+
+static inline
+void pci_write_uint32(volatile uint32_t value){
+  const uint16_t PCI_CONFIG_DATA_PORT = 0x0CFC;
+  write_port_uint32(PCI_CONFIG_DATA_PORT, value);
 }
 
 
@@ -107,6 +114,10 @@ typedef struct {
   uintptr_t ohci_physical_address;
   uintptr_t ehci_physical_address;
   uintptr_t xhci_physical_address;
+  PCI_Device uhci_pci_device;
+  PCI_Device ohci_pci_device;
+  PCI_Device ehci_pci_device;
+  PCI_Device xhci_pci_device;
 } PCI_Info;
 
 static inline
@@ -161,6 +172,9 @@ void pci_scan_devices(){
             pci_set_config_address(bus_number, device_number, function_number, 0x10);
             uint32_t ehci_registers_address = pci_read_uint32(); 
             pci_info.ehci_physical_address = ehci_registers_address;
+            pci_info.ehci_pci_device.bus_number = bus_number;
+            pci_info.ehci_pci_device.device_number = device_number;
+            pci_info.ehci_pci_device.function_number = function_number;
           } else if (prog_if == XHCI_CONTROLLER){
             klog_debug("[pci] Found XHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
             pci_set_config_address(bus_number, device_number, function_number, 0x10);
@@ -181,10 +195,12 @@ void pci_scan_devices(){
     }
   }
 
+#if 1
   if(pci_info.ehci_physical_address != 0){
     klog_debug("initalizing ehci controller at 0x%X", pci_info.ehci_physical_address);
-    ehci_initalize(pci_info.ehci_physical_address);
+    ehci_initalize(pci_info.ehci_physical_address, &pci_info.ehci_pci_device);
   }
+  #endif
 
   klog_debug("pci enumeration complete");
 }

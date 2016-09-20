@@ -30,7 +30,7 @@ void write_port_uint8(uint16_t port, uint8_t value) {
 }
 
 static inline
-void write_port_uint32(uint16_t port, uint32_t value){
+void write_port_uint32(volatile uint16_t port, volatile uint32_t value){
   asm volatile ("outl %0, %1" : : "a"(value), "Nd"(port));
 }
 
@@ -40,6 +40,13 @@ uint8_t read_port_uint8(uint16_t port) {
 	uint8_t result;
 	asm volatile ("inb %1, %0" : "=a"(result) : "Nd"(port));
 	return result;
+}
+
+static inline
+uint16_t read_port_uint16(uint16_t port){
+  uint16_t result;
+  asm volatile("inw %1, %0" : "=a"(result) : "Nd"(port));
+  return result;
 }
 
 static inline

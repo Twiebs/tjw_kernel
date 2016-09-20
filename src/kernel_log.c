@@ -187,7 +187,6 @@ void klog_write_string(Circular_Log *log, const char *string, size_t length){
 
 void klog_write_fmt(Circular_Log *log, const char *fmt, ...){
   if(globals.is_logging_disabled) return;
-
   asm volatile("cli");
   spinlock_aquire(&log->spinlock); 
   size_t entry_index = log->entry_write_position % CIRCULAR_LOG_ENTRY_COUNT;
@@ -196,12 +195,10 @@ void klog_write_fmt(Circular_Log *log, const char *fmt, ...){
   if(log->current_entry_count < CIRCULAR_LOG_ENTRY_COUNT){ log->current_entry_count++; }
   spinlock_release(&log->spinlock);
   asm volatile("sti");
-  
   va_list args;
   va_start(args, fmt);
   entry->length = kernel_vsnprintf(entry->message, CIRCULAR_LOG_MESSAGE_SIZE, fmt, args);
   va_end(args);
-
   //NOTE(Torin: 2016-08-08) This could cause serial output to mismatch
   //console output if a cpu core formats a sufficantly small message and aquires
   //the spin lock before the first core finishes formating the message
@@ -210,6 +207,9 @@ void klog_write_fmt(Circular_Log *log, const char *fmt, ...){
   log->is_dirty = true;
   write_serial(entry->message, entry->length);
   write_serial("\n", 1);
+#if FORCE_REDRAW_ON_LOG_ENTRY
+  kgfx_draw_log_if_dirty(log);
+#endif//FORCE_DREDRAW_ON_LOG_ENTRY
   spinlock_release(&log->spinlock);
   asm volatile("sti");
 }

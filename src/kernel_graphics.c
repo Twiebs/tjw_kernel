@@ -38,6 +38,7 @@ void kgfx_draw_character(char c, size_t x_orign, size_t y_origin, Framebuffer *f
 }
 #endif
 
+#if 0
 void kgfx_clear_framebuffer(Framebuffer *fb){
   size_t step_count = (fb->width * fb->height * fb->depth) / 16;
   __m128i *write_ptr = (__m128i *)fb->buffer; 
@@ -47,6 +48,11 @@ void kgfx_clear_framebuffer(Framebuffer *fb){
     write_ptr = (__m128i *)((uintptr_t)write_ptr + 16);
   }
 }
+#else
+void kgfx_clear_framebuffer(Framebuffer *fb){
+  memset(fb->buffer, 0x00, fb->width * fb->height * fb->depth);
+}
+#endif
 
 #if 0
 void kgfx_draw_character(char c, size_t x_orign, size_t y_origin, Framebuffer *fb) {
@@ -176,7 +182,7 @@ void kgfx_draw_log_if_dirty(Circular_Log *log){
     static const uint32_t ROW_SPACING = 0;
     static const uint32_t CHARACTER_SPACING = 10;
     Framebuffer *fb = &globals.framebuffer;
-    //kgfx_clear_framebuffer(fb);
+    kgfx_clear_framebuffer(fb);
     const uint32_t total_column_count = fb->width / CHARACTER_SPACING;
     const uint32_t max_row_count = fb->height / (FONT_SIZE + ROW_SPACING);
     const uint32_t total_lines_to_draw = min(log->current_entry_count, max_row_count - 1); 

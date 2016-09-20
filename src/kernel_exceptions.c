@@ -97,19 +97,17 @@ isr_handler_page_fault(Interrupt_Stack_Frame stack_frame) {
     klog_error("invalid faulting_address");
   }
 
-	uint64_t is_protection_voloation_else_not_present = stack_frame.error_code & CAUSE_PROTECTION_VIOLATION_OR_NOT_PRESENT;
+	uint64_t is_protection_violation_else_not_present = stack_frame.error_code & CAUSE_PROTECTION_VIOLATION_OR_NOT_PRESENT;
 	uint64_t is_write_else_read = stack_frame.error_code & CAUSE_WRITE_OR_READ;
 	uint64_t is_usermode_else_kernel = stack_frame.error_code & CAUSE_USER_OR_KERNEL;
 	uint64_t is_reserved_bit_overwritten = stack_frame.error_code & CAUSE_RESERVED_BIT_SET;
 	uint64_t is_instruction_else_data = stack_frame.error_code & CAUSE_INSTRUCTION_FETCH;
 	
-	klog_error("Page Fault: 0x%X (%s%s%s%s%s)", faulting_address,
-    (is_protection_voloation_else_not_present ? "caused by protection violation, " : "page is non-present, "),
-    (is_write_else_read ? "cause by page write, " : "caused by page read, "),
-    (is_usermode_else_kernel ? "happened in user-mode, " : "happened in kernel-mode, "),
-    (is_reserved_bit_overwritten ? "a reserved bit was overrwriten, " : "reserved bits are fine, "),
-    (is_instruction_else_data ? "caused by instruction fetch" : "caused by data access")
-  );
+	klog_error("Page Fault: 0x%X", faulting_address);
+  klog_error("page is %s%s", (is_protection_violation_else_not_present ? "present" : "not present"), (is_protection_violation_else_not_present ? ", caused by protection violation" : ""));
+  klog_error("caused by %s %s %s", is_usermode_else_kernel ? "ring3" : "ring0", is_write_else_read ? "writing" : "reading", is_instruction_else_data ? "a instruction" : "data");
+  klog_error("%s", is_reserved_bit_overwritten ? "a reserved bit was overrwriten" : "reserved bits are fine"),
+  kdebug_log_interrupt_stack_frame(&stack_frame);
 
 	if(is_usermode_else_kernel == false){
 		//This is a serious bug there should never be a page-fault in the kernel

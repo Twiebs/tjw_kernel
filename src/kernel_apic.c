@@ -72,6 +72,7 @@ ioapic_initalize(uintptr_t ioapic_register_base) {
   asm volatile("sti");
 }
 
+#if 0
 static void
 lapic_initalize(uintptr_t apic_register_base) {
 	asm volatile ("cli");
@@ -94,6 +95,7 @@ lapic_initalize(uintptr_t apic_register_base) {
   lapic_write_register(apic_register_base, APIC_SIVR_OFFSET, 0x31 | SIVR_ENABLE);
 	asm volatile("sti");
 }
+#endif
 
 static inline
 uint32_t lapic_get_id(uintptr_t lapic_virtual_address){

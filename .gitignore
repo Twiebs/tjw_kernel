@@ -8,5 +8,6 @@
 debug/*
 bin/*
 kfs/*
+qemu/*
 
 

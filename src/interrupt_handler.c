@@ -59,11 +59,12 @@ const uintptr_t g_syscall_procedures[] = {
 
 extern void 
 isr_common_handler(Interrupt_Stack_Frame stack) {
-	klog_debug("Exception Occured:%u %s", stack.interrupt_number, EXCEPTION_NAMES[stack.interrupt_number]);
-	klog_debug("error_code: %u", stack.error_code);
-	klog_debug("rip: 0x%X", stack.rip);
   if(g_exception_handlers[stack.interrupt_number] != 0){
     g_exception_handlers[stack.interrupt_number](stack);
+  } else {
+    klog_debug("Exception Occured:%u %s", stack.interrupt_number, EXCEPTION_NAMES[stack.interrupt_number]);
+    klog_debug("error_code: %u", stack.error_code);
+    klog_debug("rip: 0x%X", stack.rip);
   }
 }
 
