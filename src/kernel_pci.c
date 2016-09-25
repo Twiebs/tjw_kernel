@@ -121,6 +121,24 @@ typedef struct {
 } PCI_Info;
 
 static inline
+void pci_log_status(PCI_Device *pci_device){
+  pci_set_config_address(pci_device->bus_number, pci_device->device_number, pci_device->function_number, 0x04);
+  uint16_t status = 0, command = 0;
+  pci_read_2x16(&status, &command);
+  static const uint16_t PCI_STATUS_DETECTED_PARITY_ERROR = 1 << 15;
+  static const uint16_t PCI_STATUS_SIGNALED_SYSTEM_ERROR = 1 << 14;
+  static const uint16_t PCI_STATUS_RECEIVED_MASTER_ABORT = 1 << 13;
+  static const uint16_t PCI_STATUS_RECEIVED_TARGET_ABORT = 1 << 12;
+  static const uint16_t PCI_STATUS_SIGNALED_TARGET_ABORT = 1 << 11;
+  static const uint16_t PCI_STATUS_MASTER_DATA_PARITY_ERROR = 1 << 8;
+  klog_debug("detected_parity_error: %u", status & PCI_STATUS_DETECTED_PARITY_ERROR);
+  klog_debug("signaled_system_error: %u", status & PCI_STATUS_SIGNALED_SYSTEM_ERROR);
+  klog_debug("received_master_abort: %u", status & PCI_STATUS_RECEIVED_MASTER_ABORT);
+  klog_debug("received_target_abort: %u", status & PCI_STATUS_RECEIVED_TARGET_ABORT);
+  klog_debug("master_data_parity_error: %u", status & PCI_STATUS_MASTER_DATA_PARITY_ERROR); 
+}
+
+static inline
 void pci_scan_devices(){
   PCI_Info pci_info = {};
 
@@ -165,7 +183,7 @@ void pci_scan_devices(){
             klog_debug("[pci] Found OHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
             pci_set_config_address(bus_number, device_number, function_number, 0x10);
             uint32_t ohci_bar_register = pci_read_uint32();
-            uint32_t ohci_register_address = ohci_bar_register & (~0xFFF);
+            uint32_t ohci_register_address = ohci_bar_register & ~0xFFF;
             pci_info.ohci_physical_address = ohci_register_address;
           } else if (prog_if == EHCI_CONTROLLER){ 
             klog_debug("[pci] Found EHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);

@@ -1,12 +1,14 @@
+#define static_assert(expr,msg) _Static_assert(expr,msg)
+#define wait_for_condition(x) { volatile uint64_t counter = 0; while((!(x)) && counter < 0xFFFFFF) { counter++; } if(counter == 0xFFFFFF) { klog_debug("wait timed out: %s,  %s:%u", #x, __FILE__, __LINE__); }}
 
 typedef struct {
-  uint8_t capability_length;
-  uint8_t reserved;
-  uint16_t hci_version;
-  uint32_t hcs_params;
-  uint32_t hcc_params;
-  uint64_t hcsp_port_route;
-} EHCI_Capability_Registers;
+  volatile uint8_t capability_length;
+  volatile uint8_t reserved;
+  volatile uint16_t hci_version;
+  volatile uint32_t hcs_params;
+  volatile uint32_t hcc_params;
+  volatile uint64_t hcsp_port_route;
+} __attribute((packed)) EHCI_Capability_Registers;
 
 typedef struct {
   volatile uint32_t usb_command;
@@ -21,14 +23,34 @@ typedef struct {
   volatile uint32_t ports[0];
 } __attribute((packed)) EHCI_Operational_Registers;
 
-//32 bytes
+typedef struct {
+  uint8_t ping_state : 1; //0
+  uint8_t split_transaction_state : 1; //1
+  uint8_t missed_micro_frame : 1; //2
+  uint8_t transaction_error : 1; //3
+  uint8_t babble_detected : 1; //4
+  uint8_t data_buffer_error : 1; //5
+  uint8_t halted : 1; //6
+  uint8_t active : 1; //7
+
+  uint8_t packet_id : 2; //8-9
+  uint8_t error_counter : 2; //10-11
+  uint8_t current_page : 3; //12-14
+  uint8_t interrupt_on_complete : 1; //15
+
+  uint16_t total_bytes_to_transfer : 15; //16-30
+  uint8_t data_toggle: 1; //31
+} __attribute((packed)) EHCI_QTD_Token;
+
+#if 0
 typedef struct {
   uint32_t next_td;
   uint32_t alt_next_td;
-  uint32_t token;
+  uint32_t qtd_token;
   uint32_t buffer_pointer[5];
-} __attribute((packed)) EHCI_Transfer_Descriptor;
-
+} __attribute((packed)) EHCI_QTD_32; //32 bytes
+#endif
+#if 0
 //48 bytes
 typedef struct {
   uint32_t horizontal_link_pointer;
@@ -39,14 +61,71 @@ typedef struct {
   uint32_t alt_next_td;
   uint32_t token;
   uint32_t buffer_pointer[5];
-} EHCI_Queue_Head;
+} EHCI_Queue_Head_32;
+#endif
+
+
+typedef struct {
+  uint32_t next_td;
+  uint32_t alt_next_td;
+  uint32_t qtd_token;
+  uint32_t buffer_pointer_low[5];
+  uint32_t buffer_pointer_high[5];
+  uint8_t padding[12]; //Forces 64byte alignment
+} __attribute((packed)) EHCI_QTD_64; //64 bytes
+
+typedef struct {
+  uint32_t horizontal_link_pointer;
+  uint32_t endpoint_characteristics;
+  uint32_t endpoint_capabilities;
+  uint32_t current_td;
+  uint32_t next_td;
+  uint32_t alt_next_td;
+  uint32_t qtd_token;
+  uint32_t buffer_pointer_low[5];
+  uint32_t buffer_pointer_high[5];
+} __attribute((packed)) EHCI_Queue_Head_64; //68 Bytes
+
+typedef struct {
+  uint8_t current_connect_status : 1; //0
+  uint8_t connect_status_change : 1;  //1
+  uint8_t port_enabled : 1; //2
+  uint8_t port_enabled_change: 1; //3
+  uint8_t over_current_active: 1; //4
+  uint8_t over_current_change: 1; //5
+  uint8_t force_port_resume: 1; //6
+  uint8_t suspend: 1; //7
+  uint8_t port_reset: 1; //8
+  uint8_t reserved0 : 1; //9
+  uint8_t line_status :2; //10-11
+  uint8_t port_power : 1; //12
+  uint8_t port_owner : 1; // 13
+  uint8_t port_indicator_control : 2; //14-15
+  uint8_t port_test_control : 4; //16-19
+  uint8_t wake_on_connect_enable : 1; //20
+  uint8_t wake_on_disconnect_enable : 1; //21
+  uint8_t wake_on_over_current_enable : 1; //22
+  uint16_t reserved1 : 9; // 23-31
+} __attribute((packed)) EHCI_Port;
+
+static_assert(sizeof(EHCI_Port) == 4, "EHCI_Port Struct has Invalid Packing");
+
+
+
+//=======================================================================================
 
 typedef struct {
   uint32_t periodic_frame_list[1024]; //4096 bytes
-  //================================= PAGE BOUNDRAY
-  EHCI_Transfer_Descriptor transfer_descriptors[4]; //4*32 = 128 bytes
-  EHCI_Queue_Head asynch_qh;          //48 bytes
-  EHCI_Queue_Head periodic_qh;        //48 bytes
+  //====================================================== PAGE BOUNDRAY
+  EHCI_Queue_Head_64 asynch_qh __attribute((aligned(64))); //68 bytes
+  EHCI_Queue_Head_64 periodic_qh __attribute((aligned(64))); //68 bytes
+  //TODO(Torin 2016-09-25) EHCI spec says these structs need to be "32-byte (cache line)"
+  //aligned.  Does this mean they need to be 64Bytes aligned on a newer system? They are
+  //already bigger than 64 bytes so I will just put that for now 
+
+  EHCI_QTD_64 qtd_array[4] __attribute((aligned(64))); //4*64 = 256 bytes
+  EHCI_Operational_Registers *op_regs;
+  PCI_Device pci_device;
 } EHCI_Controller;
 
 static EHCI_Controller g_ehci __attribute((aligned(4096)));
@@ -61,50 +140,229 @@ void kdebug_log_ehci_operational_registers(EHCI_Operational_Registers *opregs){
   klog_debug("frindex: 0x%X", (uint64_t)opregs->frame_index);
 }
 
+static inline
+void kdebug_log_qtd_token(const uint32_t in_token){
+  EHCI_QTD_Token qtd_token = *(EHCI_QTD_Token *)(&in_token);
+  klog_debug(" split_transaction_state: %u", (uint32_t)qtd_token.split_transaction_state);
+  klog_debug(" missed_micro_frame: %u", (uint32_t)qtd_token.missed_micro_frame);
+  klog_debug(" transaction_error: %u", (uint32_t)qtd_token.transaction_error);
+  klog_debug(" babble_detected: %u", (uint32_t)qtd_token.babble_detected);
+  klog_debug(" data_buffer_error: %u", (uint32_t)qtd_token.data_buffer_error);
+  klog_debug(" halted: %u", (uint32_t)qtd_token.halted);
+  klog_debug(" active: %u", (uint32_t)qtd_token.active);
+  klog_debug(" error_counter: %u", (uint32_t)qtd_token.error_counter);
+  klog_debug(" data_toggle: %u", (uint32_t)qtd_token.data_toggle);
+  klog_debug(" total_bytes_to_transfer: %u", (uint32_t)qtd_token.total_bytes_to_transfer);
+}
+
+static inline
+void kdebug_log_qtd(const EHCI_QTD_64 *qtd){
+  klog_debug(" next_td: 0x%X", (uint64_t)qtd->next_td);
+  klog_debug(" alt_next_td: 0x%X", (uint64_t)qtd->alt_next_td);
+  uint64_t buffer_pointer = ((uint64_t)qtd->buffer_pointer_high[0] << 32) | qtd->buffer_pointer_low[0];
+  klog_debug(" buffer_pointer: 0x%X", buffer_pointer);
+  kdebug_log_qtd_token(qtd->qtd_token);
+}
+
 //====================================================================================
 
+#if 0
+static void ehci_init_qtd_64(EHCI_QTD_64 *previous_td, EHCI_QTD_64 *current_td, 
+  bool toggle, uint8_t transfer_type, uint16_t size, uintptr_t data_physical_address)
+{
+  kassert(size < 32767);
+  kassert(transfer_type < 3);
+  static const uint32_t QTD_TRANSFER_SIZE_SHIFT = 16;
+  static const uint32_t QTD_TRANSFER_SIZE_MASK = 0x7FFF;
+  static const uint32_t QTD_ERROR_COUNTER_SHIFT = 10;
+  static const uint32_t QTD_TRANSFER_TYPE_SHIFT = 8;
+  static const uint32_t QTD_ACTIVE_BIT = 1 << 7;
+
+  if(previous_td != 0) {
+    previous_td->next_td = (uint32_t)(uintptr_t)current_td;
+    previous_td->alt_next_td = (uint32_t)(uintptr_t)current_td;
+  }
+
+  current_td->next_td = 0;
+  current_td->alt_next_td = 0;
+  current_td->qtd_token = ((size & QTD_TRANSFER_SIZE_MASK) << QTD_TRANSFER_SIZE_SHIFT) |
+    (3 << QTD_ERROR_COUNTER_SHIFT) | (transfer_type << QTD_TRANSFER_TYPE_SHIFT) |
+    QTD_ACTIVE_BIT;
+
+  //TODO(Torin 2016-09-20) Larger than one page transfers
+  kassert(size < 4096);
+  current_td->buffer_pointer_low[0] = (uint32_t)data_physical_address;
+  current_td->buffer_pointer_high[0] = (uint32_t)(data_physical_address >> 32);
+}
+#endif
+
+static void ehci_init_qtd_64(EHCI_QTD_64 *previous_td, EHCI_QTD_64 *current_td, 
+  bool toggle, uint8_t transfer_type, uint16_t size, uintptr_t data_physical_address)
+{
+  kassert(size < 32767);
+  kassert(transfer_type < 3);
+  static const uint32_t QTD_TRANSFER_SIZE_SHIFT = 16;
+  static const uint32_t QTD_TRANSFER_SIZE_MASK = 0x7FFF;
+  static const uint32_t QTD_ERROR_COUNTER_SHIFT = 10;
+  static const uint32_t QTD_TRANSFER_TYPE_SHIFT = 8;
+  static const uint32_t QTD_ACTIVE_BIT = 1 << 7;
+  static const uint32_t QTD_POINTER_TERMINATE = 0b01;
+  static const uint32_t QTD_DATA_TOGGLE_BIT = 1 << 31;
+
+  if(previous_td != 0) {
+    previous_td->next_td = (uint32_t)(uintptr_t)current_td;
+    previous_td->alt_next_td = (uint32_t)(uintptr_t)current_td;
+  }
+
+  current_td->next_td = QTD_POINTER_TERMINATE;
+  current_td->alt_next_td = QTD_POINTER_TERMINATE;
+  current_td->qtd_token = QTD_ACTIVE_BIT;
+  current_td->qtd_token |= (3 << QTD_ERROR_COUNTER_SHIFT);
+  current_td->qtd_token |= transfer_type << QTD_TRANSFER_TYPE_SHIFT;
+  current_td->qtd_token |= (size & QTD_TRANSFER_SIZE_MASK) << QTD_TRANSFER_SIZE_SHIFT;
+  current_td->qtd_token |= (toggle ? QTD_DATA_TOGGLE_BIT : 0);
+
+  //TODO(Torin 2016-09-20) Larger than one page transfers
+  kassert(size < 4096);
+  current_td->buffer_pointer_low[0] = (uint32_t)data_physical_address;
+  current_td->buffer_pointer_high[0] = (uint32_t)(data_physical_address >> 32);
+}
+
+typedef enum {
+  USB_Speed_FULL = 0b00,
+  USB_Speed_LOW = 0b01,
+  USB_Speed_HIGH = 0b10,
+} USB_Speed;
+
+#if 0
+static void ehci_initalize_qh_32(EHCI_Queue_Head_32 *qh, uint8_t device_address, uint8_t endpoint_number, USB_Speed speed, uint16_t max_packet_length){
+  static const uint32_t DATA_TOGGLE_CONTROL_BIT = 1 << 14;
+  kassert(device_address < 64);
+  kassert(endpoint_number < 16);
+  kassert(max_packet_length <= 1024);
+  qh->endpoint_characteristics = device_address;
+  qh->endpoint_characteristics |= 1 << 15; //TODO(Torin) REMOVE THIS
+  qh->endpoint_characteristics |= (endpoint_number << 8);
+  qh->endpoint_characteristics |= (speed << 12);
+  qh->endpoint_characteristics |= DATA_TOGGLE_CONTROL_BIT;
+  qh->endpoint_characteristics |= max_packet_length << 16;
+  qh->endpoint_capabilities = 1 << 30;
+  qh->token = 0;
+}
+#endif
+
+static void ehci_initalize_qh_64(EHCI_Queue_Head_64 *qh, uint8_t device_address, uint8_t endpoint_number, USB_Speed speed, uint16_t max_packet_length){
+  static const uint32_t DATA_TOGGLE_CONTROL_BIT = 1 << 14;
+  kassert(device_address < 64);
+  kassert(endpoint_number < 16);
+  kassert(max_packet_length <= 1024);
+
+  static const uint32_t HEAD_OF_RECLAMATION_LIST_BIT = 1 << 15;
+  static const uint32_t HIGH_BANDWIDTH_PIPE_MULT_ONE = 0b01 << 30;
+
+  qh->endpoint_characteristics = device_address;
+  qh->endpoint_characteristics |= HEAD_OF_RECLAMATION_LIST_BIT; //TODO(Torin) REMOVE THIS
+  qh->endpoint_characteristics |= (endpoint_number << 8);
+  qh->endpoint_characteristics |= (speed << 12);
+  qh->endpoint_characteristics |= DATA_TOGGLE_CONTROL_BIT;
+  qh->endpoint_characteristics |= max_packet_length << 16;
+  qh->endpoint_capabilities = HIGH_BANDWIDTH_PIPE_MULT_ONE;
+  qh->qtd_token = 0;
+}
+
 static int 
-ehci_check_qh_status(EHCI_Queue_Head *qh){
+ehci_check_qh_status(EHCI_Queue_Head_64 *qh){
   static const uint32_t STATUS_ERROR_MASK = 0b01111100;
   static const uint32_t STATUS_HALTED = 1 << 6;
   static const uint32_t STATUS_DATA_BUFFER_ERROR = 1 << 5;
   static const uint32_t STATUS_ACTIVE = 1 << 7;
-  const uint32_t error_status = qh->token & STATUS_ERROR_MASK;
-  if(error_status != 0){
-    klog_error("USB Transaction Error:"); 
-    return -1;
-  }
+  const uint32_t error_status = qh->qtd_token & STATUS_ERROR_MASK;
+  if(error_status != 0) return -1;
+  if(qh->qtd_token & STATUS_ACTIVE) return 0;
   return 1;
 }
 
-void ehci_control_transaction(){
-
+static int
+ehci_check_port_status(uint32_t volatile *port_register){
+  EHCI_Port *port = (EHCI_Port *)port_register;
+  klog_debug(" connect_status_change: %u", (uint32_t)port->connect_status_change);
+  klog_debug(" port_enabled_change: %u", (uint32_t)port->port_enabled_change);
+  klog_debug(" over_current_change: %u", (uint32_t)port->over_current_change);
+  klog_debug(" port_enabled: %u", (uint32_t)port->port_enabled);
+  return 1;
 }
 
 static inline
-void ehci_port_set(volatile uint32_t *port, uint32_t data){
-  static const uint32_t PORT_CONNECT_STATUS_CHANGE = (1 << 1); 
-  static const uint32_t PORT_ENABLE_DISABLE_CHANGE = (1 << 3);
-  static const uint32_t PORT_OVER_CURRENT_CHANGE = (1 << 5);
-  #define PORT_CHANGE_MASK (PORT_CONNECT_STATUS_CHANGE | PORT_ENABLE_DISABLE_CHANGE | PORT_OVER_CURRENT_CHANGE)
-  uint32_t status = *port;
-  status |= data;
-  status &= ~PORT_CHANGE_MASK; *port = status;
-  #undef PORT_CHANGE_MASK
+void ehci_disable_asynch_schedule(EHCI_Controller *hc){
+  static const uint32_t USBCMD_ASYNCH_SCHEDULE_ENABLE_BIT = 1 << 5;
+  static const uint32_t USBSTS_ASYNCH_SCHEDULE_STATUS_BIT = 1 << 15;
+  hc->op_regs->usb_command = hc->op_regs->usb_command & ~USBCMD_ASYNCH_SCHEDULE_ENABLE_BIT;
+  wait_for_condition((hc->op_regs->usb_status & USBSTS_ASYNCH_SCHEDULE_STATUS_BIT) == 0);
 }
 
 static inline
-void ehci_port_clear(volatile uint32_t *port, uint32_t data){
-  static const uint32_t PORT_CONNECT_STATUS_CHANGE = (1 << 1); 
-  static const uint32_t PORT_ENABLE_DISABLE_CHANGE = (1 << 3);
-  static const uint32_t PORT_OVER_CURRENT_CHANGE = (1 << 5);
-  #define PORT_CHANGE_MASK (PORT_CONNECT_STATUS_CHANGE | PORT_ENABLE_DISABLE_CHANGE | PORT_OVER_CURRENT_CHANGE)
-  uint32_t status = *port;
-  status &= ~PORT_CHANGE_MASK;
-  status &= ~data;
-  status |= PORT_CHANGE_MASK & data;
-  *port = status;
-  #undef PORT_CHANGE_MASK
+void ehci_enable_asynch_schedule(EHCI_Controller *hc){
+  static const uint32_t USBCMD_ASYNCH_SCHEDULE_ENABLE_BIT = 1 << 5;
+  static const uint32_t USBSTS_ASYNCH_SCHEDULE_STATUS_BIT = 1 << 15;
+  hc->op_regs->usb_command = hc->op_regs->usb_command | USBCMD_ASYNCH_SCHEDULE_ENABLE_BIT;
+  wait_for_condition(hc->op_regs->usb_status & USBSTS_ASYNCH_SCHEDULE_STATUS_BIT);
+}
+
+
+static void ehci_control_transfer(EHCI_Controller *hc, USB_Device_Request *request, uintptr_t data){
+  static const uint8_t QTD_TOKEN_TYPE_OUT = 0b00;
+  static const uint8_t QTD_TOKEN_TYPE_IN = 0b01;
+  static const uint8_t QTD_TOKEN_TYPE_SETUP = 0b10;
+
+  const uintptr_t first_qtd_physical_address = (uintptr_t)hc->qtd_array;
+  EHCI_QTD_64 *setup_qtd = &hc->qtd_array[0];
+  EHCI_QTD_64 *data_qtd = &hc->qtd_array[1];
+  EHCI_QTD_64 *status_qtd = &hc->qtd_array[2];
+  kassert(request->length < 4096);
+
+  ehci_init_qtd_64(0, setup_qtd, 1, QTD_TOKEN_TYPE_SETUP, sizeof(USB_Device_Request), (uintptr_t)request);
+  ehci_init_qtd_64(setup_qtd, data_qtd, 0, QTD_TOKEN_TYPE_IN, request->length, data);
+  ehci_init_qtd_64(data_qtd, status_qtd, 1, QTD_TOKEN_TYPE_OUT, 0, 0);
+
+  ehci_disable_asynch_schedule(hc);
+  EHCI_Queue_Head_64 *qh = &hc->asynch_qh;
+  ehci_initalize_qh_64(qh, 0, 0, USB_Speed_HIGH, 64);
+  qh->next_td = (uint32_t)(uintptr_t)setup_qtd;
+  qh->alt_next_td = (uint32_t)(uintptr_t)setup_qtd;
+
+  ehci_enable_asynch_schedule(hc);
+  pit_wait_milliseconds(2);
+  wait_for_condition(ehci_check_qh_status(qh))
+  ehci_disable_asynch_schedule(hc);
+  int status = ehci_check_qh_status(qh);
+  if(status == 1) {
+    klog_debug("control transfer sucuess");
+  } else {
+    klog_debug("CONTROL TRANSFER ERROR");
+  }
+
+  kdebug_log_qtd_token(qh->qtd_token);
+  klog_debug("setup_qtd");
+  kdebug_log_qtd(setup_qtd);
+  klog_debug("data_qtd");
+  kdebug_log_qtd_token(data_qtd->qtd_token);
+  klog_debug("status_qtd");
+  kdebug_log_qtd_token(status_qtd->qtd_token);
+}
+
+void ehci_initalize_device(EHCI_Controller *hc){
+  USB_Device_Description device_description = {};
+  USB_Device_Request request = {};
+  request.type = USB_REQUEST_TYPE_HOST_TO_DEVICE; 
+  request.request = USB_REQUEST_GET_DESCRIPTION;
+  request.value = USB_DESCRIPTION_DEVICE;
+  request.index = 0;
+  request.length = sizeof(USB_Device_Description);
+  ehci_control_transfer(hc, &request, (uintptr_t)&device_description);
+
+  klog_debug("length: %u", (uint32_t)device_description.descriptor_length);
+  klog_debug("descriptor_type: %u", (uint32_t)device_description.descriptor_type);
+  klog_debug("device_class: %u", (uint32_t)device_description.device_class);  
 }
 
 static bool 
@@ -114,21 +372,37 @@ ehci_reset_port(volatile uint32_t *port){
   static const uint32_t EHCI_PORT_ENABLED_CHANGED_BIT = 1 << 3;
 
   *port = *port | EHCI_PORT_RESET_BIT;
-  pit_wait_milliseconds(50); //NOTE(Torin 2016-09-17) Must Wait Max 50ms (USB2.0 spec 10.2.8.1)
+  kassert(*port & EHCI_PORT_RESET_BIT);
+  //NOTE(Torin 2016-09-17) Must Wait Max 50ms (USB2.0 spec 10.2.8.1)
+  pit_wait_milliseconds(50);
+  klog_debug("waited 50ms");
   *port = *port & ~EHCI_PORT_RESET_BIT;
-  while(*port & EHCI_PORT_RESET_BIT) {}
-  pit_wait_milliseconds(2);
+  //NOTE(Torin 2016-09-25) The HC has 2ms to set RESET bit to 0
+  wait_for_condition((*port & EHCI_PORT_RESET_BIT) == 0)
+  kassert((*port & EHCI_PORT_RESET_BIT) == 0);
+  klog_debug("port was reset");
 
-  if(*port & EHCI_PORT_ENABLED_BIT) return true;
+  if(*port & EHCI_PORT_ENABLED_BIT) {
+    klog_debug("port was enabled");
+    return true;
+  }
+
   if(*port & EHCI_PORT_ENABLED_CHANGED_BIT){
-    *port = *port & EHCI_PORT_ENABLED_CHANGED_BIT; 
+    *port = *port & EHCI_PORT_ENABLED_CHANGED_BIT;
     if(*port & EHCI_PORT_ENABLED_BIT) {
+      klog_debug("port was enabled with the changed bit set?");
       return true;
-    } else {
-      return false;
     }
   }
+
   return false;
+}
+
+static inline
+int ehci_is_hc_halted(EHCI_Operational_Registers *op_regs){
+  static const uint32_t USBSTATUS_CONTROLLER_HALTED = (1 << 12);
+  int result = op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED;
+  return result;
 }
 
 void ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
@@ -139,10 +413,15 @@ void ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
   uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_2MB(ehci_physical_address, ehci_virtual_page, 0); 
   uintptr_t ehci_virtual_address = page_offset + ehci_virtual_page;
 
+  bool use_64_bit_ds = false;
+
+  EHCI_Controller *hc = &g_ehci;
+  hc->pci_device = *pci_device;
   EHCI_Capability_Registers *cap_regs = (EHCI_Capability_Registers *)ehci_virtual_address;
   klog_debug("capabilites_length: %u", (uint32_t)cap_regs->capability_length);
   uintptr_t operational_register_base = ehci_virtual_address + cap_regs->capability_length;
   EHCI_Operational_Registers *op_regs = (EHCI_Operational_Registers *)operational_register_base;
+  hc->op_regs = op_regs;
   
   { //NOTE(Torin 2016-09-04) Extract information from hhcparams register
     static const uint32_t HHCPARAMS_EXT_CAPS_MASK = 0xFF00;
@@ -157,11 +436,12 @@ void ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
     } else if (extended_capabilities < 0x40) {
       klog_error("inconsistant extended_capabilities pointer!");
     } else {
+      //TODO(Torin 2016-09-25) Need better error handling to bail out if taking 
+      //ownership of the EHCI controler here fails for some reason
       static const uint32_t EHCI_USBLEGSUP_REGISTER_OFFSET = 0x00;
       uint32_t legacy_support_register = extended_capabilities + EHCI_USBLEGSUP_REGISTER_OFFSET;
       pci_set_config_address(pci_device->bus_number, pci_device->device_number, 
         pci_device->function_number, legacy_support_register);
-
       uint32_t legacy_support = pci_read_uint32();
       static const uint32_t USBLEGSUP_OS_OWNERSHIP = 1 << 24;
       static const uint32_t USBLEGSUP_BIOS_OWNERSHIP = 1 << 16;
@@ -169,25 +449,17 @@ void ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
         klog_debug("taking ownership of usb controller");
         volatile uint32_t legacy_with_os_ownership = legacy_support | USBLEGSUP_OS_OWNERSHIP;
         pci_write_uint32(legacy_with_os_ownership);
-        legacy_support = pci_read_uint32();
-        while((legacy_support & USBLEGSUP_OS_OWNERSHIP) == 0)
-          legacy_support = pci_read_uint32();
+        wait_for_condition(pci_read_uint32() & USBLEGSUP_OS_OWNERSHIP)
         klog_debug("set os owenership bit");
-        legacy_support = pci_read_uint32();
-        kassert(legacy_support & USBLEGSUP_OS_OWNERSHIP);
-        while(legacy_support & USBLEGSUP_BIOS_OWNERSHIP)
-          legacy_support = pci_read_uint32();
+        wait_for_condition((pci_read_uint32() & USBLEGSUP_BIOS_OWNERSHIP) == 0)
         klog_debug("the kernel now owns this ehci controller");
       }
     }
 
-    //TODO(Torin 2016-09-16) Find out when it is appropiate to use 64bit data structures
-    //for the EHCI operational data structures
-    if(addressing_capability == ADDRESSING_CAPABILITY_32){
-      klog_error("hhcparams does not support 64bit addressing"); 
-    } else {
-      klog_debug("usb host controller supports 64bit addressing");
+    if(addressing_capability == ADDRESSING_CAPABILITY_64){
+      use_64_bit_ds = true;
     } 
+    klog_debug("addressing_capability: %s", use_64_bit_ds ? "64" : "32");
   }
 
   size_t port_count = 0;
@@ -199,16 +471,15 @@ void ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
     is_port_power_control_enabled = cap_regs->hcs_params & POWER_PORT_CONTROL_BIT;
   }
 
-  klog_debug("port count: %lu", port_count);
   klog_debug("is_port_power_control_enabled: %u", (uint32_t)is_port_power_control_enabled);
 
   { //NOTE(Torin 2016-09-06) Setup Queue heads and periodic frame list
     static const uint32_t EHCI_POINTER_TERMINATE = 1;
     static const uint32_t EHCI_POINTER_TYPE_QH = (1 << 1);
-    EHCI_Queue_Head *asynch_qh = &g_ehci.asynch_qh;
-    EHCI_Queue_Head *periodic_qh = &g_ehci.periodic_qh;
-    memset(asynch_qh, 0x00, sizeof(EHCI_Queue_Head));
-    memset(periodic_qh, 0x00, sizeof(EHCI_Queue_Head));
+    EHCI_Queue_Head_64 *asynch_qh = &g_ehci.asynch_qh;
+    EHCI_Queue_Head_64 *periodic_qh = &g_ehci.periodic_qh;
+    memset(asynch_qh, 0x00, sizeof(EHCI_Queue_Head_64));
+    memset(periodic_qh, 0x00, sizeof(EHCI_Queue_Head_64));
 
     //NOTE(Torin 2016-09-10) Setup the Asynch_Queue_Head
     asynch_qh->horizontal_link_pointer = ((uint32_t)(uintptr_t)(asynch_qh)) | EHCI_POINTER_TYPE_QH;
@@ -237,32 +508,46 @@ void ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
     static const uint32_t USBCMD_PERIODIC_SCHEDULE_ENABLE = (1 << 4);
     static const uint32_t USBCMD_ASYNCH_SCHEDULE_ENABLE = (1 << 5);
     static const uint32_t USBCMD_INTERRUPT_THRESHOLD_CONTROL_8 = (0x08 << 16); //1ms
+
     static const uint32_t USBSTATUS_CONTROLLER_HALTED = (1 << 12);
+    static const uint32_t USBSTATUS_HOST_SYSTEM_ERROR = 1 << 4;
     //NOTE(Torin 2016-09-04) Set all devices to be managed by this EHCI 
     static const uint32_t ROUTE_PORTS_TO_IMPLEMENTATION_DEPENDENT_CONTROLLER = 0b00;
     static const uint32_t ROUTE_PORTS_TO_HOST_EHCI = 0b01;
 
     op_regs->usb_command = op_regs->usb_command & (~USBCMD_RUN_STOP);
-    while(op_regs->usb_command & USBCMD_RUN_STOP) { asm volatile ("nop"); }
+    wait_for_condition((op_regs->usb_command & USBCMD_RUN_STOP) == 0);
     op_regs->usb_command = op_regs->usb_command | USBCMD_HCRESET;
-    while(op_regs->usb_command & USBCMD_HCRESET) { asm volatile ("nop"); }
+    wait_for_condition((op_regs->usb_command & USBCMD_HCRESET) == 0);
 
     op_regs->ctrl_ds_segment = 0;
     op_regs->usb_interrupt = 0;
+    op_regs->ctrl_ds_segment = 0x00;
     op_regs->perodic_list_base = (uint32_t)(uintptr_t)g_ehci.periodic_frame_list;
     op_regs->async_list_address = (uint32_t)(uintptr_t)&g_ehci.asynch_qh;
     op_regs->frame_index = 0;
     op_regs->config_flag = ROUTE_PORTS_TO_HOST_EHCI;
     op_regs->usb_command = USBCMD_INTERRUPT_THRESHOLD_CONTROL_8 | 
-      USBCMD_PERIODIC_SCHEDULE_ENABLE | USBCMD_ASYNCH_SCHEDULE_ENABLE | USBCMD_RUN_STOP; 
-    while((op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED)) { asm volatile ("nop"); }
+      USBCMD_ASYNCH_SCHEDULE_ENABLE | USBCMD_RUN_STOP; 
+    wait_for_condition((op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED) == 0);
     klog_debug("ehci controller was started");
+ 
+    if(op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED){
+      klog_debug("CONTROLLER UNEXPECTEDLY HALTED");
+      if(op_regs->usb_status & USBSTATUS_HOST_SYSTEM_ERROR) {
+        klog_debug("HOST SYSTEM ERROR");
+      } 
+    }
     op_regs->config_flag = ROUTE_PORTS_TO_HOST_EHCI;
   }
+
+  static const uint32_t USBSTATUS_CONTROLLER_HALTED = (1 << 12);
+
 
   { //NOTE(Torin 2016-09-06) Probe the ports managed by this controler
     klog_debug("enumerating %lu ports", port_count);
     for(size_t i = 0; i < port_count; i++){
+      kassert((op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED) == 0);
       static const uint32_t PORT_ENABLED_BIT = (1 << 2);
       static const uint32_t PORT_POWER_BIT = 1 << 12;
 
@@ -274,24 +559,24 @@ void ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
       uint32_t volatile *port_reg = &op_regs->ports[i];
       if(*port_reg & PORT_CONNECT_STATUS_CHANGED_BIT){
         *port_reg = *port_reg | PORT_CONNECT_STATUS_CHANGED_BIT; //clears out connect status change
-        while(*port_reg & PORT_CONNECT_STATUS_CHANGED_BIT) { asm volatile("nop"); } 
+        wait_for_condition((*port_reg & PORT_CONNECT_STATUS_CHANGED_BIT) == 0);
         if(*port_reg & PORT_CONNECT_STATUS_BIT){
           klog_debug("USB_Device connected on port %lu", i);
           bool is_port_enabled = *port_reg & PORT_ENABLED_BIT;
-          if(is_port_enabled == false) is_port_enabled = ehci_reset_port(port_reg);
+          if(is_port_enabled == false) {
+            kassert(ehci_is_hc_halted(op_regs) == 0);
+            is_port_enabled = ehci_reset_port(port_reg);
+          }
           if(is_port_enabled == false){
             klog_debug("Port %lu failed to enable", i);
           } else {
             klog_debug("Port %lu enabled sucuessfuly", i);
-
-            //DO USB THINGS!!!!
-
+            ehci_initalize_device(&g_ehci);
           }
         }
       }
+      klog_debug("no device connected on port %lu", i);
     }
   }
   klog_debug("echi was initalized");
-
-  kgfx_draw_log_if_dirty(&globals.log);
 }
