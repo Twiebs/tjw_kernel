@@ -207,6 +207,7 @@ idt_install_all_interrupts(){
 		static const uint32_t IRQ_KEYBOARD = 0x21;
 		extern void asm_irq0(void);
 		extern void asm_irq1(void);
+    extern void asm_irq2(void);
     extern void asm_irq128(void);
 
     extern void asm_syscall_handler(void);
@@ -214,8 +215,10 @@ idt_install_all_interrupts(){
 
 		_interrupt_handlers[0] = (uintptr_t)irq_handler_pit;
 		_interrupt_handlers[1] = (uintptr_t)irq_handler_keyboard;
+    _interrupt_handlers[2] = (uintptr_t)lapic_timer_interrupt;
 		idt_install_interrupt(IRQ_PIT, (uintptr_t)asm_irq0);
 		idt_install_interrupt(IRQ_KEYBOARD, (uintptr_t)asm_irq1);
+    idt_encode_entry((uintptr_t)&_idt[0x22], (uintptr_t)asm_irq2, true);
     idt_encode_entry((uintptr_t)&_idt[0x80], (uintptr_t)asm_syscall_handler, true);
     idt_encode_entry((uintptr_t)&_idt[0x31], (uintptr_t)asm_spurious_interrupt_handler, true);
 	}
@@ -454,11 +457,9 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     }
   }
   #endif
-  kgfx_draw_log_if_dirty(&globals.log);
-  pci_scan_devices();
-  kgfx_draw_log_if_dirty(&globals.log);
 
-  //lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x20, 1);
+  pci_scan_devices();
+  lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x22, 1);
 
 	while(1) { asm volatile("hlt"); };
 }

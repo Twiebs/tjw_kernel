@@ -10,4 +10,5 @@ bin/*
 kfs/*
 qemu/*
 
+kernel.dump
 

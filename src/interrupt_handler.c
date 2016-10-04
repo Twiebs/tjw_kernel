@@ -178,7 +178,7 @@ irq_handler_pit(void){
 
 
 static void
-process_kernel_events(){
+lapic_timer_interrupt(void){
   Keyboard_State *keyboard = &globals.keyboard;
   if(globals.keyboard.scancode_event_stack_count > 0){
     klog_process_keyevents(keyboard, &globals.log); 

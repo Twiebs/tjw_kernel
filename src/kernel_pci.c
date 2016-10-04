@@ -193,6 +193,10 @@ void pci_scan_devices(){
             pci_info.ehci_pci_device.bus_number = bus_number;
             pci_info.ehci_pci_device.device_number = device_number;
             pci_info.ehci_pci_device.function_number = function_number;
+            //TODO(Torin 2016-10-04) Initalizing the EHCI controller should be defered until
+            //after PCI bus enumeration has completed.
+            klog_debug("initalizing ehci controller at 0x%X", pci_info.ehci_physical_address);
+            ehci_initalize(pci_info.ehci_physical_address, &pci_info.ehci_pci_device);
           } else if (prog_if == XHCI_CONTROLLER){
             klog_debug("[pci] Found XHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
             pci_set_config_address(bus_number, device_number, function_number, 0x10);
@@ -212,13 +216,6 @@ void pci_scan_devices(){
       } 
     }
   }
-
-#if 1
-  if(pci_info.ehci_physical_address != 0){
-    klog_debug("initalizing ehci controller at 0x%X", pci_info.ehci_physical_address);
-    ehci_initalize(pci_info.ehci_physical_address, &pci_info.ehci_pci_device);
-  }
-  #endif
 
   klog_debug("pci enumeration complete");
 }
