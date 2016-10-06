@@ -3,6 +3,7 @@
 #define internal static 
 #define global_variable static 
 
+#define static_assert(expr) _Static_assert(expr, "ASSERTION FAILED(" #expr ")")
 #define kassert(expr) if(!(expr)) { klog_error("ASSERTION FAILED(%s) on line %u of file %s", #expr, (uint32_t)(__LINE__), __FILE__); kpanic(); }
 
 #define KLOG_ERROR 0
