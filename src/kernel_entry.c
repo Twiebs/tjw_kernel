@@ -83,19 +83,21 @@ pit_configure_timer(const uint32_t requested_frequency){
   static const uint8_t COMMAND_CHANNEL1 = (0b01) << 6;
   static const uint8_t COMMAND_CHANNEL2 = (0b11) << 6;
   static const uint8_t COMMAND_ACCESS_LOW_AND_HIGH = (0b11) << 4;
-  static const uint8_t COMMAND_MODE_RATE_GENERATOR = (0b010) << 1;
-  static const uint8_t COMMAND_MODE_SQUARE_WAVE = (0b011) << 1;
+  static const uint8_t COMMAND_MODE_SQUARE_WAVE = 0x06; 
 
   static const uint32_t PIT_BASE_FREQUENCY = 1193182;
 
   kassert(requested_frequency > 18);
   kassert(requested_frequency < 1193181);
-
+  //set timer mode
+  static const uint8_t COUNTER0 = 0x00;
+  static const uint8_t COMMAND_MODE_RATE_GENERATOR = 0x04; 
+  static const uint8_t RW_LOW_HIGH_MODE = 0x30;
+  write_port_uint8(PIT_COMMAND_PORT, COUNTER0 | COMMAND_MODE_RATE_GENERATOR | RW_LOW_HIGH_MODE);
+  //Set the divisor
   uint32_t divisor = PIT_BASE_FREQUENCY / requested_frequency;
   uint8_t divisor_low = (uint8_t)(divisor & 0xFF);
   uint8_t divisor_high = (uint8_t)((divisor >> 8) & 0xFF);
-
-  write_port_uint8(PIT_COMMAND_PORT, 0x36);
   write_port_uint8(PIT_CHANNEL0_DATA_PORT, divisor_low);
   write_port_uint8(PIT_CHANNEL0_DATA_PORT, divisor_high);
 }
@@ -103,7 +105,7 @@ pit_configure_timer(const uint32_t requested_frequency){
 static void
 pit_wait_milliseconds(const volatile uint32_t ms){
   globals.pit_timer_ticks = 0;
-  while (globals.pit_timer_ticks < ms) { }
+  while (globals.pit_timer_ticks < (ms + 1)) { }
 }
 
 //TODO(Torin) Remove IDT Global variable
@@ -281,6 +283,10 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     write_port_uint8(PIC1_DATA_PORT, 0b11111110);
     write_port_uint8(PIC2_DATA_PORT, 0b11111111);
   }
+
+  //TODO(Torin 2016-10-04) Consider inlining the pit timer config here since in theory
+  //It will only be used once
+  pit_configure_timer(1000);
 
   { //NOTE(Torin) Initalize the IDT
     //NOTE(Torin 2016-09-02) At some point in the future this should just be 

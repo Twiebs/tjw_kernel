@@ -266,17 +266,43 @@ void ehci_enable_asynch_schedule(EHCI_Controller *hc){
   wait_for_condition(hc->op_regs->usb_status & USBSTS_ASYNCH_SCHEDULE_STATUS_BIT);
 }
 
-#if 0
-static inline
-void kdebug_log_usb_request(USB_Device_Request *request){
-  klog_debug("request_type: %u", (uint32_t)request.type);
-  klog_debug("request_request: %u", (uint32_t)request.request);
-  klog_debug("request_value: %u", (uint32_t)request.value);
-  klog_debug("request_index: %u", (uint32_t)request.index);
-}
-#endif
+ int ehci_control_transfer_without_data(EHCI_Controller *hc, uint8_t device_address, bool host_to_device, USB_Device_Request *request){
+  static const uint8_t QTD_TOKEN_TYPE_OUT = 0b00;
+  static const uint8_t QTD_TOKEN_TYPE_IN = 0b01;
+  static const uint8_t QTD_TOKEN_TYPE_SETUP = 0b10;
 
-int ehci_control_transfer(EHCI_Controller *hc, uint8_t device_address, USB_Device_Request *request, uintptr_t data_physical_address){
+  EHCI_QTD *setup_qtd = &hc->qtd_array[0];
+  EHCI_QTD *status_qtd = &hc->qtd_array[1];
+  ehci_init_qtd(0, setup_qtd, 0, QTD_TOKEN_TYPE_SETUP, sizeof(USB_Device_Request), (uintptr_t)request);
+  ehci_init_qtd(setup_qtd, status_qtd, 1, QTD_TOKEN_TYPE_IN, 0, 0);
+  ehci_disable_asynch_schedule(hc);
+  EHCI_Queue_Head *qh = &hc->asynch_qh;
+  ehci_initalize_qh(qh, device_address, 0, USB_Speed_HIGH, 64);
+  qh->next_td = (uint32_t)(uintptr_t)setup_qtd;
+  qh->alt_next_td = (uint32_t)(uintptr_t)setup_qtd;
+  ehci_enable_asynch_schedule(hc);
+  pit_wait_milliseconds(2);
+  wait_for_condition(ehci_check_qh_status(qh))
+  ehci_disable_asynch_schedule(hc);
+  int status = ehci_check_qh_status(qh);
+  if(status == 1) {
+    klog_debug("control transfer sucuess");
+  } else {
+    klog_debug("CONTROL TRANSFER ERROR");
+    klog_debug(" ");
+    klog_debug("setup_qtd: ");
+    kdebug_log_qtd(setup_qtd);
+    klog_debug(" ");
+    klog_debug("status_qtd: ");
+    kdebug_log_qtd(status_qtd);
+    klog_debug("usb_status");
+    kdebug_log_hc_status(hc);
+    return 0;
+  }
+  return 1;
+}
+
+int ehci_control_transfer_with_data(EHCI_Controller *hc, uint8_t device_address, bool host_to_device, USB_Device_Request *request, uintptr_t data_physical_address){
   static const uint8_t QTD_TOKEN_TYPE_OUT = 0b00;
   static const uint8_t QTD_TOKEN_TYPE_IN = 0b01;
   static const uint8_t QTD_TOKEN_TYPE_SETUP = 0b10;
@@ -286,8 +312,8 @@ int ehci_control_transfer(EHCI_Controller *hc, uint8_t device_address, USB_Devic
   EHCI_QTD *status_qtd = &hc->qtd_array[2];
 
   ehci_init_qtd(0, setup_qtd, 0, QTD_TOKEN_TYPE_SETUP, 8, (uintptr_t)request);
-  ehci_init_qtd(setup_qtd, data_qtd, 1, QTD_TOKEN_TYPE_IN, request->length, data_physical_address);
-  ehci_init_qtd(data_qtd, status_qtd, 1, QTD_TOKEN_TYPE_OUT, 0, 0);
+  ehci_init_qtd(setup_qtd, data_qtd, 1, host_to_device ? QTD_TOKEN_TYPE_OUT : QTD_TOKEN_TYPE_IN, request->length, data_physical_address);
+  ehci_init_qtd(data_qtd, status_qtd, 1, host_to_device ? QTD_TOKEN_TYPE_IN : QTD_TOKEN_TYPE_OUT, 0, 0);
 
   ehci_disable_asynch_schedule(hc);
   EHCI_Queue_Head *qh = &hc->asynch_qh;
@@ -320,6 +346,9 @@ static const uint16_t USB_LANGID_ENGLISH_USA = 0x0409;
 
 typedef struct {
   uint8_t device_address;
+  uint8_t device_class;
+  uint16_t vendor_id;
+  uint16_t product_id;
   uint8_t vendor_string[126];
   uint8_t product_string[126];
   uint8_t vendor_string_length;
@@ -333,6 +362,25 @@ void utf16_to_ascii(uint8_t *ascii, uint16_t *utf16, size_t utf16_length){
     ascii[i] = utf16[i];
   } 
 }
+
+static inline
+int ehci_get_descriptor(EHCI_Controller *hc, uint8_t descriptor_type, uint8_t descriptor_index, uint8_t langid, uint16_t length, void *data){
+  USB_Device_Request request = {};
+  request.type = USB_REQUEST_TYPE_DEVICE_TO_HOST;
+  request.request = USB_REQUEST_GET_DESCRIPTOR;
+  request.value_low = descriptor_index;
+  request.value_high = descriptor_type;
+  request.index = langid;
+  request.length = length;
+  int result = ehci_control_transfer_with_data(hc, 0, false, &request, (uintptr_t)data);
+  return result;
+}
+
+typedef struct {
+  uint8_t address;
+  uint8_t out_endpoint;
+  uint8_t in_endpoint;
+} USB_Mass_Storage_Device;
 
 int ehci_initalize_device(EHCI_Controller *hc){
   static const uint8_t QTD_TOKEN_TYPE_OUT = 0b00;
@@ -350,8 +398,7 @@ int ehci_initalize_device(EHCI_Controller *hc){
   request.value_low = 0;
   request.index = 0;
   request.length = 64;
-  if(ehci_control_transfer(hc, 0, &request, (uintptr_t)&device_descriptor) == 0){
-    #if 0
+  if(ehci_control_transfer_with_data(hc, 0, false, &request, (uintptr_t)&device_descriptor) == 0){
     klog_debug("length: %u", (uint32_t)device_descriptor.descriptor_length);
     klog_debug("descriptor_type: %u", (uint32_t)device_descriptor.descriptor_type);
     klog_debug("device_class: 0x%X", (uint64_t)device_descriptor.device_class);
@@ -360,7 +407,6 @@ int ehci_initalize_device(EHCI_Controller *hc){
     klog_debug("product_id: 0x%X", (uint64_t)device_descriptor.product_id);
     klog_debug("vendor_string: 0x%X", (uint64_t)device_descriptor.vendor_string);
     klog_debug("product_string: 0x%X", (uint64_t)device_descriptor.product_string);
-    #endif
     return 0;
   }
 
@@ -375,6 +421,10 @@ int ehci_initalize_device(EHCI_Controller *hc){
   klog_debug("product_string: 0x%X", (uint64_t)device_descriptor.product_string);
 #endif
 
+  device->vendor_id = device_descriptor.vendor_id;
+  device->product_id = device_descriptor.product_id;
+  device->device_class = device_descriptor.device_class;
+
   {
     uint8_t string_descriptor_buffer[256] = {};
     USB_String_Descriptor *string_descriptor = (USB_String_Descriptor *)string_descriptor_buffer;
@@ -382,11 +432,8 @@ int ehci_initalize_device(EHCI_Controller *hc){
     string_request.type = USB_REQUEST_TYPE_DEVICE_TO_HOST;
     string_request.request = USB_REQUEST_GET_DESCRIPTOR;
     string_request.value_high = USB_DESCRIPTOR_TYPE_STRING;
-    string_request.value_low = 0;
-    string_request.index = 0;
     string_request.length = 8;
-
-    ehci_control_transfer(hc, 0, &string_request, (uintptr_t)string_descriptor);
+    ehci_control_transfer_with_data(hc, 0, false, &string_request, (uintptr_t)string_descriptor);
     klog_debug("string_descriptor_length: %u", string_descriptor->length);
     uint16_t *supported_language_list = (uint16_t *)(((uintptr_t)string_descriptor) + 2);
     size_t supported_language_count = string_descriptor->length - 2;
@@ -407,7 +454,7 @@ int ehci_initalize_device(EHCI_Controller *hc){
     string_request.value_low = device_descriptor.vendor_string; 
     string_request.length = 64;
     memset(string_descriptor, 0x00, sizeof(USB_String_Descriptor));
-    ehci_control_transfer(hc, 0, &string_request, (uintptr_t)string_descriptor);
+    ehci_control_transfer_with_data(hc, 0, false, &string_request, (uintptr_t)string_descriptor);
     if(string_descriptor->length > 0){
       utf16_to_ascii(device->vendor_string, string_descriptor->string, string_descriptor->length - 2);
       device->vendor_string_length = (string_descriptor->length - 2) / 2;
@@ -415,51 +462,92 @@ int ehci_initalize_device(EHCI_Controller *hc){
         
     string_request.value_low = device_descriptor.product_string;
     memset(string_descriptor, 0x00, sizeof(USB_String_Descriptor));
-    ehci_control_transfer(hc, 0, &string_request, (uintptr_t)string_descriptor);
+    ehci_control_transfer_with_data(hc, 0, false, &string_request, (uintptr_t)string_descriptor);
     if(string_descriptor->length > 0){
       utf16_to_ascii(device->product_string, string_descriptor->string, string_descriptor->length - 2);
       device->product_string_length = (string_descriptor->length - 2) / 2;
     }
   }
+  USB_Mass_Storage_Device _msd = {};
+  USB_Mass_Storage_Device *msd = &_msd;
+
+  uint8_t configuration_value = 0;
+  uint8_t configuration_buffer[256] = {};
+  for(size_t config_index = 0; config_index < device_descriptor.config_count; config_index++){
+    USB_Configuration_Descriptor *config = (USB_Configuration_Descriptor *)configuration_buffer;
+    ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_CONFIG, config_index, 0, sizeof(configuration_buffer), configuration_buffer);
+    if(config->total_length > sizeof(configuration_buffer)){
+      klog_error("configuration descriptor is too large for provided buffer");
+      return 0;
+    }
+
+    USB_Interface_Descriptor *interface = (USB_Interface_Descriptor *)(config + 1);
+    for(size_t i = 0; i < config->interface_count; i++){
+      static const uint8_t SUBCLASS_SCSI = 0x06;
+      USB_Endpoint_Descriptor *endpoint = (USB_Endpoint_Descriptor *)(interface + 1);
+      if(interface->interface_class == USB_DEVICE_CLASS_MASS_STORAGE && 
+          interface->interface_subclass == SUBCLASS_SCSI && 
+          interface->interface_protocol == USB_MASS_STORAGE_PROTOCOL_BULK_ONLY) {
+        for(size_t j = 0; j < interface->endpoint_count; j++){
+          if(endpoint->endpoint_direction == 0)
+            msd->out_endpoint = endpoint->endpoint_number;
+          else if (endpoint->endpoint_direction == 1)
+            msd->in_endpoint = endpoint->endpoint_number;
+          endpoint++;
+        }
+        break;
+      } else {
+        for(size_t j = 0; j < interface->endpoint_count; j++){
+          endpoint++;
+        }
+      }
+
+      interface = (USB_Interface_Descriptor *)endpoint;
+    }
+
+    if(msd->in_endpoint != 0 && msd->out_endpoint != 0){
+      configuration_value = config->configuration_value;
+      break;
+    } 
+  }
+
+  if(msd->out_endpoint == 0){
+    klog_error("failed to find valid mass storage device protocol for usb device");
+    return 0;
+  }
+
+  device->device_address = 1;
+  USB_Device_Request set_address_request = {};
+  set_address_request.request = USB_REQUEST_SET_ADDRESSS;
+  set_address_request.value_low = device->device_address;
+  if(ehci_control_transfer_without_data(hc, 0, true, &set_address_request) == 0){
+    klog_error("failed to set usb device address");
+    return 0;
+  }
+
+
+  if(configuration_value != 0){
+    USB_Device_Request set_config_request = {};
+    set_config_request.type = USB_REQUEST_TYPE_HOST_TO_DEVICE;
+    set_config_request.request = USB_REQUEST_SET_CONFIGURATION;
+    set_config_request.value_low = configuration_value;
+    if(ehci_control_transfer_without_data(hc, device->device_address, true, &set_config_request) == 0){
+      klog_error("failed to set usb device configuration");
+      return 0;
+    }
+  }
 
   klog_debug("usb_device_info:");
+  klog_debug(" device_address: 0x%X", (uint64_t)device->device_address);
+  klog_debug(" device_class: 0x%X", (uint64_t)device->device_class);
+  klog_debug(" vendor_id: 0x%X", (uint64_t)device->vendor_id);
+  klog_debug(" product_id: 0x%X", (uint64_t)device->product_id);
   klog_debug(" vendor_string: %.*s", device->vendor_string_length, device->vendor_string);
   klog_debug(" product_string: %.*s", device->product_string_length, device->product_string);
 
-  USB_Device_Request set_address_request = {};
-  set_address_request.type = 0;
-  set_address_request.request = USB_REQUEST_SET_ADDRESSS;
-  set_address_request.value_low = 1;
-  set_address_request.index = 0;
-  set_address_request.length = 0;
-  EHCI_QTD *setup_qtd = &hc->qtd_array[0];
-  EHCI_QTD *status_qtd = &hc->qtd_array[1];
-  ehci_init_qtd(0, setup_qtd, 0, QTD_TOKEN_TYPE_SETUP, sizeof(USB_Device_Request), (uintptr_t)&set_address_request);
-  ehci_init_qtd(setup_qtd, status_qtd, 1, QTD_TOKEN_TYPE_IN, 0, 0);
-  ehci_disable_asynch_schedule(hc);
-  EHCI_Queue_Head *qh = &hc->asynch_qh;
-  ehci_initalize_qh(qh, 0, 0, USB_Speed_HIGH, 64);
-  qh->next_td = (uint32_t)(uintptr_t)setup_qtd;
-  qh->alt_next_td = (uint32_t)(uintptr_t)setup_qtd;
-  ehci_enable_asynch_schedule(hc);
-  pit_wait_milliseconds(2);
-  wait_for_condition(ehci_check_qh_status(qh))
-  ehci_disable_asynch_schedule(hc);
-  int status = ehci_check_qh_status(qh);
-  if(status == 1) {
-    klog_debug("control transfer sucuess");
-  } else {
-    klog_debug("CONTROL TRANSFER ERROR");
-    klog_debug(" ");
-    klog_debug("setup_qtd: ");
-    kdebug_log_qtd(setup_qtd);
-    klog_debug(" ");
-    klog_debug("status_qtd: ");
-    kdebug_log_qtd(status_qtd);
-    klog_debug("usb_status");
-    kdebug_log_hc_status(hc);
-    return 0;
-  }
+  klog_debug("out_endpoint: %u", (uint32_t)msd->out_endpoint);
+  klog_debug("in_endpoint: %u", (uint32_t)msd->in_endpoint);
+
 
   return 1;
 }
