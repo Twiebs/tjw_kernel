@@ -1,25 +1,44 @@
 
-static const uint32_t USB_REQUEST_TYPE_HOST_TO_DEVICE = 0x00;
-static const uint32_t USB_REQUEST_TYPE_DEVICE_TO_HOST = 0x80;
-static const uint32_t USB_REQUEST_TYPE_RECIPIENT_ENDPOINT = 0b10;
+//NOTE(Torin 2016-10-15) Unpacked USB Request type bitmap fields
+static const uint8_t USB_REQUEST_DIRECTION_DEVICE_TO_HOST = 0;
+static const uint8_t USB_REQUEST_DIRECTION_HOST_TO_DEVICE = 1;
+static const uint8_t USB_REQUEST_RECIPIENT_DEVICE = 0;
+static const uint8_t USB_REQUEST_RECIPIENT_INTERFACE = 1;
+static const uint8_t USB_REQUEST_RECIPIENT_ENDPOINT = 2;
+static const uint8_t USB_REQUEST_RECIPIENT_OTHER = 3;
+static const uint8_t USB_REQUEST_MODE_STANDARD = 0;
+static const uint8_t USB_REQUEST_MODE_CLASS = 1;
+static const uint8_t USB_REQUEST_MODE_VENDOR = 2;
 
-
-//NOTE(Torin) USB Requests  
+//NOTE(Torin) USB Request ID List 
 static const uint8_t USB_REQUEST_SET_ADDRESSS = 0x05;
 static const uint8_t USB_REQUEST_GET_DESCRIPTOR = 0x06;
 static const uint8_t USB_REQUEST_SET_CONFIGURATION = 0x09;
 
-//=========================================================
-
+//NOTE(Torin) USB Descriptor Types
 static const uint32_t USB_DESCRIPTOR_TYPE_DEVICE = 0x01;
 static const uint32_t USB_DESCRIPTOR_TYPE_CONFIG = 0x02;
 static const uint32_t USB_DESCRIPTOR_TYPE_STRING = 0x03;
 
 static const uint16_t USB_DEVICE_CLASS_HUMAN_INTERFACE = 0x03;
 
+//NOTE(Torin) USB String Descriptor Request LanguageID list
+static const uint16_t USB_LANGID_ENGLISH_USA = 0x0409;
+
 //Mass storage stuff
 static const uint16_t USB_DEVICE_CLASS_MASS_STORAGE = 0x08;
 static const uint8_t USB_MASS_STORAGE_PROTOCOL_BULK_ONLY = 0x50;
+
+typedef struct {
+  uint8_t device_address;
+  uint8_t device_class;
+  uint16_t vendor_id;
+  uint16_t product_id;
+  uint8_t vendor_string[126];
+  uint8_t product_string[126];
+  uint8_t vendor_string_length;
+  uint8_t product_string_length;
+} USB_Device;
 
 typedef struct {
   uint8_t device_number;
@@ -30,7 +49,16 @@ typedef struct {
   uint8_t in_toggle_value;
   uint16_t out_endpoint_max_packet_size;
   uint16_t in_endpoint_max_packet_size;
+  uint32_t logical_block_size;
+  uint64_t logical_block_count;
 } USB_Mass_Storage_Device;
+
+//=========================================
+
+typedef struct {
+  uint8_t descriptor_length;
+  uint8_t descriptor_type;
+} __attribute((packed)) USB_Descriptor_Common;
 
 typedef struct {
   volatile uint8_t descriptor_length;
@@ -98,11 +126,16 @@ typedef struct {
 //===========================================================
 
 typedef struct {
-  volatile uint8_t type;
+  //uint8_t RequestType unpacked
+  volatile uint8_t recipient : 5;
+  volatile uint8_t mode : 2;
+  volatile uint8_t direction : 1;
+  //=============================
   volatile uint8_t request;
   volatile uint8_t value_low;
   volatile uint8_t value_high;
-  volatile uint16_t index;
+  volatile uint8_t index_low;
+  volatile uint8_t index_high;
   volatile uint16_t length;
 } __attribute((packed)) USB_Device_Request;
 
@@ -130,6 +163,7 @@ typedef struct {
 
 //=======================================================================
 
+static const uint8_t SCSI_PAGE_CODE_RIGID_DRIVE_GEOMETRY = 0x04;
 
 typedef struct {
   USB_Command_Block_Wrapper cbw;
@@ -172,6 +206,20 @@ typedef struct {
 
 typedef struct {
   USB_Command_Block_Wrapper cbw;
+  uint8_t operation_code; //0x1A
+  uint8_t reserved_0 : 3;
+  uint8_t disable_block_descriptors : 1;
+  uint8_t reserved_1 : 4;
+  uint8_t page_code : 6;
+  uint8_t page_control : 2;
+  uint8_t reserved_2;
+  uint8_t allocation_length;
+  uint8_t control;
+  uint8_t padding[6];
+} __attribute((packed)) SCSI_Mode_Sense_Command;
+
+typedef struct {
+  USB_Command_Block_Wrapper cbw;
   uint8_t operation_code; //0x28
   //==============================
   uint8_t obsolete_0 : 1;
@@ -199,6 +247,42 @@ static_assert(sizeof(SCSI_Inquiry_Command) == 31);
 static_assert(sizeof(SCSI_Test_Unit_Ready_Command) == 31);
 static_assert(sizeof(SCSI_Read_Capacity_Command) == 31);
 static_assert(sizeof(SCSI_Read_Command) == 31);
+
+typedef struct {
+  uint8_t page_code : 6;
+  uint8_t reserved_0 : 1;
+  uint8_t parameter_savable : 1;
+  //=============================
+  uint8_t page_length;
+  uint8_t cylinder_count_2;
+  uint8_t cylinder_count_1;
+  uint8_t cylinder_count_3;
+  uint8_t head_count;
+  //NOTE(Torin) The following data layout is unclear in spec but is unused by the kernel
+  //See SCSI Command Reference Manual Page 312
+  uint8_t starting_cylinder_write_precomp_2;
+  uint8_t starting_cylinder_write_precomp_1;
+  uint8_t starting_cylinder_write_precomp_0;
+  uint8_t starting_cylinder_reduced_write_current_2;
+  uint8_t starting_cylinder_reduced_write_current_1; 
+  uint8_t starting_cylinder_reduced_write_current_0;
+  uint8_t drive_step_rate_1;
+  uint8_t drive_step_rate_0;
+  uint8_t landing_zone_cylinder_2;
+  uint8_t landing_zone_cylinder_1;
+  uint8_t landing_zone_cylinder_0;
+  //NOTE(Torin) The data layout is clear from here foward
+  //====================================
+  uint8_t rotational_position_locking : 2;
+  uint8_t reserved_1 : 6;
+  //====================================
+  uint8_t rotational_offset;
+  uint8_t reserved_2;
+  uint8_t medium_rotation_rate_1;
+  uint8_t medium_rotation_rate_0;
+  uint8_t reserved_3;
+  uint8_t reserved_4;
+} __attribute((packed)) SCSI_Rigid_Drive_Geometry_Data;
 
 typedef struct {
   uint8_t logical_block_address_3;
@@ -257,6 +341,7 @@ typedef struct {
   uint8_t drive_serial_number_0;
 } __attribute((packed)) SCSI_Inquiry_Data;
 
+
 static inline
 void scsi_create_inquiry(SCSI_Inquiry_Command *inquiry, const uint16_t length){
   static const uint8_t SCSI_COMMAND_INQUIRY = 0x12;
@@ -270,33 +355,60 @@ void scsi_create_inquiry(SCSI_Inquiry_Command *inquiry, const uint16_t length){
   inquiry->allocation_length_0 = (length & 0xFF);
 }
 
+static const char *USB_REQUEST_NAMES[] = {
+  "GET_STATUS",
+  "CLEAR_FEATURE",
+  "RESERVED",
+  "SET_FEATURE",
+  "RESERVED",
+  "SET_ADDRESS",
+  "GET_DESCRIPTOR",
+  "GET_CONFIGURATION",
+  "SET_CONFIGURATION",
+  "GET_INTERFACE",
+  "SET_INTERFACE",
+  "SYNC_FRAME",
+};
 
+static const char *USB_DESCRIPTOR_NAMES[] = {
+  "INVALID_DESCRIPTOR",
+  "DEVICE",
+  "CONFIGURATION",
+  "STRING",
+  "INTERFACE",
+  "ENDPOINT",
+  "DEVICE_QUALIFER",
+  "OTHER_SPEED_CONFIGURATION",
+  "INTERFACE_POWER",
+};
 
-#if 0
-typedef struct {
-  uint8_t operation_code;
-  uint8_t reserved0 : 5;
-  uint8_t misc_cdb_info : 3;
-  uint8_t logical_block_address_high; //NOTE(Torin) Big Endian!!! This order is correct!
-  uint8_t logical_block_address_low;
-  uint8_t transfer_length;
-  uint8_t control;
-} __attribute((packed)) SCSI_Command_Descriptor_Block_6;
-typedef struct {
-  uint8_t operation_code;
-  uint8_t service_action : 5;
-  uint8_t misc_cdb_info_0 : 3;
-  uint8_t logical_block_address_3;
-  uint8_t logical_block_address_2;
-  uint8_t logical_block_address_1;
-  uint8_t logical_block_address_0;
-  uint8_t misc_cdb_info_1;
-  uint8_t length_1;
-  uint8_t length_0;
-  uint8_t control;
-} __attribute((packed)) SCSI_Command_Descriptor_Block_10;
-static_assert(sizeof(SCSI_Command_Descriptor_Block_6) == 6);
-static_assert(sizeof(SCSI_Command_Descriptor_Block_10) == 10);
-#endif
+//==========================================================================
 
+static inline
+void kdebug_log_usb_request(USB_Device_Request *request){
+  const char *request_name = USB_REQUEST_NAMES[request->request];
+  if(request->request == USB_REQUEST_GET_DESCRIPTOR){
+    const char *descriptor_name = USB_DESCRIPTOR_NAMES[request->value_high];
+    klog_debug("request: %s, value: %s", request_name, descriptor_name);
+  } else {
+     klog_debug("request: %s", request_name);
+  }
+}
 
+static inline
+void kdebug_log_usb_descriptor(void *descriptor_pointer){
+  USB_Descriptor_Common *descriptor = (USB_Descriptor_Common *)descriptor_pointer;
+  klog_debug("descriptor_length: %u", descriptor->descriptor_length);
+  klog_debug("descriptor_type: %u", descriptor->descriptor_type);
+  switch(descriptor->descriptor_type){
+    case 0x01 /*USB_DESCRIPTOR_TYPE_DEVICE*/: {
+      USB_Device_Descriptor *device_descriptor = (USB_Device_Descriptor *)descriptor_pointer;
+      klog_debug("device_class: 0x%X", (uint64_t)device_descriptor->device_class);
+      klog_debug("max_packet_size: %u", (uint32_t)device_descriptor->max_packet_size);
+      klog_debug("vendor_id: 0x%X", (uint64_t)device_descriptor->vendor_id);
+      klog_debug("product_id: 0x%X", (uint64_t)device_descriptor->product_id);
+      klog_debug("vendor_string: 0x%X", (uint64_t)device_descriptor->vendor_string);
+      klog_debug("product_string: 0x%X", (uint64_t)device_descriptor->product_string); 
+    } break;
+  }
+}

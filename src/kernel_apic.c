@@ -126,6 +126,14 @@ lapic_configure_timer(uintptr_t lapic_virtual_address, uint32_t inital_count, ui
   lapic_write_register(lapic_virtual_address, TIMER_IRQ_REGISTER, irq_number | mode_mask);
 }
 
+static void
+lapic_wait_milliseconds(uint32_t ms){
+  globals.lapic_timer_ticks = 0;
+  while(globals.lapic_timer_ticks < ms){
+    asm volatile("nop"); 
+  }
+}
+
 //NOTE(Torin) Called from the bootstrap processor to send A SIPI signal to the target application processor 
 static void 
 lapic_startup_ap(uintptr_t apic_register_base, uint8_t target_apic_id, uint8_t target_page_number){

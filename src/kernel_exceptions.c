@@ -1,4 +1,5 @@
-
+//TODO(Torin: 2016-10-15) Test all exceptions
+//TODO(Torin 2016-10-16) Divide by zero Exception overflows
 
 //NOTE(Torin: 2016-08-24) Exception names derrived from Table found at http://wiki.osdev.org/Exceptions 
 static const char *EXCEPTION_NAMES[] = {

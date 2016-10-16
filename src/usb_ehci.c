@@ -1,4 +1,8 @@
-#define wait_for_condition(x) { volatile uint64_t counter = 0; while((!(x)) && counter < 0xFFFFFFF) { counter++; } if(counter == 0xFFFFFFF) { klog_debug("wait timed out: %s,  %s:%u", #x, __FILE__, __LINE__); }}
+#define wait_for_condition(x, timeout) { \
+  globals.lapic_timer_ticks = 0; \
+  while((!(x)) && (globals.lapic_timer_ticks < timeout)) { asm volatile("nop"); } \
+  if(globals.lapic_timer_ticks >= timeout) { klog_debug("wait timed out: %s,  %s:%u", #x, __FILE__, __LINE__); }} \
+  if(globals.lapic_timer_ticks >= timeout)
 
 typedef struct {
   volatile uint8_t capability_length;
@@ -169,18 +173,6 @@ void kdebug_log_hc_status(const EHCI_Controller *hc){
   klog_debug("asynch_schedule_status: %u", (uint32_t)usbsts->asynch_schedule_status);
 }
 
-static inline
-void kdebug_log_usb_device_descriptor(USB_Device_Descriptor *device_descriptor){
-  klog_debug("length: %u", (uint32_t)device_descriptor->descriptor_length);
-  klog_debug("descriptor_type: %u", (uint32_t)device_descriptor->descriptor_type);
-  klog_debug("device_class: 0x%X", (uint64_t)device_descriptor->device_class);
-  klog_debug("max_packet_size: %u", (uint32_t)device_descriptor->max_packet_size);
-  klog_debug("vendor_id: 0x%X", (uint64_t)device_descriptor->vendor_id);
-  klog_debug("product_id: 0x%X", (uint64_t)device_descriptor->product_id);
-  klog_debug("vendor_string: 0x%X", (uint64_t)device_descriptor->vendor_string);
-  klog_debug("product_string: 0x%X", (uint64_t)device_descriptor->product_string);
-}
-
 //====================================================================================
 
 static void ehci_init_qtd(EHCI_QTD *previous_td, EHCI_QTD *current_td, bool toggle, uint8_t transfer_type, uint16_t size, uintptr_t data_physical_address) {
@@ -249,8 +241,16 @@ ehci_check_qh_status(EHCI_Queue_Head *qh){
   static const uint32_t STATUS_ACTIVE = 1 << 7;
   const uint32_t error_status = qh->qtd_token & STATUS_ERROR_MASK;
   if(error_status != 0) return -1;
-  if(qh->qtd_token & STATUS_ACTIVE) return 0;
-  return 1;
+  if(qh->qtd_token & STATUS_ACTIVE) return 0; 
+  if(((qh->qtd_token & STATUS_ACTIVE) == 0) && qh->next_td == 1 && qh->alt_next_td == 1) {
+    //NOTE(Torin 2016-10-16) Make sure the transaction is actualy done and not in a rare
+    //intermediant case while the EHCI Controler is in the middle of writing data into the overlay
+    asm volatile("nop");
+    if(((qh->qtd_token & STATUS_ACTIVE) == 0) && qh->next_td == 1 && qh->alt_next_td == 1) {
+      return 1;
+    }
+  }
+  return 0;
 }
 
 static int
@@ -268,7 +268,9 @@ void ehci_disable_asynch_schedule(EHCI_Controller *hc){
   static const uint32_t USBCMD_ASYNCH_SCHEDULE_ENABLE_BIT = 1 << 5;
   static const uint32_t USBSTS_ASYNCH_SCHEDULE_STATUS_BIT = 1 << 15;
   hc->op_regs->usb_command = hc->op_regs->usb_command & ~USBCMD_ASYNCH_SCHEDULE_ENABLE_BIT;
-  wait_for_condition((hc->op_regs->usb_status & USBSTS_ASYNCH_SCHEDULE_STATUS_BIT) == 0);
+  wait_for_condition((hc->op_regs->usb_status & USBSTS_ASYNCH_SCHEDULE_STATUS_BIT) == 0, 2){
+    klog_error("asynchrous shedule failed to disable");
+  }
 }
 
 static inline
@@ -276,10 +278,14 @@ void ehci_enable_asynch_schedule(EHCI_Controller *hc){
   static const uint32_t USBCMD_ASYNCH_SCHEDULE_ENABLE_BIT = 1 << 5;
   static const uint32_t USBSTS_ASYNCH_SCHEDULE_STATUS_BIT = 1 << 15;
   hc->op_regs->usb_command = hc->op_regs->usb_command | USBCMD_ASYNCH_SCHEDULE_ENABLE_BIT;
-  wait_for_condition(hc->op_regs->usb_status & USBSTS_ASYNCH_SCHEDULE_STATUS_BIT);
+  wait_for_condition(hc->op_regs->usb_status & USBSTS_ASYNCH_SCHEDULE_STATUS_BIT, 2){
+    klog_error("failed to enable asynchronous schedule");
+  }
 }
 
- int ehci_control_transfer_without_data(EHCI_Controller *hc, uint8_t device_address, bool host_to_device, USB_Device_Request *request){
+//==========================================================================================================
+
+ int ehci_control_transfer_without_data(EHCI_Controller *hc, uint8_t device_address, USB_Device_Request *request){
   static const uint8_t QTD_TOKEN_TYPE_OUT = 0b00;
   static const uint8_t QTD_TOKEN_TYPE_IN = 0b01;
   static const uint8_t QTD_TOKEN_TYPE_SETUP = 0b10;
@@ -292,8 +298,7 @@ void ehci_enable_asynch_schedule(EHCI_Controller *hc){
   EHCI_Queue_Head *qh = &hc->asynch_qh;
   ehci_initalize_qh(qh, setup_qtd, device_address, 0, USB_Speed_HIGH, 64);
   ehci_enable_asynch_schedule(hc);
-  pit_wait_milliseconds(2);
-  wait_for_condition(ehci_check_qh_status(qh))
+  wait_for_condition(ehci_check_qh_status(qh), 125) {}
   ehci_disable_asynch_schedule(hc);
 
   int status = ehci_check_qh_status(qh);
@@ -312,28 +317,39 @@ void ehci_enable_asynch_schedule(EHCI_Controller *hc){
   return 1;
 }
 
-int ehci_control_transfer_with_data(EHCI_Controller *hc, uint8_t device_address, bool host_to_device, USB_Device_Request *request, uintptr_t data_physical_address){
+//TODO(Torin 2016-10-16) Find out the max timeout value for a usb transaction
+//to wait for the qtd to become inactive
+
+static inline
+int ehci_internal_control_transfer_with_data(EHCI_Controller *hc, EHCI_Queue_Head *qh, EHCI_QTD *setup_qtd, EHCI_QTD *data_qtd, EHCI_QTD *status_qtd, 
+uint8_t device_address, USB_Device_Request *request, uintptr_t data_physical_address){
   static const uint8_t QTD_TOKEN_TYPE_OUT = 0b00;
   static const uint8_t QTD_TOKEN_TYPE_IN = 0b01;
   static const uint8_t QTD_TOKEN_TYPE_SETUP = 0b10;
+  ehci_init_qtd(0, setup_qtd, 0, QTD_TOKEN_TYPE_SETUP, 8, (uintptr_t)request);
+  ehci_init_qtd(setup_qtd, data_qtd, 1, request->direction ? QTD_TOKEN_TYPE_IN : QTD_TOKEN_TYPE_OUT, request->length, data_physical_address);
+  ehci_init_qtd(data_qtd, status_qtd, 1, request->direction ? QTD_TOKEN_TYPE_OUT : QTD_TOKEN_TYPE_IN, 0, 0);
+  ehci_disable_asynch_schedule(hc);
+  ehci_initalize_qh(qh, setup_qtd, device_address, 0, USB_Speed_HIGH, 64);
+  ehci_enable_asynch_schedule(hc);
+  wait_for_condition(ehci_check_qh_status(qh), 125){}
+  ehci_disable_asynch_schedule(hc);
+  int status = ehci_check_qh_status(qh);
+  return status;
+}
+
+static inline 
+int ehci_control_transfer_with_data(EHCI_Controller *hc, uint8_t device_address, USB_Device_Request *request, uintptr_t data_physical_address){
   EHCI_QTD *setup_qtd = &hc->qtd_array[0];
   EHCI_QTD *data_qtd = &hc->qtd_array[1];
   EHCI_QTD *status_qtd = &hc->qtd_array[2];
-  ehci_init_qtd(0, setup_qtd, 0, QTD_TOKEN_TYPE_SETUP, 8, (uintptr_t)request);
-  ehci_init_qtd(setup_qtd, data_qtd, 1, host_to_device ? QTD_TOKEN_TYPE_OUT : QTD_TOKEN_TYPE_IN, request->length, data_physical_address);
-  ehci_init_qtd(data_qtd, status_qtd, 1, host_to_device ? QTD_TOKEN_TYPE_IN : QTD_TOKEN_TYPE_OUT, 0, 0);
-
-  ehci_disable_asynch_schedule(hc);
   EHCI_Queue_Head *qh = &hc->asynch_qh;
-  ehci_initalize_qh(qh, setup_qtd, device_address, 0, USB_Speed_HIGH, 64);
-  ehci_enable_asynch_schedule(hc);
-  pit_wait_milliseconds(2);
-  wait_for_condition(ehci_check_qh_status(qh))
-  ehci_disable_asynch_schedule(hc);
-  
-  int status = ehci_check_qh_status(qh);
-  if(status == 0){
-    klog_debug("CONTROL TRANSFER ERROR");
+  int status = ehci_internal_control_transfer_with_data(hc, qh, setup_qtd, data_qtd, status_qtd, 
+    device_address, request, data_physical_address);
+  if(status == -1){
+    klog_error("[CONTROL_TRANSFER_ERROR]");
+    klog_debug("qh_qtd:");
+    kdebug_log_qtd_token(qh->qtd_token);
     klog_debug("setup_qtd: ");
     kdebug_log_qtd(setup_qtd);
     klog_debug("data_qtd: ");
@@ -343,42 +359,39 @@ int ehci_control_transfer_with_data(EHCI_Controller *hc, uint8_t device_address,
     klog_debug("usb_status");
     kdebug_log_hc_status(hc);
     return 0;
+  } else if (status == 0){
+    klog_warning("failed first control transfer");
+    status = ehci_internal_control_transfer_with_data(hc, qh, setup_qtd, data_qtd, status_qtd, 
+      device_address, request, data_physical_address);
+    if(status == 0){
+      klog_error("[CONTROL_TRANSFER_TIMEOUT");
+      klog_debug("qh_qtd:");
+      kdebug_log_qtd_token(qh->qtd_token);
+      klog_debug("setup_qtd: ");
+      kdebug_log_qtd(setup_qtd);
+      klog_debug("data_qtd: ");
+      kdebug_log_qtd(data_qtd);
+      klog_debug("status_qtd: ");
+      kdebug_log_qtd(status_qtd);
+      klog_debug("usb_status");
+      kdebug_log_hc_status(hc);
+      return 0;
+    } else if (status == -1){
+      klog_error("[CONTROL_TRANSFER_ERROR]");
+      klog_debug("qh_qtd:");
+      kdebug_log_qtd_token(qh->qtd_token);
+      klog_debug("setup_qtd: ");
+      kdebug_log_qtd(setup_qtd);
+      klog_debug("data_qtd: ");
+      kdebug_log_qtd(data_qtd);
+      klog_debug("status_qtd: ");
+      kdebug_log_qtd(status_qtd);
+      klog_debug("usb_status");
+      kdebug_log_hc_status(hc);
+      return 0;
+    }
   }
-
   return 1;
- }
-static const uint16_t USB_LANGID_ENGLISH_USA = 0x0409;
-
-typedef struct {
-  uint8_t device_address;
-  uint8_t device_class;
-  uint16_t vendor_id;
-  uint16_t product_id;
-  uint8_t vendor_string[126];
-  uint8_t product_string[126];
-  uint8_t vendor_string_length;
-  uint8_t product_string_length;
-} USB_Device;
-
-static inline
-void utf16_to_ascii(uint8_t *ascii, uint16_t *utf16, size_t utf16_length){
-  size_t step_count = utf16_length / 2;
-  for(size_t i = 0; i < step_count; i++){
-    ascii[i] = utf16[i];
-  } 
-}
-
-static inline
-int ehci_get_descriptor(EHCI_Controller *hc, uint8_t descriptor_type, uint8_t descriptor_index, uint8_t langid, uint16_t length, void *data){
-  USB_Device_Request request = {};
-  request.type = USB_REQUEST_TYPE_DEVICE_TO_HOST;
-  request.request = USB_REQUEST_GET_DESCRIPTOR;
-  request.value_low = descriptor_index;
-  request.value_high = descriptor_type;
-  request.index = langid;
-  request.length = length;
-  int result = ehci_control_transfer_with_data(hc, 0, false, &request, (uintptr_t)data);
-  return result;
 }
 
 int ehci_bulk_transfer_with_data(EHCI_Controller *hc, USB_Mass_Storage_Device *msd, USB_Command_Block_Wrapper *cbw, size_t out_length, void *in_data, size_t in_length){
@@ -387,6 +400,7 @@ int ehci_bulk_transfer_with_data(EHCI_Controller *hc, USB_Mass_Storage_Device *m
   //NOTE(Torin 2016-10-06) This is set to failed to catch errors if the tranaction never transfers any data
   static const uint8_t CSW_COMMAND_PASSED = 0x00;
   static const uint8_t CSW_COMMAND_FAILED = 0x01;
+  static const uint8_t CSW_STATUS_INVALID = 0xFF; //NOTE(Torin) Valued used by kernel to determine if status was not recieved correctly
   USB_Command_Status_Wrapper csw = {};
   csw.status = CSW_COMMAND_FAILED;
   //Preallocate Required data strucutres
@@ -402,7 +416,7 @@ int ehci_bulk_transfer_with_data(EHCI_Controller *hc, USB_Mass_Storage_Device *m
   ehci_disable_asynch_schedule(hc);
   ehci_initalize_qh(out_qh, out_data_qtd, msd->device_number, msd->out_endpoint, USB_Speed_HIGH, msd->out_endpoint_max_packet_size);
   ehci_enable_asynch_schedule(hc);
-  wait_for_condition(ehci_check_qh_status(out_qh))
+  wait_for_condition(ehci_check_qh_status(out_qh), 125){}
   ehci_disable_asynch_schedule(hc);
   int status = ehci_check_qh_status(out_qh);
   if(status == 0) {
@@ -417,10 +431,10 @@ int ehci_bulk_transfer_with_data(EHCI_Controller *hc, USB_Mass_Storage_Device *m
   ehci_disable_asynch_schedule(hc);
   ehci_initalize_qh(in_qh, in_data_qtd, msd->device_number, msd->in_endpoint, USB_Speed_HIGH, msd->in_endpoint_max_packet_size);
   ehci_enable_asynch_schedule(hc);
-  pit_wait_milliseconds(1000);
-  wait_for_condition(ehci_check_qh_status(in_qh))
+  wait_for_condition(ehci_check_qh_status(in_qh), 1000) {}
   ehci_disable_asynch_schedule(hc);
   status = ehci_check_qh_status(in_qh);
+
   if(status == 0) {
     klog_error("bulk in transaction timed out without completing");
     klog_debug("queue_head:");
@@ -439,6 +453,10 @@ int ehci_bulk_transfer_with_data(EHCI_Controller *hc, USB_Mass_Storage_Device *m
     klog_debug("in_status:");
     kdebug_log_qtd(in_status_qtd);
     return 0;
+  }
+
+  if(csw.status == CSW_STATUS_INVALID){
+    klog_warning("wtf mate STATUS is invalid???");
   }
 
   if(csw.status == CSW_COMMAND_FAILED){
@@ -479,7 +497,7 @@ int ehci_bulk_transfer_no_data(EHCI_Controller *hc, USB_Mass_Storage_Device *msd
   ehci_disable_asynch_schedule(hc);
   ehci_initalize_qh(out_qh, out_data_qtd, msd->device_number, msd->out_endpoint, USB_Speed_HIGH, msd->out_endpoint_max_packet_size);
   ehci_enable_asynch_schedule(hc);
-  wait_for_condition(ehci_check_qh_status(out_qh))
+  wait_for_condition(ehci_check_qh_status(out_qh), 125){}
   ehci_disable_asynch_schedule(hc);
   int status = ehci_check_qh_status(out_qh);
   if(status == 0) {
@@ -494,10 +512,9 @@ int ehci_bulk_transfer_no_data(EHCI_Controller *hc, USB_Mass_Storage_Device *msd
   ehci_disable_asynch_schedule(hc);
   ehci_initalize_qh(in_qh, in_status_qtd, msd->device_number, msd->in_endpoint, USB_Speed_HIGH, msd->in_endpoint_max_packet_size);
   ehci_enable_asynch_schedule(hc);
-  pit_wait_milliseconds(1000);
-  wait_for_condition(ehci_check_qh_status(in_qh))
-  ehci_disable_asynch_schedule(hc);
+  wait_for_condition(ehci_check_qh_status(in_qh), 125){}
   status = ehci_check_qh_status(in_qh);
+  ehci_disable_asynch_schedule(hc);
   if(status == 0) {
     klog_error("bulk in transaction timed out without completing");
     klog_debug("queue_head:");
@@ -531,28 +548,95 @@ int ehci_bulk_transfer_no_data(EHCI_Controller *hc, USB_Mass_Storage_Device *msd
   return 1;
 }
 
+//=====================================================================
+static inline
+void utf16_to_ascii(uint8_t *ascii, uint16_t *utf16, size_t utf16_length){
+  size_t step_count = utf16_length / 2;
+  for(size_t i = 0; i < step_count; i++){
+    ascii[i] = utf16[i];
+  } 
+}
+
+static inline
+int ehci_get_descriptor(EHCI_Controller *hc, uint8_t descriptor_type, uint8_t descriptor_index, uint16_t langid, uint16_t length, void *data){
+  USB_Device_Request request = {};
+  request.direction = 1;
+  request.request = USB_REQUEST_GET_DESCRIPTOR;
+  request.value_low = descriptor_index;
+  request.value_high = descriptor_type;
+  request.index_high = (uint8_t)(langid >> 8);
+  request.index_low = (uint8_t)langid;
+  request.length = length;
+  int result = ehci_control_transfer_with_data(hc, 0, &request, (uintptr_t)data);
+  return result;
+}
+
+
+
 #include "filesystem.c"
 
-int ehci_initalize_device(EHCI_Controller *hc){
-  static const uint8_t QTD_TOKEN_TYPE_OUT = 0b00;
-  static const uint8_t QTD_TOKEN_TYPE_IN = 0b01;
-  static const uint8_t QTD_TOKEN_TYPE_SETUP = 0b10;
+static int ehci_read_to_physical_address(EHCI_Controller *hc, USB_Mass_Storage_Device *msd, uintptr_t out_data, uint32_t start_block, uint16_t block_count){
+  if(msd->logical_block_count < (start_block + block_count)){
+    klog_error("usb read excedes device maximums");
+    return 0;
+  }
 
-  USB_Device _device = {};
-  USB_Device *device = &_device;
+  SCSI_Read_Command read_command = {
+    .cbw.signature = USB_CBW_SIGNATURE,
+    .cbw.tag = 0x28,
+    .cbw.transfer_length = msd->logical_block_size, 
+    .cbw.direction = 1, //device-to-host
+    .cbw.length = 10,
+    .operation_code = 0x28,
+    .logical_block_address_3 = start_block >> 24,
+    .logical_block_address_2 = start_block >> 16,
+    .logical_block_address_1 = start_block >> 8,
+    .logical_block_address_0 = start_block >> 0,
+    .transfer_length_1 = block_count >> 8,
+    .transfer_length_0 = block_count >> 0,
+  };
 
+  if(ehci_bulk_transfer_with_data(hc, msd, &read_command.cbw, 31, (void *)out_data, msd->logical_block_size * block_count) == 0){
+    uint32_t logical_block_address = read_command.logical_block_address_0;
+    logical_block_address |= read_command.logical_block_address_1 << 8;
+    logical_block_address |= read_command.logical_block_address_2 << 16;
+    logical_block_address |= read_command.logical_block_address_3 << 24;
+    uint16_t transfer_length = read_command.transfer_length_0; 
+    transfer_length |= read_command.transfer_length_1 << 8;
+
+    klog_error("[FAILED] USB MSD Read");
+    klog_debug(" cbw.transfer_length: %u", (uint32_t)read_command.cbw.transfer_length);
+    klog_debug(" transfer_length: %u", (uint32_t)transfer_length);
+    klog_debug(" logical_block_address: %u", (uint32_t)logical_block_address);
+    return 0;
+  } 
+
+  return 1;
+}
+
+
+static Ext2_Filesystem g_ext2;
+
+int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
   USB_Device_Descriptor device_descriptor = {};
-  USB_Device_Request request = {}; 
-  request.type = USB_REQUEST_TYPE_DEVICE_TO_HOST; 
+  if(ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_DEVICE, 0, 0, 64, &device_descriptor) == 0){
+    klog_debug("failed to get device descriptor");
+    return 0;
+  }
+
+#if 0
+  USB_Device_Request request = {};
+  request.direction = 1; 
   request.request = USB_REQUEST_GET_DESCRIPTOR;
   request.value_high = USB_DESCRIPTOR_TYPE_DEVICE;
   request.value_low = 0;
-  request.index = 0;
   request.length = 64;
   if(ehci_control_transfer_with_data(hc, 0, false, &request, (uintptr_t)&device_descriptor) == 0){
     klog_error("get device descriptor failed  for device");
     return 0;
   }
+  kdebug_log_usb_descriptor(device_descriptor);
+#endif
 
   device->vendor_id = device_descriptor.vendor_id;
   device->product_id = device_descriptor.product_id;
@@ -560,13 +644,21 @@ int ehci_initalize_device(EHCI_Controller *hc){
 
   {
     uint8_t string_descriptor_buffer[256] = {};
-    USB_String_Descriptor *string_descriptor = (USB_String_Descriptor *)string_descriptor_buffer;
-    USB_Device_Request string_request = {};
+    if(ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_STRING, 0, 0, 8, string_descriptor_buffer) == 0){
+      klog_debug("failed to get string descriptor list");
+      return 0;
+    }
+
+#if 0
     string_request.type = USB_REQUEST_TYPE_DEVICE_TO_HOST;
     string_request.request = USB_REQUEST_GET_DESCRIPTOR;
     string_request.value_high = USB_DESCRIPTOR_TYPE_STRING;
+    string_request.value_low = 0; //NOTE(Torin) Requesting Language Information
     string_request.length = 8;
     ehci_control_transfer_with_data(hc, 0, false, &string_request, (uintptr_t)string_descriptor);
+  #endif 
+
+    USB_String_Descriptor *string_descriptor = (USB_String_Descriptor *)string_descriptor_buffer;
     klog_debug("string_descriptor_length: %u", string_descriptor->length);
     uint16_t *supported_language_list = (uint16_t *)(((uintptr_t)string_descriptor) + 2);
     size_t supported_language_count = string_descriptor->length - 2;
@@ -578,24 +670,28 @@ int ehci_initalize_device(EHCI_Controller *hc){
       }
     }
 
+    //TODO(Torin 2016-10-09) Support non-english languages
     if(device_supports_english == false){
       klog_error("usb device does not support english!");
       return 0;
     }
 
+#if 0
     string_request.index = USB_LANGID_ENGLISH_USA;
     string_request.value_low = device_descriptor.vendor_string; 
     string_request.length = 64;
     memset(string_descriptor, 0x00, sizeof(USB_String_Descriptor));
-    ehci_control_transfer_with_data(hc, 0, false, &string_request, (uintptr_t)string_descriptor);
+#endif
+
+    ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_STRING, device_descriptor.vendor_string, USB_LANGID_ENGLISH_USA, 64, string_descriptor_buffer);
+
+
     if(string_descriptor->length > 0){
       utf16_to_ascii(device->vendor_string, string_descriptor->string, string_descriptor->length - 2);
       device->vendor_string_length = (string_descriptor->length - 2) / 2;
     }
         
-    string_request.value_low = device_descriptor.product_string;
-    memset(string_descriptor, 0x00, sizeof(USB_String_Descriptor));
-    ehci_control_transfer_with_data(hc, 0, false, &string_request, (uintptr_t)string_descriptor);
+    ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_STRING, device_descriptor.product_string, USB_LANGID_ENGLISH_USA, 64, string_descriptor_buffer);
     if(string_descriptor->length > 0){
       utf16_to_ascii(device->product_string, string_descriptor->string, string_descriptor->length - 2);
       device->product_string_length = (string_descriptor->length - 2) / 2;
@@ -606,9 +702,15 @@ int ehci_initalize_device(EHCI_Controller *hc){
 
   uint8_t configuration_value = 0;
   uint8_t configuration_buffer[256] = {};
+  klog_debug("configuration_count: %u", (uint32_t)device_descriptor.config_count);
+
+
   for(size_t config_index = 0; config_index < device_descriptor.config_count; config_index++){
+    klog_debug("config_index: %lu", config_index);
     USB_Configuration_Descriptor *config = (USB_Configuration_Descriptor *)configuration_buffer;
-    ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_CONFIG, config_index, 0, sizeof(configuration_buffer), configuration_buffer);
+    ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_CONFIG, config_index, 0,  64, configuration_buffer);
+    //TODO(Torin) Have an entire page mapped for this buffer
+    //Hell just make it per kernel thread... Problematic for interrupts?
     if(config->total_length > sizeof(configuration_buffer)){
       klog_error("configuration descriptor is too large for provided buffer");
       return 0;
@@ -658,7 +760,7 @@ int ehci_initalize_device(EHCI_Controller *hc){
   USB_Device_Request set_address_request = {};
   set_address_request.request = USB_REQUEST_SET_ADDRESSS;
   set_address_request.value_low = device->device_address;
-  if(ehci_control_transfer_without_data(hc, 0, true, &set_address_request) == 0){
+  if(ehci_control_transfer_without_data(hc, 0, &set_address_request) == 0){
     klog_error("failed to set usb device address");
     return 0;
   }
@@ -666,10 +768,10 @@ int ehci_initalize_device(EHCI_Controller *hc){
 
   if(configuration_value != 0){
     USB_Device_Request set_config_request = {};
-    set_config_request.type = USB_REQUEST_TYPE_HOST_TO_DEVICE;
+    set_config_request.direction = 0;
     set_config_request.request = USB_REQUEST_SET_CONFIGURATION;
     set_config_request.value_low = configuration_value;
-    if(ehci_control_transfer_without_data(hc, device->device_address, true, &set_config_request) == 0){
+    if(ehci_control_transfer_without_data(hc, device->device_address, &set_config_request) == 0){
       klog_error("failed to set usb device configuration");
       return 0;
     }
@@ -692,19 +794,21 @@ int ehci_initalize_device(EHCI_Controller *hc){
   klog_debug("in_max_packet_size: %u", (uint32_t)msd->in_endpoint_max_packet_size);
 
   USB_Device_Request msd_reset_request = {};
-  msd_reset_request.type = 0b00100001;
+  msd_reset_request.recipient = USB_REQUEST_RECIPIENT_INTERFACE;
+  msd_reset_request.mode = USB_REQUEST_MODE_CLASS;
   msd_reset_request.request = 0xFF;
-  msd_reset_request.index = msd->interface_number;
-  if(ehci_control_transfer_without_data(hc, device->device_address, true, &msd_reset_request) == 0){
+  msd_reset_request.index_high = msd->interface_number >> 8;
+  msd_reset_request.index_low = msd->interface_number;
+  if(ehci_control_transfer_without_data(hc, device->device_address, &msd_reset_request) == 0){
     klog_error("usb mass storage device failed bulk reset");
   }
-
 
   uint8_t inquiry_buffer[36] = {};
   SCSI_Inquiry_Command inquiry_command = {};
   scsi_create_inquiry(&inquiry_command, 36);
   if(ehci_bulk_transfer_with_data(hc, msd, &inquiry_command.cbw, sizeof(inquiry_command), inquiry_buffer, sizeof(inquiry_buffer)) == 0){
     klog_error("inquiry bulk transfer error!");
+    return 0;
   }
 
   SCSI_Inquiry_Data *inquiry_data = (SCSI_Inquiry_Data *)inquiry_buffer;
@@ -725,6 +829,8 @@ int ehci_initalize_device(EHCI_Controller *hc){
   SCSI_Read_Capacity_Command read_capacity_command = {
     .cbw.signature = USB_CBW_SIGNATURE,
     .cbw.tag = 0x25,
+    .cbw.transfer_length = 0x08,
+    .cbw.direction = 1, //device_to_host
     .cbw.length = 10,
     .operation_code = 0x25,
   };
@@ -732,49 +838,130 @@ int ehci_initalize_device(EHCI_Controller *hc){
   if(ehci_bulk_transfer_with_data(hc, msd, &read_capacity_command.cbw, 31, &read_capacity_data, sizeof(read_capacity_data)) == 0){
     klog_error("failed to execute read capacity command!");
     return 0;
-  } 
+  }
 
-  uint32_t logical_block_address = 0, block_size = 0;
-  logical_block_address = read_capacity_data.logical_block_address_0;
-  logical_block_address |= read_capacity_data.logical_block_address_1 << 8;
-  logical_block_address |= read_capacity_data.logical_block_address_2 << 16;
-  logical_block_address |= read_capacity_data.logical_block_address_3 << 24;
-  block_size = read_capacity_data.block_size_0;
-  block_size |= read_capacity_data.block_size_1 << 8; 
-  block_size |= read_capacity_data.block_size_2 << 16; 
-  block_size |= read_capacity_data.block_size_3 << 24; 
-  klog_debug("logical_block_address: 0x%X", (uint64_t)logical_block_address);
-  klog_debug("block_size: %u bytes", block_size);
-  uint64_t total_size = logical_block_address * block_size;
-  uint64_t total_size_mb = total_size / 1024;
-  klog_debug("total_size: %lu MB", logical_block_address / 512);
-  klog_debug("total_size: %lu MB", logical_block_address / 1024);
-  klog_debug("total_size: %lu MB", logical_block_address);
-  klog_debug("total_size: %lu MB", (logical_block_address*2) / 1024);
-  klog_debug("total_size: %lu MB", total_size_mb);
+  msd->logical_block_count = read_capacity_data.logical_block_address_0;
+  msd->logical_block_count |= read_capacity_data.logical_block_address_1 << 8;
+  msd->logical_block_count |= read_capacity_data.logical_block_address_2 << 16;
+  msd->logical_block_count |= read_capacity_data.logical_block_address_3 << 24;
+  msd->logical_block_count += 1; //read_capacity holds the last addressable block
+  msd->logical_block_size = read_capacity_data.block_size_0;
+  msd->logical_block_size |= read_capacity_data.block_size_1 << 8; 
+  msd->logical_block_size |= read_capacity_data.block_size_2 << 16; 
+  msd->logical_block_size |= read_capacity_data.block_size_3 << 24;
+  klog_debug("%lu Blocks, %lu Bytes", msd->logical_block_count, msd->logical_block_count * msd->logical_block_size);
 
-  uint8_t read_data[512] = {};
-  SCSI_Read_Command read_command = {
-    .cbw.signature = USB_CBW_SIGNATURE,
-    .cbw.tag = 0x28,
-    .cbw.transfer_length = block_size,
-    .cbw.direction = 1, //device-to-host
-    .cbw.length = 10,
-    .operation_code = 0x28,
-    .logical_block_address_0 = 0x00, //block 0
-    .transfer_length_0 = 0x01, //one block
-  };
-
-
-
-  if(ehci_bulk_transfer_with_data(hc, msd, &read_command.cbw, 31, read_data, 512) == 0){
-    klog_error("failed usb mass storage device read");
+  uint8_t read_buffer[1024] = {};
+  const uintptr_t buffer_physical_address = (uintptr_t)read_buffer;
+  if(ehci_read_to_physical_address(hc, msd, buffer_physical_address, 0x00, 1) == 0){
+    klog_error("failed to read msd partition table");
     return 0;
   }
 
-  //Partition_Table *pt = (Partition_Table)(read_data + 0x1BE);
-  //klog_debug("bootable_indicator: %u", (uint32_t)pt->boot_indicator); 
+  MBR_Partition_Table *pt = (MBR_Partition_Table *)(read_buffer + 0x1BE);
+  for(size_t partition_index = 0; partition_index < 4; partition_index++){
+    uint64_t *raw_data = (uint64_t *)pt;
+    if(raw_data[0] == 0 && raw_data[1] == 0) continue;
+    if(pt->system_id != PARTITION_TYPE_LINUX_FILESYSTEM)
+      klog_error("currently only support for linux fs");
 
+    Partition_Info partition_info = {};
+    partition_info.partition_type = pt->system_id;
+    partition_info.first_block = pt->start_sector;
+    partition_info.block_count = pt->sector_count;
+    klog_debug("partiton_start_block: %u", (uint32_t)partition_info.first_block);
+    klog_debug("partition_block_count: %u", (uint32_t)partition_info.block_count);
+
+    //Read the EXT2 Superblock 
+
+    Ext2_Filesystem *extfs = &g_ext2;
+    uint32_t superblock_location = partition_info.first_block + 2;
+    klog_debug("superblock_location: %u", superblock_location);
+    if(ehci_read_to_physical_address(hc, msd, buffer_physical_address, superblock_location, 1) == 0){
+      klog_error("failed to read superblock from ext2 partition");
+      return 0;
+    }
+
+    Ext2_Superblock *superblock = (Ext2_Superblock *)read_buffer;
+    if(superblock->ext2_signature != EXT2_SUPERBLOCK_SIGNATURE){
+      klog_error("superblock has invalid signature");
+      return 0;
+    } 
+    if(superblock->version_major < 1){
+      klog_error("ext2 uses version 0");
+    }
+
+    extfs->partition_first_sector = partition_info.first_block;
+    extfs->inode_size = superblock->inode_struct_size;
+    extfs->block_size = 1024 << superblock->block_size_shift_count;
+    extfs->inode_count_per_group = superblock->inodes_per_group;
+    extfs->buffer_physical_address = extfs->buffer_physical_address;
+    extfs->superblock_sector = superblock_location;
+    strict_assert(buffer_physical_address  + 4096 < 0x200000);
+    uint32_t block_group_count = superblock->block_count / superblock->blocks_per_group;
+
+    if(extfs->block_size % msd->logical_block_size != 0) { klog_error("filesystem block size not multiple of device logical block size"); }
+    extfs->sectors_per_block = extfs->block_size / msd->logical_block_size;
+    ext2_log_fs_info(extfs);
+
+    klog_debug("inode_count: %u", (uint32_t)superblock->inode_count);
+    klog_debug("block_count: %u", (uint32_t)superblock->block_count);
+    klog_debug("block_group_count: %u", block_group_count);
+    klog_debug("unallocated_inodes: %u", superblock->unallocated_inodes);
+    klog_debug("unallocated_blocks: %u", superblock->unallocated_blocks);
+
+    uint32_t current_block_count = superblock->block_count - superblock->unallocated_blocks;
+    uint32_t current_inode_count = superblock->inode_count - superblock->unallocated_inodes;
+    klog_debug("allocated_blocks: %u", current_block_count);
+    klog_debug("allocated_inodes: %u", current_inode_count);
+    klog_debug("volume_name: %s", superblock->volume_name);
+
+    static const uint16_t EXT2_INODE_TYPE_DIRECTORY = 0x4000;
+    uint32_t block_group_descriptor_table_sector = ext2fs_get_sector_location(1, extfs); 
+    klog_debug("bock_group_descriptor_table_sector: %u", block_group_descriptor_table_sector);
+    if(ehci_read_to_physical_address(hc, msd, buffer_physical_address, block_group_descriptor_table_sector, 1) == 0){
+      klog_error("failed to read block_group_descriptor_table");
+      return 0;
+    }
+
+    Ext2_Block_Group_Descriptor *block_group_descriptor = (Ext2_Block_Group_Descriptor *)read_buffer;
+    klog_debug("directory_count: %u", (uint32_t)block_group_descriptor->directory_count);
+    klog_debug("unallocated_block_count: %u", (uint32_t)block_group_descriptor->unallocated_block_count);
+    klog_debug("unallocated_inode_count: %u", (uint32_t)block_group_descriptor->unallocated_inode_count);
+    uint32_t allocated_block_count = superblock->blocks_per_group - block_group_descriptor->unallocated_block_count;
+    uint32_t allocated_inode_count = superblock->inodes_per_group - block_group_descriptor->unallocated_inode_count;
+    klog_debug("allocated_block_count: %u", allocated_block_count);
+    klog_debug("allocated_inode_count: %u", allocated_inode_count);
+
+    ext2_read_inode(2, extfs);
+
+    uint32_t inode_table_sector = ext2fs_get_sector_location(block_group_descriptor->inode_table_block_number, extfs);
+    klog_debug("inode_table_sector: %u", inode_table_sector);
+    if(ehci_read_to_physical_address(hc, msd, buffer_physical_address, inode_table_sector, 1) == 0){
+      klog_error("failed to read inode table");
+      return 0;
+    }
+
+    Ext2_Inode *inode_table = (Ext2_Inode *)read_buffer;
+    Ext2_Inode *root_inode = (Ext2_Inode *)(read_buffer + extfs->inode_size);
+    uint32_t directory_entries_location = ext2fs_get_sector_location(root_inode->direct_block_pointer_0, extfs);
+    klog_debug("directory_entries_location: %u", directory_entries_location);
+    if(ehci_read_to_physical_address(hc, msd, buffer_physical_address, directory_entries_location, 1) == 0){
+      klog_debug("failed to read directory entriies");
+      return 0;
+    }
+
+    Ext2_Directory_Entry *directory_entry = (Ext2_Directory_Entry *)read_buffer; 
+    while(((uintptr_t)directory_entry - (uintptr_t)read_buffer) < 4096){
+      klog_debug("directory_name: %.*s", directory_entry->name_length, directory_entry->name);
+      if(directory_entry->entry_size == 0) break;
+      directory_entry = (Ext2_Directory_Entry *)((uintptr_t)directory_entry + directory_entry->entry_size);
+    }
+
+
+    pt++;
+  }
+  
   return 1;
 }
 
@@ -787,11 +974,11 @@ ehci_reset_port(volatile uint32_t *port){
   *port = *port | EHCI_PORT_RESET_BIT;
   kassert(*port & EHCI_PORT_RESET_BIT);
   //NOTE(Torin 2016-09-17) Must Wait Max 50ms (USB2.0 spec 10.2.8.1)
-  pit_wait_milliseconds(50);
+  lapic_wait_milliseconds(50);
   klog_debug("waited 50ms");
   *port = *port & ~EHCI_PORT_RESET_BIT;
   //NOTE(Torin 2016-09-25) The HC has 2ms to set RESET bit to 0
-  wait_for_condition((*port & EHCI_PORT_RESET_BIT) == 0)
+  wait_for_condition((*port & EHCI_PORT_RESET_BIT) == 0, 2){}
   kassert((*port & EHCI_PORT_RESET_BIT) == 0);
   klog_debug("port was reset");
 
@@ -858,8 +1045,14 @@ int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
       if(legacy_support & USBLEGSUP_BIOS_OWNERSHIP){
         volatile uint32_t legacy_with_os_ownership = legacy_support | USBLEGSUP_OS_OWNERSHIP;
         pci_write_uint32(legacy_with_os_ownership);
-        wait_for_condition(pci_read_uint32() & USBLEGSUP_OS_OWNERSHIP)
-        wait_for_condition((pci_read_uint32() & USBLEGSUP_BIOS_OWNERSHIP) == 0)
+        wait_for_condition(pci_read_uint32() & USBLEGSUP_OS_OWNERSHIP, 2){
+          klog_error("failed to take os owernership of echi controller");
+          return 0;
+        }
+        wait_for_condition((pci_read_uint32() & USBLEGSUP_BIOS_OWNERSHIP) == 0, 2){
+          klog_error("bios faild to release owenership of ehci controller");
+          return 0;
+        }
       }
     }
   }
@@ -891,9 +1084,7 @@ int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
     periodic_qh->alt_next_td = EHCI_POINTER_TERMINATE;
     //NOTE(Torin 2016-10-04) Setup perodic framelist 
     uint32_t *periodic_frame_list = g_ehci.periodic_frame_list;
-    for(size_t i = 0; i < 1024; i++){
-      periodic_frame_list[i] = (uint32_t)(uintptr_t)periodic_qh | EHCI_POINTER_TYPE_QH | EHCI_POINTER_TERMINATE;
-    }
+    for(size_t i = 0; i < 1024; i++) periodic_frame_list[i] = (uint32_t)(uintptr_t)periodic_qh | EHCI_POINTER_TYPE_QH | EHCI_POINTER_TERMINATE;
   }
 
   { //NOTE(Torin 2016-09-13) Set nessecary registers and initalize the controller 
@@ -905,23 +1096,34 @@ int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
     static const uint32_t USBSTATUS_CONTROLLER_HALTED = (1 << 12);
     static const uint32_t USBSTATUS_HOST_SYSTEM_ERROR = 1 << 4;
 
-    op_regs->usb_command = op_regs->usb_command & (~USBCMD_RUN_STOP);
-    wait_for_condition((op_regs->usb_command & USBCMD_RUN_STOP) == 0);
-    op_regs->usb_command = op_regs->usb_command | USBCMD_HCRESET;
-    wait_for_condition((op_regs->usb_command & USBCMD_HCRESET) == 0);
+    static const uint32_t USBINTR_INTERRUPT_ENABLE = 1 << 0;
+    static const uint32_t USBINTR_ERROR_INTERRUPT_ENABLE = 1 << 1;
+    static const uint32_t USBINTR_PORT_CHANGE_INTERRUPT_ENABLE = 1 << 2;
+    static const uint32_t USBINTR_FRAME_LIST_ROLLOVER_ENABLE = 1 << 3;
+    static const uint32_t USBINTR_HOST_SYSTEM_ERROR_ENABLE = 1 << 4;
+    static const uint32_t USBINTR_INTERRUPT_ON_ASYNC_ADVANCE_ENABLE = 1 << 5;
 
-    op_regs->usb_interrupt = 0x00;
+    //NOTE(Torin 2016-10-09)The HC will halt within 16 microframes of clearing the bit
+    op_regs->usb_command = op_regs->usb_command & (~USBCMD_RUN_STOP);
+    //NOTE(Torin 2016-10-09) 16 micro-frames * 125micro-seconds = 2mili-seconds
+    wait_for_condition((op_regs->usb_command & USBCMD_RUN_STOP) == 0, 3) { return 0;}
+    op_regs->usb_command = op_regs->usb_command | USBCMD_HCRESET;
+    //TODO(Torin 2016-10-09) What is a good value to wait while the HC resets?
+    wait_for_condition((op_regs->usb_command & USBCMD_HCRESET) == 0, 60) { return 0; }
+
+    op_regs->usb_interrupt = USBINTR_INTERRUPT_ENABLE | USBINTR_ERROR_INTERRUPT_ENABLE | USBINTR_PORT_CHANGE_INTERRUPT_ENABLE |
+      USBINTR_FRAME_LIST_ROLLOVER_ENABLE | USBINTR_HOST_SYSTEM_ERROR_ENABLE | USBINTR_INTERRUPT_ON_ASYNC_ADVANCE_ENABLE;
     op_regs->ctrl_ds_segment = 0x00;
     op_regs->perodic_list_base = (uint32_t)(uintptr_t)g_ehci.periodic_frame_list;
     op_regs->async_list_address = (uint32_t)(uintptr_t)&g_ehci.asynch_qh;
     op_regs->frame_index = 0x00;
     op_regs->config_flag = 1; //NOTE(Torin) Route all ports to the EHCI controler(Rather than compainion controllers)
     op_regs->usb_command = USBCMD_INTERRUPT_THRESHOLD_CONTROL_8 | USBCMD_ASYNCH_SCHEDULE_ENABLE | USBCMD_RUN_STOP; 
-    wait_for_condition((op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED) == 0);
+    wait_for_condition((op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED) == 0, 2) { return 0; }
     klog_debug("ehci controller was started");
   }
 
-  pit_wait_milliseconds(2); //TODO(Torin 2016-10-06) Check what the right value for this wait should be
+  lapic_wait_milliseconds(2); //TODO(Torin 2016-10-06) Check what the right value for this wait should be
   //Is this where we should wait 100ms for the ports power state to stabialize?
 
   { //NOTE(Torin 2016-09-06) Enumerating the ports managed by this controler
@@ -936,14 +1138,18 @@ int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
 
      if(ehci_is_hc_halted(op_regs)){
        klog_error("ehci host controller unexpectedly halted during port enumeration");
+       return 0;
      }
+
+      static const uint32_t USBSTS_PORT_CHANGE_DETECT = 1 << 2;
+      op_regs->usb_status = op_regs->usb_status & ~USBSTS_PORT_CHANGE_DETECT;
 
       uint32_t volatile *port_reg = &op_regs->ports[port_index];
       if(*port_reg & PORT_CONNECT_STATUS_CHANGED_BIT){
         *port_reg = *port_reg | PORT_CONNECT_STATUS_CHANGED_BIT; //clears out connect status change
-        wait_for_condition((*port_reg & PORT_CONNECT_STATUS_CHANGED_BIT) == 0);
+        wait_for_condition((*port_reg & PORT_CONNECT_STATUS_CHANGED_BIT) == 0, 1) {}
         if(*port_reg & PORT_CONNECT_STATUS_BIT){
-          pit_wait_milliseconds(100);
+          lapic_wait_milliseconds(100);
           klog_debug("USB_Device connected on port %lu", port_index);
           bool is_port_enabled = *port_reg & PORT_ENABLED_BIT;
           if(is_port_enabled == false) {
@@ -957,8 +1163,10 @@ int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
             klog_debug("Port %lu failed to enable", port_index);
           } else {
             klog_debug("Port %lu enabled sucuessfuly", port_index);
-            pit_wait_milliseconds(10);
-            ehci_initalize_device(&g_ehci);
+            lapic_wait_milliseconds(10);
+            //TODO(Torin 2016-10-15) Put this inside of the EHCI controler struct!
+            USB_Device device = {};
+            ehci_initalize_device(&g_ehci, &device);
           }
         }
       }

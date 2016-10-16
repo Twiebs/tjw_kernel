@@ -31,6 +31,10 @@ typedef struct {
 	uint32_t creator_revision;
 } __attribute__((packed)) ACPI_SDT_Header;
 
+typedef struct {
+
+} ACPI_MCFG_Table;
+
 //MADT: Multiple APIC Description Table
 //=====================================
 //=======================================

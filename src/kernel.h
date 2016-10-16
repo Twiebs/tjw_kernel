@@ -3,6 +3,7 @@
 #define internal static 
 #define global_variable static 
 
+#define strict_assert(expr) kassert(expr)
 #define static_assert(expr) _Static_assert(expr, "ASSERTION FAILED(" #expr ")")
 #define kassert(expr) if(!(expr)) { klog_error("ASSERTION FAILED(%s) on line %u of file %s", #expr, (uint32_t)(__LINE__), __FILE__); kpanic(); }
 
@@ -57,6 +58,16 @@ uint32_t read_port_uint32(uint16_t port){
 	return result;
 }
 
+static inline 
+void cpuid(int code, uint32_t *a, uint32_t *d) {
+  asm volatile("cpuid":"=a"(*a),"=d"(*d):"a"(code):"ecx","ebx");
+}
+
+static inline 
+void cpu_get_msr(uint32_t msr, uint32_t *lo, uint32_t *hi) {
+   asm volatile("rdmsr" : "=a"(*lo), "=d"(*hi) : "c"(msr));
+}
+
 //TODO(Torin) Proper rebooting with ACPI
 static void
 kernel_reboot() {
@@ -104,6 +115,3 @@ typedef struct {
   uint64_t r14;
   uint64_t r15;
 } Register_State;
-
-static inline
-void pit_wait_milliseconds(const uint32_t ms);

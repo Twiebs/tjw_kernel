@@ -164,9 +164,20 @@ void pci_scan_devices(){
         pci_read_2x16(&vendor, &device);
         if(vendor == 0xFFFF) continue;
 
-        pci_set_config_address(bus_number, device_number, function_number, 0x08);
         uint8_t class_code, subclass, prog_if, revision_id;
+        pci_set_config_address(bus_number, device_number, function_number, 0x08);
         pci_read_4x8(&class_code, &subclass, &prog_if, &revision_id);
+
+        uint16_t status, command;
+        pci_set_config_address(bus_number, device_number, function_number, 0x04);
+        pci_read_2x16(&status, &command);
+        static const uint16_t STATUS_CAPABILITIES_BIT = 1 << 4;
+        if(status & STATUS_CAPABILITIES_BIT){
+          klog_debug("pci has extended capabilities");
+        }
+
+        uint8_t max_latency, min_grant, interrupt_pin, interrupt_line;
+        pci_read_4x8(&max_latency, &min_grant, &interrupt_pin, &interrupt_line);
 
         //NOTE(Torin 2016-09-13) Get the base addressess of the USB Host Controllers 
         if(class_code == PCI_CLASS_SERIAL_BUS_CONTROLLER && subclass == PCI_SUBCLASS_USB_CONTROLLER){
@@ -196,7 +207,10 @@ void pci_scan_devices(){
             //TODO(Torin 2016-10-04) Initalizing the EHCI controller should be defered until
             //after PCI bus enumeration has completed.
             klog_debug("initalizing ehci controller at 0x%X", pci_info.ehci_physical_address);
+            klog_debug("interrupt_pin: %u", (uint32_t)interrupt_pin);
+            klog_debug("interrupt_line: %u", (uint32_t)interrupt_line);
             ehci_initalize(pci_info.ehci_physical_address, &pci_info.ehci_pci_device);
+            return; //TODO(Torin 2016-10-07) Delete this test code!
           } else if (prog_if == XHCI_CONTROLLER){
             klog_debug("[pci] Found XHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
             pci_set_config_address(bus_number, device_number, function_number, 0x10);

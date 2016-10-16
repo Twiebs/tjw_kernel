@@ -176,6 +176,11 @@ irq_handler_pit(void){
   write_port_uint8(0x20, 0x20);
 }
 
+static void
+lapic_periodic_timer_interrupt_handler(void){
+  globals.lapic_timer_ticks += 1;
+}
+
 
 static void
 lapic_timer_interrupt(void){

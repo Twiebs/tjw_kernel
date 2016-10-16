@@ -9,6 +9,7 @@ debug/*
 bin/*
 kfs/*
 qemu/*
+vbox/*
 
 kernel.dump
 

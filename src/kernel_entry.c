@@ -17,11 +17,11 @@ typedef struct {
   Task_Info task_info;
 
   volatile uint64_t pit_timer_ticks;
+  volatile uint64_t lapic_timer_ticks;
 
   bool is_logging_disabled;
   bool log_keyboard_events;
 } Kernel_Globals;
-
 
 static Kernel_Globals globals;
 
@@ -59,58 +59,9 @@ uint32_t get_cpu_id(){
   return 0;
 }
 
-#if 0
-static uint16_t
-pit_read_timer(){
-  static const uint8_t PIT_CHANNEL0_DATA_PORT = 0x40;
-  static const uint8_t PIT_COMMAND_PORT = 0x43;
-  write_port_uint8(PIT_COMMAND_PORT, 0x00);  
-  uint8_t count_low = read_port_uint8(PIT_CHANNEL0_DATA_PORT);
-  uint8_t count_high = read_port_uint8(PIT_CHANNEL0_DATA_PORT);
-  uint16_t count = (count_high << 8) | count_low;
-  return count;
-}
-#endif
-
-static void
-pit_configure_timer(const uint32_t requested_frequency){
-  static const uint8_t PIT_CHANNEL0_DATA_PORT = 0x40;
-  static const uint8_t PIT_CHANNEL1_DATA_PORT = 0x41;
-  static const uint8_t PIT_CHANNEL2_DATA_PORT = 0x42; 
-  static const uint8_t PIT_COMMAND_PORT = 0x43;
-
-  static const uint8_t COMMAND_CHANNEL0 = (0b00) << 6;
-  static const uint8_t COMMAND_CHANNEL1 = (0b01) << 6;
-  static const uint8_t COMMAND_CHANNEL2 = (0b11) << 6;
-  static const uint8_t COMMAND_ACCESS_LOW_AND_HIGH = (0b11) << 4;
-  static const uint8_t COMMAND_MODE_SQUARE_WAVE = 0x06; 
-
-  static const uint32_t PIT_BASE_FREQUENCY = 1193182;
-
-  kassert(requested_frequency > 18);
-  kassert(requested_frequency < 1193181);
-  //set timer mode
-  static const uint8_t COUNTER0 = 0x00;
-  static const uint8_t COMMAND_MODE_RATE_GENERATOR = 0x04; 
-  static const uint8_t RW_LOW_HIGH_MODE = 0x30;
-  write_port_uint8(PIT_COMMAND_PORT, COUNTER0 | COMMAND_MODE_RATE_GENERATOR | RW_LOW_HIGH_MODE);
-  //Set the divisor
-  uint32_t divisor = PIT_BASE_FREQUENCY / requested_frequency;
-  uint8_t divisor_low = (uint8_t)(divisor & 0xFF);
-  uint8_t divisor_high = (uint8_t)((divisor >> 8) & 0xFF);
-  write_port_uint8(PIT_CHANNEL0_DATA_PORT, divisor_low);
-  write_port_uint8(PIT_CHANNEL0_DATA_PORT, divisor_high);
-}
-
-static void
-pit_wait_milliseconds(const volatile uint32_t ms){
-  globals.pit_timer_ticks = 0;
-  while (globals.pit_timer_ticks < (ms + 1)) { }
-}
-
 //TODO(Torin) Remove IDT Global variable
 static void
-idt_install_interrupt(const uint32_t irq_number, const uint64_t irq_handler_addr) {
+idt_install_interrupt(const uint32_t irq_number, const uint64_t irq_handler_addr){
 	static const uint64_t PRIVILEGE_LEVEL_0 = 0b00000000;
 	static const uint64_t PRIVILEGE_LEVEL_3 = 0b01100000;
 	static const uint64_t PRESENT_BIT = (1 << 7); 
@@ -284,10 +235,6 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     write_port_uint8(PIC2_DATA_PORT, 0b11111111);
   }
 
-  //TODO(Torin 2016-10-04) Consider inlining the pit timer config here since in theory
-  //It will only be used once
-  pit_configure_timer(1000);
-
   { //NOTE(Torin) Initalize the IDT
     //NOTE(Torin 2016-09-02) At some point in the future this should just be 
     //A simple load on the staticly baked IDT table that will be created with an
@@ -361,6 +308,7 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 		tag = (struct multiboot_tag *)(((uint8_t *)tag) + ((tag->size + 7) & ~7));
 	}
 
+
   //NOTE(Torin) Initalize the framebuffer
   if(fb_mbtag == 0) {
     kassert(0 && "MULTIBOOT FAILED TO PROVIDE FRAMEBUFFER TAG");
@@ -428,15 +376,53 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     static const uint32_t LAPIC_TIMER_DIVIDE_4 = 0b01;
     static const uint32_t LAPIC_TIMER_DIVIDE_8 = 0b10;
     static const uint32_t LAPIC_TIMER_DIVIDE_16 = 0b11;
+    static const uint32_t LAPIC_TIMER_PERODIC_MODE = 0x20000; 
 
     klog_debug("initalzing lapic timer");
-    lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_DIVIDE_CONFIG_REGISTER, LAPIC_TIMER_DIVIDE_16);
+
+    { //NOTE(Torin) Configure the PIT Timer 
+      static const uint8_t PIT_CHANNEL0_DATA_PORT = 0x40;
+      static const uint8_t PIT_COMMAND_PORT = 0x43;
+      static const uint8_t COMMAND_CHANNEL0 = (0b00) << 6;
+      static const uint8_t COMMAND_ACCESS_LOW_AND_HIGH = (0b11) << 4;
+      static const uint8_t COMMAND_MODE_SQUARE_WAVE = 0x06; 
+      static const uint8_t COMMAND_MODE_RATE_GENERATOR = 0x04; 
+      static const uint32_t PIT_BASE_FREQUENCY = 1193182;
+
+      static const uint8_t COUNTER0 = 0x00;
+      static const uint8_t RW_LOW_HIGH_MODE = 0x30;
+
+      uint32_t requested_frequency = 1000;
+      kassert(requested_frequency > 18);
+      kassert(requested_frequency < 1193181);
+      //set timer mode
+      write_port_uint8(PIT_COMMAND_PORT, COUNTER0 | COMMAND_MODE_RATE_GENERATOR | RW_LOW_HIGH_MODE);
+      //Set the divisor
+      uint32_t divisor = PIT_BASE_FREQUENCY / requested_frequency;
+      uint8_t divisor_low = (uint8_t)(divisor & 0xFF);
+      uint8_t divisor_high = (uint8_t)((divisor >> 8) & 0xFF);
+      write_port_uint8(PIT_CHANNEL0_DATA_PORT, divisor_low);
+      write_port_uint8(PIT_CHANNEL0_DATA_PORT, divisor_high);
+    }
+
+    lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_DIVIDE_CONFIG_REGISTER, LAPIC_TIMER_DIVIDE_2);
     lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, 0xFFFFFFFF);
     lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_IRQ_MASKED);
-    pit_wait_milliseconds(10); 
+
+    globals.pit_timer_ticks = 0;
+    while(globals.pit_timer_ticks <= 32){ asm volatile("nop"); }
     uint32_t ticks_remaining = lapic_read_register(sys->lapic_virtual_address, LAPIC_TIMER_CURRENT_COUNT_REGISTER);  
-    uint32_t ticks_in_10_ms = 0xFFFFFFFF - ticks_remaining;
-    klog_debug("lapic ticks in 10 ms: %u", ticks_in_10_ms);
+    uint32_t ticks_in_32_ms = 0xFFFFFFFF - ticks_remaining;
+    uint32_t ticks_per_millisecond = ticks_in_32_ms / 32;
+    klog_debug("ticks_per_millisecond: %u", ticks_per_millisecond);
+    //NOTE(Torin 2016-10-15) Disable PIT timer interrupt for PIC
+    static const uint8_t PIC1_DATA_PORT = 0x21; 
+    write_port_uint8(PIC1_DATA_PORT, 0b11111111); 
+
+    _interrupt_handlers[2] = (uintptr_t)lapic_periodic_timer_interrupt_handler;
+    lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, ticks_per_millisecond);
+    lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_PERODIC_MODE); 
+
 
     ioapic_initalize(sys->ioapic_virtual_address);
     klog_debug("apic initalized");
@@ -465,6 +451,8 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
   #endif
 
   pci_scan_devices();
+
+  _interrupt_handlers[2] = (uintptr_t)lapic_timer_interrupt; 
   lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x22, 1);
 
 	while(1) { asm volatile("hlt"); };

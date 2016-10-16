@@ -198,5 +198,5 @@ g_p2_table:
 g_cpu_counter:
   resb 2
 stack_bottom:
-  resb 8192
+  resb 16384 
 stack_top:
