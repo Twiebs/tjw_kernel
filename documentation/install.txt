@@ -1,0 +1,7 @@
+#Create a partition for the kernel on your device now refered to as
+#/dev/sdxN where x is the device number and N is the partition number
+mkfs.ext2 /dev/sdxN
+mount /dev/sdxN /mnt
+sudo grub-install --target=i386-pc --boot-directory=/mnt/boot /dev/sdx
+
+

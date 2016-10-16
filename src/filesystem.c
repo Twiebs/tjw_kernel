@@ -14,18 +14,6 @@ typedef struct {
   uint32_t sector_count;
 } __attribute((packed)) MBR_Partition_Table;
 
-static const uint8_t PARTITION_TYPE_LINUX_FILESYSTEM = 0x83;
-
-typedef struct {
-  uint8_t partition_type;
-  uint64_t first_block;
-  uint64_t block_count;
-} Partition_Info;
-
-static const uint16_t EXT2_SUPERBLOCK_SIGNATURE = 0xEF53;
-static const uint16_t EXT2_FILESYSTEM_STATE_CLEAN = 0x01;
-static const uint16_t EXT2_FILESYSTEM_STATE_ERRORS = 0x02;
-
 typedef struct {
   uint32_t inode_count;
   uint32_t block_count;
@@ -54,7 +42,6 @@ typedef struct {
   uint32_t version_major;
   uint16_t user_id_of_reserved_blocks;
   uint16_t group_id_of_reserved_blocks;
-
   //Extended Superblock Fields(Avaiable if Version is >= 1)
   uint32_t first_non_reserved_inode;
   uint16_t inode_struct_size;
@@ -126,51 +113,110 @@ typedef struct {
   uint32_t operating_system_specific_value_4;
 } __attribute((packed)) Ext2_Inode;
 
-static const uint16_t EXT2_INODE_PERMISSION_OTHER_EXECUTE = 1 << 0;
-static const uint16_t EXT2_INODE_PERMISSION_OTHER_WRITE = 1 << 1;
-static const uint16_t EXT2_INODE_PERMISSION_OTHER_READ = 1 << 2;
-static const uint16_t EXT2_INODE_PERMISSION_GROUP_EXECUTE = 1 << 3;
-static const uint16_t EXT2_INODE_PERMISSION_GROUP_WRITE = 1 << 4;
-static const uint16_t EXT2_INODE_PERMISSION_GROUP_READ = 1 << 5;
-static const uint16_t EXT2_INODE_PERMISSION_USER_EXECUTE = 1 << 6;
-static const uint16_t EXT2_INODE_PERMISSION_USER_WRITE = 1 << 7;
-static const uint16_t EXT2_INODE_PERMISSION_USER_READ = 1 << 8;
-static const uint16_t EXT2_INODE_PERMISSION_STICKY_BIT = 1 << 9;
-static const uint16_t EXT2_INODE_PERMISSION_SET_GROUP_ID = 1 << 10;
-static const uint16_t EXT2_INODE_PERMISSION_SET_USER_ID = 1 << 11;
-
-static const uint8_t EXT2_INODE_TYPE_FIFO = 1 << 0; //Bit 12
-static const uint8_t EXT2_INODE_TYPE_CHARACTER_DEVICE = 1 << 1; //Bit 13
-static const uint8_t EXT2_INODE_TYPE_DIRECTORY = 1 << 2; //Bit 14
-
-static inline
-void kdebug_log_ext2_inode(Ext2_Inode *inode){
-  uint8_t type = inode->type_and_permissions >> 12;
-  const char *type_name = "unknown";
-  if(type & EXT2_INODE_TYPE_DIRECTORY) type_name = "directory";
-  else if(type & EXT2_INODE_TYPE_FIFO) type_name = "FIFO";
-  else if(type & EXT2_INODE_TYPE_CHARACTER_DEVICE) type_name = "character_device";
-  klog_debug(" type: %u (%s)", (uint32_t)type, type_name);
-}
-
 typedef struct {
   uint32_t inode;
   uint16_t entry_size;
   uint8_t name_length;
-  uint8_t type_indicator;
+  uint8_t type;
   char name[0];
 } __attribute((packed)) Ext2_Directory_Entry;
 
+static const uint8_t PARTITION_TYPE_LINUX_FILESYSTEM = 0x83;
+
+static const uint16_t EXT2_SUPERBLOCK_SIGNATURE = 0xEF53;
+static const uint16_t EXT2_FILESYSTEM_STATE_CLEAN = 0x01;
+static const uint16_t EXT2_FILESYSTEM_STATE_ERRORS = 0x02;
+
+static const uint32_t EXT2_REQUIRED_FEATURE_COMPRESSION = 1 << 0;
+static const uint32_t EXT2_REQUIRED_FEATURE_DIRECTORY_ENTRYIES_CONTAIN_TYPE = 1 << 1;
+static const uint32_t EXT2_REQUIRED_FEATURE_REPLAY_JOURNAL = 1 << 2;
+static const uint32_t EXT2_REQUIRED_FEATURE_JOURNAL_DEVICE = 1 << 3;
+
+static const uint16_t EXT2_INODE_PERMISSION_OTHER_EXECUTE   = 1 << 0;
+static const uint16_t EXT2_INODE_PERMISSION_OTHER_WRITE     = 1 << 1;
+static const uint16_t EXT2_INODE_PERMISSION_OTHER_READ      = 1 << 2;
+static const uint16_t EXT2_INODE_PERMISSION_GROUP_EXECUTE   = 1 << 3;
+static const uint16_t EXT2_INODE_PERMISSION_GROUP_WRITE     = 1 << 4;
+static const uint16_t EXT2_INODE_PERMISSION_GROUP_READ      = 1 << 5;
+static const uint16_t EXT2_INODE_PERMISSION_USER_EXECUTE    = 1 << 6;
+static const uint16_t EXT2_INODE_PERMISSION_USER_WRITE      = 1 << 7;
+static const uint16_t EXT2_INODE_PERMISSION_USER_READ       = 1 << 8;
+static const uint16_t EXT2_INODE_PERMISSION_STICKY_BIT      = 1 << 9;
+static const uint16_t EXT2_INODE_PERMISSION_SET_GROUP_ID    = 1 << 10;
+static const uint16_t EXT2_INODE_PERMISSION_SET_USER_ID     = 1 << 11;
+static const uint16_t EXT2_INODE_TYPE_FIFO                  = 1 << 12; 
+static const uint16_t EXT2_INODE_TYPE_CHARACTER_DEVICE      = 1 << 13; 
+static const uint16_t EXT2_INODE_TYPE_DIRECTORY             = 1 << 14; 
+
+static const uint8_t EXT2_DIRECTORY_ENTRY_TYPE_UNKNOWN_TYPE = 0;
+static const uint8_t EXT2_DIRECTORY_ENTRY_TYPE_REGULAR_FILE = 1;
+static const uint8_t EXT2_DIRECTORY_ENTRY_TYPE_DIRECTORY = 2;
+static const uint8_t EXT2_DIRECTORY_ENTRY_TYPE_CHARACTER_DEVICE = 3;
+static const uint8_t EXT2_DIRECTORY_ENTRY_TYPE_BLOCK_DEVICE = 4;
+static const uint8_t EXT2_DIRECTORY_ENTRY_TYPE_FIFO = 5;
+static const uint8_t EXT2_DIRECTORY_ENTRY_TYPE_SOCKET = 6;
+static const uint8_t EXT2_DIRECTORY_ENTRY_TYPE_SYMBOLIC_LINK = 7;
+
+static const char *DIRECTORY_ENTRY_TYPE_NAMES[] = {
+  "UNKNOWN_TYPE",     //0
+  "REGULAR_FILE",     //1
+  "DIRECTORY",        //2
+  "CHARACTER_DEVICE", //3
+  "BLOCK_DEVICE",     //4
+  "FIFO",             //5
+  "SCOKET",           //6
+  "SYMBOLIC_LINK"     //7
+};
+
+//===================================================================================================
+
 typedef struct {
   uint32_t inode_count_per_group;
+  uint32_t block_count_per_group;
   uint32_t inode_size;
   uint32_t block_size;
   uint32_t sectors_per_block;
   uint32_t partition_first_sector;
   uint32_t superblock_sector;
-  uintptr_t buffer_physical_address; //The physical address of the buffer below
-  uint8_t buffer[4096];
+  uint32_t required_features;
+  //uintptr_t buffer_physical_address; //The physical address of the buffer below
+  //uint8_t buffer[4096];
 } Ext2_Filesystem;
+
+typedef struct {
+  uint8_t partition_type;
+  uint64_t first_block;
+  uint64_t block_count;
+} Partition_Info;
+
+static inline
+void kdebug_ext2_log_directory_entry(Ext2_Filesystem *fs, Ext2_Directory_Entry *directory_entry){
+  klog_debug("directory_entry");
+  klog_debug("  size: %u", (uint32_t)directory_entry->entry_size);
+  uint32_t name_length = 0;
+  if(fs->required_features & EXT2_REQUIRED_FEATURE_DIRECTORY_ENTRYIES_CONTAIN_TYPE){
+    if(directory_entry->type > 7) klog_debug("  directory_entry has invalid type: %u", (uint32_t)directory_entry->type);
+    else klog_debug("  type: %s", DIRECTORY_ENTRY_TYPE_NAMES[directory_entry->type]);
+    name_length = directory_entry->name_length;
+  } else {
+    klog_debug("  type: FEATURE UNUSED");
+    name_length = directory_entry->name_length;
+    name_length |= directory_entry->type << 8; 
+  }
+
+  klog_debug("  name_length: %u", name_length);
+  klog_debug("  name: %.*s", name_length, directory_entry->name);
+}
+
+static inline
+void kdebug_ext2_log_inode(Ext2_Inode *inode){
+  const char *type_name = "unknown";
+  if(inode->type_and_permissions & EXT2_INODE_TYPE_DIRECTORY) type_name = "directory";
+  else if(inode->type_and_permissions & EXT2_INODE_TYPE_FIFO) type_name = "FIFO";
+  else if(inode->type_and_permissions & EXT2_INODE_TYPE_CHARACTER_DEVICE) type_name = "character_device";
+  uint8_t type = inode->type_and_permissions >> 12;
+  klog_debug(" type: %u (%s)", (uint32_t)type, type_name);
+}
 
 static inline
 void ext2_log_fs_info(Ext2_Filesystem *extfs){
@@ -179,7 +225,7 @@ void ext2_log_fs_info(Ext2_Filesystem *extfs){
   klog_debug(" inode_size: %u", extfs->inode_size);
   klog_debug(" block_size: %u", extfs->block_size);
   klog_debug(" sectors_per_block: %u", extfs->sectors_per_block);
-  klog_debug(" buffer_physical_address: 0x%X", (uint64_t)extfs->buffer_physical_address);
+  //klog_debug(" buffer_physical_address: 0x%X", (uint64_t)extfs->buffer_physical_address);
 }
 
 static inline
