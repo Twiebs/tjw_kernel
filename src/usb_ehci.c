@@ -1,8 +1,3 @@
-#define wait_for_condition(x, timeout) { \
-  globals.lapic_timer_ticks = 0; \
-  while((!(x)) && (globals.lapic_timer_ticks < timeout)) { asm volatile("nop"); } \
-  if(globals.lapic_timer_ticks >= timeout) { klog_debug("wait timed out: %s,  %s:%u", #x, __FILE__, __LINE__); }} \
-  if(globals.lapic_timer_ticks >= timeout)
 
 typedef struct {
   volatile uint8_t capability_length;
@@ -59,17 +54,17 @@ typedef struct {
   volatile uint8_t data_toggle: 1; //31
 } __attribute((packed)) EHCI_QTD_Token;
 
-//NOTE(Torin 2016-10-03) The QTD and QH DS are used in the 64 and 32 bit variants of the
-//EHCI spec data structures
 typedef struct {
   volatile uint32_t next_td;
   volatile uint32_t alt_next_td;
   volatile uint32_t qtd_token;
   volatile uint32_t buffer_pointer_low[5];
   volatile uint32_t buffer_pointer_high[5];
-  volatile uint8_t padding[12]; //Force 64byte size for cache line alignment
+  volatile uint8_t padding[12]; //QTD Must have 64 byte alignment
 } __attribute((packed)) EHCI_QTD; //64 bytes
 
+//TODO(Torin 2016-10-21) Does the QH need to be 32byte algined or literaly cache line aligned?
+//Or can it be aligned on 32Byte boundry (96Byte struct size)???
 typedef struct {
   volatile uint32_t horizontal_link_pointer;
   volatile uint32_t endpoint_characteristics;
@@ -80,6 +75,7 @@ typedef struct {
   volatile uint32_t qtd_token;
   volatile uint32_t buffer_pointer_low[5];
   volatile uint32_t buffer_pointer_high[5];
+  volatile uint8_t padding[60];
 } __attribute((packed)) EHCI_Queue_Head; //68 Bytes
 
 typedef struct {
@@ -104,27 +100,26 @@ typedef struct {
   volatile uint16_t reserved1 : 9; // 23-31
 } __attribute((packed)) EHCI_Port;
 
-static_assert(sizeof(EHCI_Port) == 4);
-
-//=======================================================================================
-
 typedef struct {
   uint32_t periodic_frame_list[1024]; //4096 bytes
   //====================================================== PAGE BOUNDRAY
-  EHCI_Queue_Head asynch_qh __attribute((aligned(64))); //68 bytes
-  EHCI_Queue_Head periodic_qh __attribute((aligned(64))); //68 bytes
-  //TODO(Torin 2016-09-25) EHCI spec says these structs need to be "32-byte (cache line)"
-  //aligned.  Does this mean they need to be 64Bytes aligned on a newer system? They are
-  //already bigger than 64 bytes so I will just put that for now 
+  EHCI_Queue_Head asynch_qh   __attribute((aligned(64)));   //128 Bytes 
+  EHCI_Queue_Head periodic_qh __attribute((aligned(64)));   //128 Bytes
+  EHCI_QTD qtd_array[4]       __attribute((aligned(64)));   //256 Bytes (4*64)
 
-  EHCI_QTD qtd_array[4] __attribute((aligned(64))); //4*64 = 256 bytes
+  uintptr_t first_page_physical_address;
+  uintptr_t second_page_physical_address;
+
   EHCI_Operational_Registers *op_regs;
+  EHCI_Capability_Registers *cap_regs;
   PCI_Device pci_device;
+
+  uint8_t port_count;
+  bool is_64bit_capable;
+  bool has_port_power_control;
 } EHCI_Controller;
 
-static EHCI_Controller g_ehci __attribute((aligned(4096)));
-
-//====================================================================================
+static_assert(sizeof(EHCI_Controller) < 4096*2);
 
 static inline
 void kdebug_log_ehci_operational_registers(EHCI_Operational_Registers *opregs){
@@ -173,9 +168,7 @@ void kdebug_log_hc_status(const EHCI_Controller *hc){
   klog_debug("asynch_schedule_status: %u", (uint32_t)usbsts->asynch_schedule_status);
 }
 
-//====================================================================================
-
-static void ehci_init_qtd(EHCI_QTD *previous_td, EHCI_QTD *current_td, bool toggle, uint8_t transfer_type, uint16_t size, uintptr_t data_physical_address) {
+static void ehci_init_qtd(EHCI_QTD *previous_td, EHCI_QTD *current_td, uintptr_t current_td_physical_address, bool toggle, uint8_t transfer_type, uint16_t size, uintptr_t data_physical_address) {
   kassert(size < 32767);
   kassert(transfer_type < 3);
   static const uint32_t QTD_TRANSFER_SIZE_SHIFT = 16;
@@ -187,8 +180,8 @@ static void ehci_init_qtd(EHCI_QTD *previous_td, EHCI_QTD *current_td, bool togg
   static const uint32_t QTD_DATA_TOGGLE_BIT = 1 << 31;
 
   if(previous_td != 0) {
-    previous_td->next_td = (uint32_t)(uintptr_t)current_td;
-    previous_td->alt_next_td = (uint32_t)(uintptr_t)current_td;
+    previous_td->next_td = (uint32_t)(uintptr_t)current_td_physical_address;
+    previous_td->alt_next_td = (uint32_t)(uintptr_t)current_td_physical_address;
   }
 
   memset(current_td, 0x00, sizeof(EHCI_QTD));
@@ -207,14 +200,7 @@ static void ehci_init_qtd(EHCI_QTD *previous_td, EHCI_QTD *current_td, bool togg
   current_td->buffer_pointer_low[0] = (uint32_t)data_physical_address;
   current_td->buffer_pointer_high[0] = (uint32_t)(data_physical_address >> 32);
 }
-
-typedef enum {
-  USB_Speed_FULL = 0b00,
-  USB_Speed_LOW = 0b01,
-  USB_Speed_HIGH = 0b10,
-} USB_Speed;
-
-static void ehci_initalize_qh(EHCI_Queue_Head *qh, EHCI_QTD *qtd, uint8_t device_address, uint8_t endpoint_number, USB_Speed speed, uint16_t max_packet_length){
+static void ehci_initalize_qh(EHCI_Queue_Head *qh, uintptr_t qtd_physical_address, uint8_t device_address, uint8_t endpoint_number, USB_Speed speed, uint16_t max_packet_length){
   static const uint32_t DATA_TOGGLE_CONTROL_BIT = 1 << 14;
   static const uint32_t HEAD_OF_RECLAMATION_LIST_BIT = 1 << 15;
   static const uint32_t HIGH_BANDWIDTH_PIPE_MULT_ONE = 0b01 << 30;
@@ -228,8 +214,8 @@ static void ehci_initalize_qh(EHCI_Queue_Head *qh, EHCI_QTD *qtd, uint8_t device
   qh->endpoint_characteristics |= DATA_TOGGLE_CONTROL_BIT;
   qh->endpoint_characteristics |= max_packet_length << 16;
   qh->endpoint_capabilities = HIGH_BANDWIDTH_PIPE_MULT_ONE;
-  qh->next_td = (uint32_t)(uintptr_t)qtd;
-  qh->alt_next_td = (uint32_t)(uintptr_t)qtd;
+  qh->next_td = (uint32_t)(uintptr_t)qtd_physical_address;
+  qh->alt_next_td = (uint32_t)(uintptr_t)qtd_physical_address;
   qh->qtd_token = 0;
 }
 
@@ -289,14 +275,18 @@ void ehci_enable_asynch_schedule(EHCI_Controller *hc){
   static const uint8_t QTD_TOKEN_TYPE_OUT = 0b00;
   static const uint8_t QTD_TOKEN_TYPE_IN = 0b01;
   static const uint8_t QTD_TOKEN_TYPE_SETUP = 0b10;
+  EHCI_Queue_Head *qh = &hc->asynch_qh;
   EHCI_QTD *setup_qtd = &hc->qtd_array[0];
   EHCI_QTD *status_qtd = &hc->qtd_array[1];
-  ehci_init_qtd(0, setup_qtd, 0, QTD_TOKEN_TYPE_SETUP, sizeof(USB_Device_Request), (uintptr_t)request);
-  ehci_init_qtd(setup_qtd, status_qtd, 1, QTD_TOKEN_TYPE_IN, 0, 0);
+  uintptr_t qh_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, asynch_qh) - 4096;
+  uintptr_t setup_qtd_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[0]) - 4096;
+  uintptr_t status_qtd_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[1]) - 4096;
 
+  ehci_init_qtd(0, setup_qtd, setup_qtd_physical, 0, QTD_TOKEN_TYPE_SETUP, sizeof(USB_Device_Request), (uintptr_t)request);
+  ehci_init_qtd(setup_qtd, status_qtd, status_qtd_physical, 1, QTD_TOKEN_TYPE_IN, 0, 0);
   ehci_disable_asynch_schedule(hc);
-  EHCI_Queue_Head *qh = &hc->asynch_qh;
-  ehci_initalize_qh(qh, setup_qtd, device_address, 0, USB_Speed_HIGH, 64);
+  ehci_initalize_qh(qh, setup_qtd_physical, device_address, 0, USB_Speed_HIGH, 64);
+
   ehci_enable_asynch_schedule(hc);
   wait_for_condition(ehci_check_qh_status(qh), 125) {}
   ehci_disable_asynch_schedule(hc);
@@ -320,32 +310,30 @@ void ehci_enable_asynch_schedule(EHCI_Controller *hc){
 //TODO(Torin 2016-10-16) Find out the max timeout value for a usb transaction
 //to wait for the qtd to become inactive
 
-static inline
-int ehci_internal_control_transfer_with_data(EHCI_Controller *hc, EHCI_Queue_Head *qh, EHCI_QTD *setup_qtd, EHCI_QTD *data_qtd, EHCI_QTD *status_qtd, 
-uint8_t device_address, USB_Device_Request *request, uintptr_t data_physical_address){
+static inline 
+int ehci_control_transfer_with_data(EHCI_Controller *hc, uint8_t device_address, USB_Device_Request *request, uintptr_t data_physical_address){
   static const uint8_t QTD_TOKEN_TYPE_OUT = 0b00;
   static const uint8_t QTD_TOKEN_TYPE_IN = 0b01;
   static const uint8_t QTD_TOKEN_TYPE_SETUP = 0b10;
-  ehci_init_qtd(0, setup_qtd, 0, QTD_TOKEN_TYPE_SETUP, 8, (uintptr_t)request);
-  ehci_init_qtd(setup_qtd, data_qtd, 1, request->direction ? QTD_TOKEN_TYPE_IN : QTD_TOKEN_TYPE_OUT, request->length, data_physical_address);
-  ehci_init_qtd(data_qtd, status_qtd, 1, request->direction ? QTD_TOKEN_TYPE_OUT : QTD_TOKEN_TYPE_IN, 0, 0);
+  EHCI_Queue_Head *qh = &hc->asynch_qh;
+  EHCI_QTD *setup_qtd = &hc->qtd_array[0];
+  EHCI_QTD *data_qtd = &hc->qtd_array[1];
+  EHCI_QTD *status_qtd = &hc->qtd_array[2];
+  uintptr_t qh_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, asynch_qh) - 4096;
+  uintptr_t setup_qtd_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[0]) - 4096;
+  uintptr_t data_qtd_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[1]) - 4096; 
+  uintptr_t status_qtd_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[2]) - 4096; 
+
+  ehci_init_qtd(0, setup_qtd, setup_qtd_physical, 0, QTD_TOKEN_TYPE_SETUP, 8, (uintptr_t)request);
+  ehci_init_qtd(setup_qtd, data_qtd, data_qtd_physical, 1, request->direction ? QTD_TOKEN_TYPE_IN : QTD_TOKEN_TYPE_OUT, request->length, data_physical_address);
+  ehci_init_qtd(data_qtd, status_qtd, status_qtd_physical, 1, request->direction ? QTD_TOKEN_TYPE_OUT : QTD_TOKEN_TYPE_IN, 0, 0);
   ehci_disable_asynch_schedule(hc);
-  ehci_initalize_qh(qh, setup_qtd, device_address, 0, USB_Speed_HIGH, 64);
+  ehci_initalize_qh(qh, setup_qtd_physical, device_address, 0, USB_Speed_HIGH, 64);
   ehci_enable_asynch_schedule(hc);
   wait_for_condition(ehci_check_qh_status(qh), 125){}
   ehci_disable_asynch_schedule(hc);
   int status = ehci_check_qh_status(qh);
-  return status;
-}
 
-static inline 
-int ehci_control_transfer_with_data(EHCI_Controller *hc, uint8_t device_address, USB_Device_Request *request, uintptr_t data_physical_address){
-  EHCI_QTD *setup_qtd = &hc->qtd_array[0];
-  EHCI_QTD *data_qtd = &hc->qtd_array[1];
-  EHCI_QTD *status_qtd = &hc->qtd_array[2];
-  EHCI_Queue_Head *qh = &hc->asynch_qh;
-  int status = ehci_internal_control_transfer_with_data(hc, qh, setup_qtd, data_qtd, status_qtd, 
-    device_address, request, data_physical_address);
   if(status == -1){
     klog_error("[CONTROL_TRANSFER_ERROR]");
     klog_debug("qh_qtd:");
@@ -359,37 +347,19 @@ int ehci_control_transfer_with_data(EHCI_Controller *hc, uint8_t device_address,
     klog_debug("usb_status");
     kdebug_log_hc_status(hc);
     return 0;
-  } else if (status == 0){
-    klog_warning("failed first control transfer");
-    status = ehci_internal_control_transfer_with_data(hc, qh, setup_qtd, data_qtd, status_qtd, 
-      device_address, request, data_physical_address);
-    if(status == 0){
-      klog_error("[CONTROL_TRANSFER_TIMEOUT");
-      klog_debug("qh_qtd:");
-      kdebug_log_qtd_token(qh->qtd_token);
-      klog_debug("setup_qtd: ");
-      kdebug_log_qtd(setup_qtd);
-      klog_debug("data_qtd: ");
-      kdebug_log_qtd(data_qtd);
-      klog_debug("status_qtd: ");
-      kdebug_log_qtd(status_qtd);
-      klog_debug("usb_status");
-      kdebug_log_hc_status(hc);
-      return 0;
-    } else if (status == -1){
-      klog_error("[CONTROL_TRANSFER_ERROR]");
-      klog_debug("qh_qtd:");
-      kdebug_log_qtd_token(qh->qtd_token);
-      klog_debug("setup_qtd: ");
-      kdebug_log_qtd(setup_qtd);
-      klog_debug("data_qtd: ");
-      kdebug_log_qtd(data_qtd);
-      klog_debug("status_qtd: ");
-      kdebug_log_qtd(status_qtd);
-      klog_debug("usb_status");
-      kdebug_log_hc_status(hc);
-      return 0;
-    }
+  } else if (status == 0) {
+    klog_error("[CONTROL_TRANSFER_TIMEOUT");
+    klog_debug("qh_qtd:");
+    kdebug_log_qtd_token(qh->qtd_token);
+    klog_debug("setup_qtd: ");
+    kdebug_log_qtd(setup_qtd);
+    klog_debug("data_qtd: ");
+    kdebug_log_qtd(data_qtd);
+    klog_debug("status_qtd: ");
+    kdebug_log_qtd(status_qtd);
+    klog_debug("usb_status");
+    kdebug_log_hc_status(hc);
+    return 0;
   }
   return 1;
 }
@@ -404,17 +374,22 @@ int ehci_bulk_transfer_with_data(EHCI_Controller *hc, USB_Mass_Storage_Device *m
   USB_Command_Status_Wrapper csw = {};
   csw.status = CSW_COMMAND_FAILED;
   //Preallocate Required data strucutres
+
+  EHCI_Queue_Head *out_qh = &hc->asynch_qh;
   EHCI_QTD *out_data_qtd = &hc->qtd_array[0];
   EHCI_QTD *in_data_qtd = &hc->qtd_array[1];
   EHCI_QTD *in_status_qtd = &hc->qtd_array[2];
-  ehci_init_qtd(0, out_data_qtd, msd->out_toggle_value, QTD_TOKEN_TYPE_OUT, out_length, (uintptr_t)cbw);
-  ehci_init_qtd(0, in_data_qtd, msd->in_toggle_value, QTD_TOKEN_TYPE_IN, in_length, (uintptr_t)in_data);
-  ehci_init_qtd(in_data_qtd, in_status_qtd, !msd->in_toggle_value, QTD_TOKEN_TYPE_IN, sizeof(USB_Command_Status_Wrapper), (uintptr_t)&csw);
+  uintptr_t out_data_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[0]) - 4096;
+  uintptr_t in_data_physical  = hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[1]) - 4096; 
+  uintptr_t in_status_physical= hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[2]) - 4096; 
+
+  ehci_init_qtd(0, out_data_qtd, out_data_physical, msd->out_toggle_value, QTD_TOKEN_TYPE_OUT, out_length, (uintptr_t)cbw);
+  ehci_init_qtd(0, in_data_qtd, in_data_physical, msd->in_toggle_value, QTD_TOKEN_TYPE_IN, in_length, (uintptr_t)in_data);
+  ehci_init_qtd(in_data_qtd, in_status_qtd, in_status_physical, !msd->in_toggle_value, QTD_TOKEN_TYPE_IN, sizeof(USB_Command_Status_Wrapper), (uintptr_t)&csw);
   msd->out_toggle_value = !msd->out_toggle_value;
 
-  EHCI_Queue_Head *out_qh = &hc->asynch_qh;
   ehci_disable_asynch_schedule(hc);
-  ehci_initalize_qh(out_qh, out_data_qtd, msd->device_number, msd->out_endpoint, USB_Speed_HIGH, msd->out_endpoint_max_packet_size);
+  ehci_initalize_qh(out_qh, out_data_physical, msd->device_number, msd->out_endpoint, USB_Speed_HIGH, msd->out_endpoint_max_packet_size);
   ehci_enable_asynch_schedule(hc);
   wait_for_condition(ehci_check_qh_status(out_qh), 125){}
   ehci_disable_asynch_schedule(hc);
@@ -429,7 +404,7 @@ int ehci_bulk_transfer_with_data(EHCI_Controller *hc, USB_Mass_Storage_Device *m
 
   EHCI_Queue_Head *in_qh = &hc->asynch_qh;
   ehci_disable_asynch_schedule(hc);
-  ehci_initalize_qh(in_qh, in_data_qtd, msd->device_number, msd->in_endpoint, USB_Speed_HIGH, msd->in_endpoint_max_packet_size);
+  ehci_initalize_qh(in_qh, in_data_physical, msd->device_number, msd->in_endpoint, USB_Speed_HIGH, msd->in_endpoint_max_packet_size);
   ehci_enable_asynch_schedule(hc);
   wait_for_condition(ehci_check_qh_status(in_qh), 1000) {}
   ehci_disable_asynch_schedule(hc);
@@ -485,16 +460,23 @@ int ehci_bulk_transfer_no_data(EHCI_Controller *hc, USB_Mass_Storage_Device *msd
   USB_Command_Status_Wrapper csw = {};
   csw.status = CSW_COMMAND_FAILED;
   //Preallocate Required data strucutres
+
+  EHCI_Queue_Head *out_qh = &hc->asynch_qh;
+  EHCI_Queue_Head *in_qh = &hc->asynch_qh;
   EHCI_QTD *out_data_qtd = &hc->qtd_array[0];
   EHCI_QTD *in_status_qtd = &hc->qtd_array[1];
-  ehci_init_qtd(0, out_data_qtd, msd->out_toggle_value, QTD_TOKEN_TYPE_OUT, 31, (uintptr_t)cbw);
-  ehci_init_qtd(0, in_status_qtd, msd->in_toggle_value, QTD_TOKEN_TYPE_IN, sizeof(USB_Command_Status_Wrapper), (uintptr_t)&csw);
+  uintptr_t out_qh_physical = hc->second_page_physical_address + offsetof(EHCI_Controller,  asynch_qh)- 4096; 
+  uintptr_t in_qh_physical = hc->second_page_physical_address + offsetof(EHCI_Controller,  asynch_qh)- 4096; 
+  uintptr_t out_data_physical = hc->second_page_physical_address + offsetof(EHCI_Controller,  qtd_array[0])- 4096; 
+  uintptr_t in_status_physical = hc->second_page_physical_address + offsetof(EHCI_Controller,  qtd_array[1])- 4096; 
+
+  ehci_init_qtd(0, out_data_qtd, out_data_physical, msd->out_toggle_value, QTD_TOKEN_TYPE_OUT, 31, (uintptr_t)cbw);
+  ehci_init_qtd(0, in_status_qtd, in_status_physical, msd->in_toggle_value, QTD_TOKEN_TYPE_IN, sizeof(USB_Command_Status_Wrapper), (uintptr_t)&csw);
   msd->out_toggle_value = !msd->out_toggle_value;
   msd->in_toggle_value = !msd->in_toggle_value;
 
-  EHCI_Queue_Head *out_qh = &hc->asynch_qh;
   ehci_disable_asynch_schedule(hc);
-  ehci_initalize_qh(out_qh, out_data_qtd, msd->device_number, msd->out_endpoint, USB_Speed_HIGH, msd->out_endpoint_max_packet_size);
+  ehci_initalize_qh(out_qh, out_data_physical, msd->device_number, msd->out_endpoint, USB_Speed_HIGH, msd->out_endpoint_max_packet_size);
   ehci_enable_asynch_schedule(hc);
   wait_for_condition(ehci_check_qh_status(out_qh), 125){}
   ehci_disable_asynch_schedule(hc);
@@ -507,9 +489,8 @@ int ehci_bulk_transfer_no_data(EHCI_Controller *hc, USB_Mass_Storage_Device *msd
     return 0;
   } 
 
-  EHCI_Queue_Head *in_qh = &hc->asynch_qh;
   ehci_disable_asynch_schedule(hc);
-  ehci_initalize_qh(in_qh, in_status_qtd, msd->device_number, msd->in_endpoint, USB_Speed_HIGH, msd->in_endpoint_max_packet_size);
+  ehci_initalize_qh(in_qh, in_status_physical, msd->device_number, msd->in_endpoint, USB_Speed_HIGH, msd->in_endpoint_max_packet_size);
   ehci_enable_asynch_schedule(hc);
   wait_for_condition(ehci_check_qh_status(in_qh), 125){}
   status = ehci_check_qh_status(in_qh);
@@ -635,7 +616,6 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
     }
 
     USB_String_Descriptor *string_descriptor = (USB_String_Descriptor *)string_descriptor_buffer;
-    klog_debug("string_descriptor_length: %u", string_descriptor->length);
     uint16_t *supported_language_list = (uint16_t *)(((uintptr_t)string_descriptor) + 2);
     size_t supported_language_count = string_descriptor->length - 2;
     bool device_supports_english = false;
@@ -670,11 +650,7 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
 
   uint8_t configuration_value = 0;
   uint8_t configuration_buffer[256] = {};
-  klog_debug("configuration_count: %u", (uint32_t)device_descriptor.config_count);
-
-
   for(size_t config_index = 0; config_index < device_descriptor.config_count; config_index++){
-    klog_debug("config_index: %lu", config_index);
     USB_Configuration_Descriptor *config = (USB_Configuration_Descriptor *)configuration_buffer;
     ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_CONFIG, config_index, 0,  64, configuration_buffer);
     //TODO(Torin) Have an entire page mapped for this buffer
@@ -1006,36 +982,37 @@ int ehci_is_hc_halted(EHCI_Operational_Registers *op_regs){
   return result;
 }
 
-int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
-  klog_debug("starting ehci initalization...");
+int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *pci_device){
+  //TODO(Torin 2016-10-20) PCI Devices should be stored in a seperate location in memory
 
-  //TODO(Torin 2016-09-16) Idealy this memory_map should occur in a different location
-  uintptr_t ehci_virtual_page = 0x1000000;  
-  uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_2MB(ehci_physical_address, ehci_virtual_page, 0); 
-  uintptr_t ehci_virtual_address = page_offset + ehci_virtual_page;
+  uintptr_t physical_page_to_map = ehci_physical_address;
+  size_t physical_page_offset = 0;
+  if(physical_page_to_map & 0xFFF){
+    physical_page_to_map &= ~0xFFFLL; 
+    physical_page_offset = ehci_physical_address - physical_page_to_map;
+  }
 
-  EHCI_Controller *hc = &g_ehci;
+  uintptr_t ehci_registers_virtual_address = kmem_map_physical_mmio(&globals.memory_state, physical_page_to_map, 1);
+  EHCI_Controller *hc = (EHCI_Controller *)kmem_allocate_persistant_kernel_memory(&globals.memory_state, 2);
+  hc->cap_regs = (EHCI_Capability_Registers *)(ehci_registers_virtual_address + physical_page_offset);
+  hc->op_regs = (EHCI_Operational_Registers *)(ehci_registers_virtual_address + physical_page_offset + hc->cap_regs->capability_length);
   hc->pci_device = *pci_device;
-  EHCI_Capability_Registers *cap_regs = (EHCI_Capability_Registers *)ehci_virtual_address;
-  uintptr_t operational_register_base = ehci_virtual_address + cap_regs->capability_length;
-  EHCI_Operational_Registers *op_regs = (EHCI_Operational_Registers *)operational_register_base;
-  hc->op_regs = op_regs;
+  hc->first_page_physical_address = kmem_get_physical_address((uintptr_t)hc + 0);
+  hc->second_page_physical_address = kmem_get_physical_address((uintptr_t)hc + 4096); 
+  //TODO(Torin 2016-10-22) Store the EHCI Controller pointer somewhere
+  //Upfront because it will leek here if host control initalization
+  //fails for any reason.  I say don't even bother having a mechanisim
+  //to release memory if it fails just make sure it is accounted for properly
 
-  bool use_64_bit_ds = false;
-  size_t port_count = 0;
-  bool is_port_power_control_enabled = false;
-  
   { //NOTE(Torin 2016-09-04) Extract information from hhcparams register
     static const uint32_t HHCPARAMS_EXT_CAPS_MASK = 0xFF00;
     static const uint32_t HHCPARAMS_ADDRESSING_BIT = (1 << 0);
     static const uint32_t ADDRESSING_CAPABILITY_32 = 0b00;
     static const uint32_t ADDRESSING_CAPABILITY_64 = 0b01;
-    uint32_t addressing_capability = cap_regs->hcc_params & HHCPARAMS_ADDRESSING_BIT;
-    uint32_t extended_capabilities = (cap_regs->hcc_params & HHCPARAMS_EXT_CAPS_MASK) >> 8;
-    if(addressing_capability == ADDRESSING_CAPABILITY_64) use_64_bit_ds = true;
+    uint32_t addressing_capability = hc->cap_regs->hcc_params & HHCPARAMS_ADDRESSING_BIT;
+    uint32_t extended_capabilities = (hc->cap_regs->hcc_params & HHCPARAMS_EXT_CAPS_MASK) >> 8;
+    if(addressing_capability == ADDRESSING_CAPABILITY_64) hc->is_64bit_capable = true;
     if(extended_capabilities >= 0x40){
-      //TODO(Torin 2016-09-25) Need better error handling to bail out if taking 
-      //ownership of the EHCI controler here fails for some reason
       static const uint32_t EHCI_USBLEGSUP_REGISTER_OFFSET = 0x00;
       uint32_t legacy_support_register = extended_capabilities + EHCI_USBLEGSUP_REGISTER_OFFSET;
       pci_set_config_address(pci_device->bus_number, pci_device->device_number, 
@@ -1061,19 +1038,25 @@ int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
   { //NOTE(Torin 2016-09-17) Extract HCSPARAMS information
     static const uint32_t HCS_PORT_COUNT_MASK = 0b1111;
     static const uint32_t POWER_PORT_CONTROL_BIT = 1 << 4;
-    port_count = cap_regs->hcs_params & HCS_PORT_COUNT_MASK; 
-    is_port_power_control_enabled = cap_regs->hcs_params & POWER_PORT_CONTROL_BIT;
+    hc->port_count = hc->cap_regs->hcs_params & HCS_PORT_COUNT_MASK; 
+    hc->has_port_power_control = hc->cap_regs->hcs_params & POWER_PORT_CONTROL_BIT;
+    size_t total_register_offset_from_page = sizeof(EHCI_Operational_Registers) + hc->cap_regs->capability_length + (hc->port_count * sizeof(EHCI_Port)); 
+    if(total_register_offset_from_page > 4096){
+      klog_error("total required registe space exceeds page boundry");
+      return 0;
+    }
   }
 
   { //NOTE(Torin 2016-09-06) Setup Queue heads and periodic frame list
     static const uint32_t EHCI_POINTER_TERMINATE = 1;
     static const uint32_t EHCI_POINTER_TYPE_QH = (1 << 1);
-    EHCI_Queue_Head *asynch_qh = &g_ehci.asynch_qh;
-    EHCI_Queue_Head *periodic_qh = &g_ehci.periodic_qh;
+    EHCI_Queue_Head *asynch_qh = &hc->asynch_qh;
+    EHCI_Queue_Head *periodic_qh = &hc->periodic_qh;
     memset(asynch_qh, 0x00, sizeof(EHCI_Queue_Head));
     memset(periodic_qh, 0x00, sizeof(EHCI_Queue_Head));
     //NOTE(Torin 2016-09-10) Setup the Asynch_Queue_Head
-    asynch_qh->horizontal_link_pointer = ((uint32_t)(uintptr_t)(asynch_qh)) | EHCI_POINTER_TYPE_QH;
+    uintptr_t asynch_qh_physical_address = hc->second_page_physical_address + offsetof(EHCI_Controller, asynch_qh) - 4096;
+    asynch_qh->horizontal_link_pointer = ((uint32_t)(uintptr_t)(asynch_qh_physical_address)) | EHCI_POINTER_TYPE_QH;
     asynch_qh->endpoint_characteristics = 0; //TODO(Torin 2016-09-06) This needs somthing
     asynch_qh->current_td = EHCI_POINTER_TERMINATE;
     asynch_qh->next_td = EHCI_POINTER_TERMINATE;
@@ -1084,8 +1067,9 @@ int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
     periodic_qh->next_td = EHCI_POINTER_TERMINATE;
     periodic_qh->alt_next_td = EHCI_POINTER_TERMINATE;
     //NOTE(Torin 2016-10-04) Setup perodic framelist 
-    uint32_t *periodic_frame_list = g_ehci.periodic_frame_list;
-    for(size_t i = 0; i < 1024; i++) periodic_frame_list[i] = (uint32_t)(uintptr_t)periodic_qh | EHCI_POINTER_TYPE_QH | EHCI_POINTER_TERMINATE;
+    uint32_t *periodic_frame_list = hc->periodic_frame_list;
+    uintptr_t perodic_qh_physical_address = hc->first_page_physical_address;
+    for(size_t i = 0; i < 1024; i++) periodic_frame_list[i] = (uint32_t)perodic_qh_physical_address | EHCI_POINTER_TYPE_QH | EHCI_POINTER_TERMINATE;
   }
 
   { //NOTE(Torin 2016-09-13) Set nessecary registers and initalize the controller 
@@ -1105,22 +1089,22 @@ int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
     static const uint32_t USBINTR_INTERRUPT_ON_ASYNC_ADVANCE_ENABLE = 1 << 5;
 
     //NOTE(Torin 2016-10-09)The HC will halt within 16 microframes of clearing the bit
-    op_regs->usb_command = op_regs->usb_command & (~USBCMD_RUN_STOP);
+    hc->op_regs->usb_command = hc->op_regs->usb_command & (~USBCMD_RUN_STOP);
     //NOTE(Torin 2016-10-09) 16 micro-frames * 125micro-seconds = 2mili-seconds
-    wait_for_condition((op_regs->usb_command & USBCMD_RUN_STOP) == 0, 3) { return 0;}
-    op_regs->usb_command = op_regs->usb_command | USBCMD_HCRESET;
+    wait_for_condition((hc->op_regs->usb_command & USBCMD_RUN_STOP) == 0, 3) { return 0;}
+    hc->op_regs->usb_command = hc->op_regs->usb_command | USBCMD_HCRESET;
     //TODO(Torin 2016-10-09) What is a good value to wait while the HC resets?
-    wait_for_condition((op_regs->usb_command & USBCMD_HCRESET) == 0, 60) { return 0; }
+    wait_for_condition((hc->op_regs->usb_command & USBCMD_HCRESET) == 0, 60) { return 0; }
 
-    op_regs->usb_interrupt = USBINTR_INTERRUPT_ENABLE | USBINTR_ERROR_INTERRUPT_ENABLE | USBINTR_PORT_CHANGE_INTERRUPT_ENABLE |
+    hc->op_regs->usb_interrupt = USBINTR_INTERRUPT_ENABLE | USBINTR_ERROR_INTERRUPT_ENABLE | USBINTR_PORT_CHANGE_INTERRUPT_ENABLE |
       USBINTR_FRAME_LIST_ROLLOVER_ENABLE | USBINTR_HOST_SYSTEM_ERROR_ENABLE | USBINTR_INTERRUPT_ON_ASYNC_ADVANCE_ENABLE;
-    op_regs->ctrl_ds_segment = 0x00;
-    op_regs->perodic_list_base = (uint32_t)(uintptr_t)g_ehci.periodic_frame_list;
-    op_regs->async_list_address = (uint32_t)(uintptr_t)&g_ehci.asynch_qh;
-    op_regs->frame_index = 0x00;
-    op_regs->config_flag = 1; //NOTE(Torin) Route all ports to the EHCI controler(Rather than compainion controllers)
-    op_regs->usb_command = USBCMD_INTERRUPT_THRESHOLD_CONTROL_8 | USBCMD_ASYNCH_SCHEDULE_ENABLE | USBCMD_RUN_STOP; 
-    wait_for_condition((op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED) == 0, 2) { return 0; }
+    hc->op_regs->ctrl_ds_segment = 0x00;
+    hc->op_regs->perodic_list_base = (uint32_t)(uintptr_t)hc->first_page_physical_address;
+    hc->op_regs->async_list_address = (uint32_t)(uintptr_t)(hc->second_page_physical_address + offsetof(EHCI_Controller, asynch_qh) - 4096);
+    hc->op_regs->frame_index = 0x00;
+    hc->op_regs->config_flag = 1; //NOTE(Torin) Route all ports to the EHCI controler(Rather than compainion controllers)
+    hc->op_regs->usb_command = USBCMD_INTERRUPT_THRESHOLD_CONTROL_8 | USBCMD_ASYNCH_SCHEDULE_ENABLE | USBCMD_RUN_STOP; 
+    wait_for_condition((hc->op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED) == 0, 2) { return 0; }
     klog_debug("ehci controller was started");
   }
 
@@ -1128,7 +1112,7 @@ int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
   //Is this where we should wait 100ms for the ports power state to stabialize?
 
   { //NOTE(Torin 2016-09-06) Enumerating the ports managed by this controler
-    for(size_t port_index = 0; port_index < port_count; port_index++) {
+    for(size_t port_index = 0; port_index < hc->port_count; port_index++) {
       static const uint32_t PORT_ENABLED_BIT = (1 << 2);
       static const uint32_t PORT_POWER_BIT = 1 << 12;
       static const uint32_t PORT_ENABLED_STATUS_CHANGED_BIT = 1 << 3;
@@ -1137,15 +1121,15 @@ int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
       static const uint32_t PORT_CONNECT_STATUS_BIT = 1 << 0;
       static const uint32_t PORT_LINE_STATUS_LOW_SPEED_DEVICE = 1 << 10;
 
-     if(ehci_is_hc_halted(op_regs)){
+     if(ehci_is_hc_halted(hc->op_regs)){
        klog_error("ehci host controller unexpectedly halted during port enumeration");
        return 0;
      }
 
       static const uint32_t USBSTS_PORT_CHANGE_DETECT = 1 << 2;
-      op_regs->usb_status = op_regs->usb_status & ~USBSTS_PORT_CHANGE_DETECT;
+      hc->op_regs->usb_status = hc->op_regs->usb_status & ~USBSTS_PORT_CHANGE_DETECT;
 
-      uint32_t volatile *port_reg = &op_regs->ports[port_index];
+      uint32_t volatile *port_reg = &hc->op_regs->ports[port_index];
       if(*port_reg & PORT_CONNECT_STATUS_CHANGED_BIT){
         *port_reg = *port_reg | PORT_CONNECT_STATUS_CHANGED_BIT; //clears out connect status change
         wait_for_condition((*port_reg & PORT_CONNECT_STATUS_CHANGED_BIT) == 0, 1) {}
@@ -1157,7 +1141,7 @@ int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
             if(*port_reg & PORT_LINE_STATUS_LOW_SPEED_DEVICE){
               klog_error("port is a low speed device!");
             }
-            kassert(ehci_is_hc_halted(op_regs) == 0);
+            kassert(ehci_is_hc_halted(hc->op_regs) == 0);
             is_port_enabled = ehci_reset_port(port_reg);
           }
           if(is_port_enabled == false){
@@ -1167,7 +1151,7 @@ int ehci_initalize(uintptr_t ehci_physical_address, PCI_Device *pci_device){
             lapic_wait_milliseconds(10);
             //TODO(Torin 2016-10-15) Put this inside of the EHCI controler struct!
             USB_Device device = {};
-            ehci_initalize_device(&g_ehci, &device);
+            ehci_initalize_device(hc, &device);
           }
         }
       }

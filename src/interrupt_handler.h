@@ -37,7 +37,6 @@ typedef struct {
   uint64_t ss;
 } Interrupt_Stack_Frame_Basic;
 
-
 static void irq_handler_keyboard();
 static void irq_handler_pit();
 static void lapic_timer_interrupt();

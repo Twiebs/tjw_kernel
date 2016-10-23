@@ -1,6 +1,0 @@
-framebuffer: width: 1280, height: 720, depth: 4
-recieved irq
-tss rsp0: 0x127002
-tss base address: 0x1100E0
-tss limit: 0xFF
-task_register selector_index: 0x28

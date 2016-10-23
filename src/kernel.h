@@ -22,6 +22,14 @@
 #define klog_info(...)    klog_write_fmt(&globals.log, __VA_ARGS__)
 #define klog_error(...)   klog_write_fmt(&globals.log, __VA_ARGS__)
 
+
+#define wait_for_condition(x, timeout) { \
+  globals.lapic_timer_ticks = 0; \
+  while((!(x)) && (globals.lapic_timer_ticks < timeout)) { asm volatile("nop"); } \
+  if(globals.lapic_timer_ticks >= timeout) { klog_debug("wait timed out: %s,  %s:%u", #x, __FILE__, __LINE__); }} \
+  if(globals.lapic_timer_ticks >= timeout)
+
+
 #define kpanic() kgfx_draw_log_if_dirty(&globals.log); \
 	asm volatile ("cli"); \
 	asm volatile ("hlt")

@@ -28,6 +28,8 @@ uint64_t ktask_create_process(uintptr_t elf_executable, Task_Info *task_info){
     return KTASK_INVALID_PID;
   }
 
+  //TODO(Torin 2016-10-20) Currently Broken process creation 
+#if 0
   uintptr_t elf_start_address = header->programEntryOffset;
   uintptr_t executable_physical_address = 0x00A00000;
   uintptr_t executable_virtual_address = 0x00400000;
@@ -35,6 +37,7 @@ uint64_t ktask_create_process(uintptr_t elf_executable, Task_Info *task_info){
   memcpy(executable_virtual_address, TEST_PROGRAM_ELF, sizeof(TEST_PROGRAM_ELF));
   process->start_address = elf_start_address;
   process->is_valid = true;
+#endif
   return result_pid;
 }
 
@@ -56,6 +59,9 @@ uint64_t ktask_create_thread(uint64_t pid, uintptr_t rip, Task_Info *task_info){
     kpanic();
   }
 
+  //TODO(Torin 2016-10-20) Broken Thread Creation!
+
+#if 0
   uintptr_t thread_physical_stack = 0x00C00000;
   uintptr_t thread_virtual_stack = 0x00600000;
   kmem_map_physical_to_virtual_2MB_ext(thread_physical_stack, thread_virtual_stack, PAGE_USER_ACCESS_BIT);
@@ -66,6 +72,9 @@ uint64_t ktask_create_thread(uint64_t pid, uintptr_t rip, Task_Info *task_info){
   thread->rip = rip;
   thread->is_valid = true;
   thread->pid = pid;
+  #endif
+
+
 
   return result_tid;
 }

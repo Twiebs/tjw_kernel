@@ -42,25 +42,26 @@ typedef struct {
 static inline
 void acpi_parse_rsdt(ACPI_SDT_Header *rsdt, System_Info *info);
 
-void parse_root_system_descriptor(const RSDP_Descriptor_1 *rsdp, System_Info *sys) {
+int parse_root_system_descriptor(const RSDP_Descriptor_1 *rsdp, System_Info *sys) {
 	if((rsdp->signature[0] == 'R' && rsdp->signature[1] == 'S' &&
       rsdp->signature[2] == 'D' && rsdp->signature[3] == ' ' &&
       rsdp->signature[4] == 'P' && rsdp->signature[5] == 'T' &&
       rsdp->signature[6] == 'R' && rsdp->signature[7] == ' ') == 0) {
     klog_error("RSDP is invalid!");
-    return;
+    return 0;
   } 
 
   //TODO(Torin) This should be a temporary page!
-  uintptr_t virtual_address = 0x0C600000;
-  uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_2MB(rsdp->rsdt_address, virtual_address, 0); 
-  ACPI_SDT_Header *rsdt = (ACPI_SDT_Header *)(virtual_address + page_offset);
+  uintptr_t mapped_virtual_address = 0xC600000;
+  uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_unaccounted(&globals.memory_state, rsdp->rsdt_address, mapped_virtual_address, 0);
+  ACPI_SDT_Header *rsdt = (ACPI_SDT_Header *)(mapped_virtual_address + page_offset);
+
   uint32_t entry_count = (rsdt->length - sizeof(ACPI_SDT_Header)) / 4;
   uint32_t *entries = (uint32_t *)(rsdt + 1);
   for(size_t i = 0; i < entry_count; i++){
     uintptr_t header_physical_addr = (uintptr_t)entries[i];
     int64_t physical_offset = header_physical_addr - rsdp->rsdt_address;
-    uintptr_t entry_address = virtual_address + page_offset + physical_offset;
+    uintptr_t entry_address = mapped_virtual_address + page_offset + physical_offset;
     ACPI_SDT_Header *header = (ACPI_SDT_Header *)entry_address;
 
     static const uint32_t ACPI_MADT_SIGNATURE = ('C' << 24) | ('I' << 16) | ('P' << 8) | ('A');
@@ -155,6 +156,7 @@ void parse_root_system_descriptor(const RSDP_Descriptor_1 *rsdp, System_Info *sy
 
 
   }  
+  return 1;
 }
 
 

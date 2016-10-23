@@ -93,8 +93,8 @@ void gdt_encode_system_descriptor(uintptr_t base_address, uint32_t segment_limit
   descriptor.privlege_level = privlege_level;
   memcpy(out, &descriptor, sizeof(struct GDT_System_Descriptor));
 
-  klog_debug("tss base address: 0x%X", base_address);
-  klog_debug("tss limit: 0x%X", segment_limit);
+  //klog_debug("tss base address: 0x%X", base_address);
+  //klog_debug("tss limit: 0x%X", segment_limit);
 }
 
 static void

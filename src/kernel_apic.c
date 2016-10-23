@@ -72,31 +72,6 @@ ioapic_initalize(uintptr_t ioapic_register_base) {
   asm volatile("sti");
 }
 
-#if 0
-static void
-lapic_initalize(uintptr_t apic_register_base) {
-	asm volatile ("cli");
-  
-  //NOTE(Torin) Disable the legacy PIC first
-  //TODO(Torin 2016-08-28) Consider remapping the PIT here and never
-  //enable it fully using the other legacy routine.  Should simplify code
-  //and keep everything nice an compact since we will never support a cpu
-  //that does not have an APIC
-  static const uint8_t PIC1_DATA_PORT = 0x21;
-  static const uint8_t PIC2_DATA_PORT = 0xA1;
-  write_port_uint8(PIC1_DATA_PORT, 0b11111110);
-  write_port_uint8(PIC2_DATA_PORT, 0b11111111);
-
-  //NOTE(Torin) Configure lapic spuritous interput vector
-  //TODO(Torin) I dont think that this is configured correctly
-  static const uint64_t APIC_SIVR_OFFSET = 0xF0;
-  static const uint32_t SIVR_ENABLE = 1 << 8;
-  static const uint32_t SIVR_FOCUS_CHECKING = 1 << 9;
-  lapic_write_register(apic_register_base, APIC_SIVR_OFFSET, 0x31 | SIVR_ENABLE);
-	asm volatile("sti");
-}
-#endif
-
 static inline
 uint32_t lapic_get_id(uintptr_t lapic_virtual_address){
   static const uint32_t APIC_ID_REGISTER = 0x20;

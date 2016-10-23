@@ -11,6 +11,8 @@ typedef struct {
   VGA_Text_Terminal vga_text_term;
   Keyboard_State keyboard;
 
+  Kernel_Memory_State memory_state;
+
   System_Info system_info;
   Framebuffer framebuffer;
 
@@ -44,9 +46,11 @@ static const uint8_t TRAMPOLINE_BINARY[] = {
 #include "trampoline.txt"
 };
 
+#if 1 
 static const uint8_t TEST_PROGRAM_ELF[] = {
 #include "test_program.txt" 
 };
+#endif
 
 static inline
 uint32_t get_cpu_id(){
@@ -229,9 +233,7 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     //NOTE(Torin) Currently set to 80x86
     write_port_uint8(PIC1_DATA_PORT, ICW4_8068);
     write_port_uint8(PIC2_DATA_PORT, ICW4_8068);
-    //NOTE(Torin) The PIT is left unmaksed inorder to initalize the apic timer
-    //after the apic timer is initalized it will be disabled
-    write_port_uint8(PIC1_DATA_PORT, 0b11111110);
+    write_port_uint8(PIC1_DATA_PORT, 0b11111111);
     write_port_uint8(PIC2_DATA_PORT, 0b11111111);
   }
 
@@ -248,9 +250,6 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     asm volatile ("sti");
   }
 
-
-  kmem_initalize();
-
   //NOTE(Torin) Setup keyboard event stack
   globals.keyboard.scancode_event_stack = globals.keyboard.scancode_event_stack0;
 
@@ -265,49 +264,45 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
 		kpanic();
 	}
 
-  struct multiboot_tag_framebuffer *fb_mbtag = 0; 
   uintptr_t rsdp_physical_address = 0;
-	struct multiboot_tag *tag = (struct multiboot_tag *)(multiboot2_address + 8);
-	while (tag->type != MULTIBOOT_TAG_TYPE_END) {
-		switch (tag->type) {
-			case MULTIBOOT_TAG_TYPE_ACPI_OLD: {
-		    struct multiboot_tag_old_acpi *acpi_info = (struct multiboot_tag_old_acpi *)(tag);
-        rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
-			} break;
-			case MULTIBOOT_TAG_TYPE_ACPI_NEW: {
-				struct multiboot_tag_new_acpi *acpi_info = (struct multiboot_tag_new_acpi *)(tag);
-        rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
-			} break;
+  struct multiboot_tag_framebuffer *fb_mbtag = 0; 
+  struct multiboot_tag_mmap *mmap_tag = 0;
 
-      case MULTIBOOT_TAG_TYPE_FRAMEBUFFER: {
-        fb_mbtag = (struct multiboot_tag_framebuffer *)(tag);
+  { //NOTE(Torin) Extract relevant multiboot information
+  	struct multiboot_tag *tag = (struct multiboot_tag *)(multiboot2_address + 8);
+  	while (tag->type != MULTIBOOT_TAG_TYPE_END) {
+  		switch (tag->type) {
+  			case MULTIBOOT_TAG_TYPE_ACPI_OLD: {
+  		    struct multiboot_tag_old_acpi *acpi_info = (struct multiboot_tag_old_acpi *)(tag);
+          rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
+  			} break;
+  			case MULTIBOOT_TAG_TYPE_ACPI_NEW: {
+  				struct multiboot_tag_new_acpi *acpi_info = (struct multiboot_tag_new_acpi *)(tag);
+          rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
+  			} break;
 
-      } break;
+        case MULTIBOOT_TAG_TYPE_FRAMEBUFFER: fb_mbtag = (struct multiboot_tag_framebuffer *)(tag); break;
+        case MULTIBOOT_TAG_TYPE_MMAP: mmap_tag = (struct multiboot_tag_mmap *)(tag); break;
 
-      case MULTIBOOT_TAG_TYPE_MMAP: {
-        #if 0
-        klog_debug("found mmap multiboot tag");
-        struct multiboot_tag_mmap *mmap_tag = (struct multiboot_tag_mmap *)(tag);
-        multiboot_memory_map_t *mmap_entry = (multiboot_memory_map_t *)(mmap_tag->entries);
-        while((uintptr_t)mmap_entry < (uintptr_t)mmap_tag + mmap_tag->size){
-          const char *MB_MMAP_TYPE_STRINGS[] = {
-            "INVALID_TYPE",
-            "MEMORY_AVAILABLE",
-            "MEMORY_ACPI_RECLAIMABLE",
-            "MEMORY_NON_VOLITALE_STORAGE",
-            "MEMORY_BAD_RAM"
-          };
+  		}
+  		tag = (struct multiboot_tag *)(((uint8_t *)tag) + ((tag->size + 7) & ~7));
+  	}
+  } 
 
-          klog_debug("addr: %lu, size: %lu, type: %s", mmap_entry->addr, mmap_entry->len, MB_MMAP_TYPE_STRINGS[mmap_entry->type]);
-          mmap_entry = (multiboot_memory_map_t *)((uintptr_t)mmap_entry + mmap_tag->entry_size);
-        }
-        #endif
-      };
+  
 
-		}
-		tag = (struct multiboot_tag *)(((uint8_t *)tag) + ((tag->size + 7) & ~7));
-	}
+  if(mmap_tag != 0){
+    multiboot_memory_map_t *mmap_entry = (multiboot_memory_map_t *)(mmap_tag->entries);
+    while((uintptr_t)mmap_entry < (uintptr_t)mmap_tag + mmap_tag->size){
+      static const uint8_t MEMORY_AVAILABLE = 1;
+      if(mmap_entry->type == MEMORY_AVAILABLE && mmap_entry->addr >= 0x100000){
+        kmem_add_usable_range(mmap_entry->addr, mmap_entry->len, &globals.memory_state);
+      }
+       mmap_entry = (multiboot_memory_map_t *)((uintptr_t)mmap_entry + mmap_tag->entry_size);
+    }
+  }
 
+  kmem_initalize_memory_state(&globals.memory_state);
 
   //NOTE(Torin) Initalize the framebuffer
   if(fb_mbtag == 0) {
@@ -317,6 +312,11 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
   if(fb_mbtag->common.framebuffer_type != MULTIBOOT_FRAMEBUFFER_TYPE_RGB){
     klog_info("this is a text buffer");
   } else {
+
+    return;
+    //TODO(TORIN 2016-10-20) Framebuffer currently broken
+
+ #if 0 
     uintptr_t framebuffer_virtual_address = 0x0A000000;
     uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_2MB(fb_mbtag->common.framebuffer_addr, framebuffer_virtual_address, PAGE_USER_ACCESS_BIT);
     kmem_map_physical_to_virtual_2MB_ext(fb_mbtag->common.framebuffer_addr - page_offset + 0x200000, framebuffer_virtual_address + 0x200000, PAGE_USER_ACCESS_BIT);
@@ -328,15 +328,21 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     fb->depth = fb_mbtag->common.framebuffer_bpp / 8; 
     fb->pitch = fb_mbtag->common.framebuffer_pitch; 
     klog_debug("framebuffer: width: %u, height: %u, depth: %u", fb->width, fb->height, (uint32_t)fb->depth);
+  #endif
   }
 
 
   if(rsdp_physical_address == 0){
-    kassert(0 && "MULTIBOOT FAILED TO PROVIDE LOCATION OF RSDP");
+    klog_error("MULTIBOOT FAILED TO PROVIDE LOCATION OF RSDP");
+    return;
   }
 
   System_Info *sys = &globals.system_info;
-  parse_root_system_descriptor((RSDP_Descriptor_1*)rsdp_physical_address, sys);
+  if(parse_root_system_descriptor((RSDP_Descriptor_1*)rsdp_physical_address, sys) == 0){
+    klog_error("unabled to parse root system descriptor");
+    return; 
+  }
+
 
   {
     //TODO(Torin 2016-08-29) This should probably be established after
@@ -347,7 +353,7 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     memset(&g_tss_entry, 0x00, sizeof(g_tss_entry));
     g_tss_entry.rsp0 = stack_top_ptr;
     g_tss_entry.ist1 = stack_top_ptr;
-    klog_debug("tss rsp0: 0x%X", g_tss_entry.rsp0);
+    //klog_debug("tss rsp0: 0x%X", g_tss_entry.rsp0);
     uint8_t *gdt = (uint8_t *)&GDT64;
     gdt_encode_system_descriptor((uintptr_t)&g_tss_entry, 0xFF, GDT_DESCRIPTOR_TYPE_TSS, 3, (uintptr_t)(gdt + GDT_TSS));
     tss_ldr(GDT_TSS);
@@ -356,15 +362,25 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
   { //NOTE(Torin) Initalize the lapic and configure the lapic timer
     //NOTE(Torin) Arbitrarly maps the lapic and ioapic into the kernels virtual addresss space
     //And initalizes the iopapic and lapic
-    sys->lapic_virtual_address = 0x0C200000;
-    sys->ioapic_virtual_address = 0x0C400000;
-    kmem_map_physical_to_virtual_2MB(sys->lapic_physical_address, sys->lapic_virtual_address);
-    kmem_map_physical_to_virtual_2MB(sys->ioapic_physical_address, sys->ioapic_virtual_address);
-    asm volatile("cli");
+    sys->lapic_virtual_address = kmem_map_physical_mmio(&globals.memory_state, sys->lapic_physical_address, 1);
+    sys->ioapic_virtual_address = kmem_map_physical_mmio(&globals.memory_state, sys->ioapic_physical_address, 1);
+    klog_debug("lapic_virtual_address: 0x%X", sys->lapic_virtual_address);
+    klog_debug("ioapic_virtual_address: 0x%X", sys->ioapic_virtual_address);
+    
     static const uint64_t LAPIC_SIVR_REGISTER = 0xF0;
     static const uint32_t LAPIC_SIVR_ENABLE = 1 << 8;
+    static const uint32_t LAPIC_VERSION_REGISTER = 0x30;
+
+    asm volatile("cli");
     lapic_write_register(sys->lapic_virtual_address, LAPIC_SIVR_REGISTER, 0x31 | LAPIC_SIVR_ENABLE);
     asm volatile("sti");
+
+    uint32_t lapic_version_register = lapic_read_register(sys->lapic_virtual_address, LAPIC_VERSION_REGISTER);
+    uint32_t lapic_version = lapic_version_register & 0xFF;
+    uint32_t lapic_max_lvt_entries = (lapic_version_register >> 16) & 0xFF;
+    klog_debug("lapic_version: %u", lapic_version);
+    klog_debug("lapic_max_lvt_entries: %u", lapic_max_lvt_entries);
+
 
     static const uint32_t LAPIC_TIMER_IRQ_NUMBER_REGISTER = 0x320;
     static const uint32_t LAPIC_TIMER_INITAL_COUNT_REGISTER = 0x380;
@@ -405,27 +421,33 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
       write_port_uint8(PIT_CHANNEL0_DATA_PORT, divisor_high);
     }
 
+    static const uint8_t PIC1_DATA_PORT = 0x21; 
+    //NOTE(Torin) Unmask the PIT timer interrupt
+    write_port_uint8(PIC1_DATA_PORT, 0b11111110); 
+    //NOTE(Torin) Start the LAPIC Timer
     lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_DIVIDE_CONFIG_REGISTER, LAPIC_TIMER_DIVIDE_2);
     lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, 0xFFFFFFFF);
     lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_IRQ_MASKED);
-
+    //NOTE(Torin) Count how many ticks the LAPIC decrements in 32 milliseconds
     globals.pit_timer_ticks = 0;
     while(globals.pit_timer_ticks <= 32){ asm volatile("nop"); }
     uint32_t ticks_remaining = lapic_read_register(sys->lapic_virtual_address, LAPIC_TIMER_CURRENT_COUNT_REGISTER);  
     uint32_t ticks_in_32_ms = 0xFFFFFFFF - ticks_remaining;
     uint32_t ticks_per_millisecond = ticks_in_32_ms / 32;
+    if(ticks_per_millisecond == 0){
+      klog_error("error initializing lapic timer");
+      return;
+    }
+
     klog_debug("ticks_per_millisecond: %u", ticks_per_millisecond);
     //NOTE(Torin 2016-10-15) Disable PIT timer interrupt for PIC
-    static const uint8_t PIC1_DATA_PORT = 0x21; 
     write_port_uint8(PIC1_DATA_PORT, 0b11111111); 
 
+    //NOTE(Torin) Install main lapic timer interrupt handler
     _interrupt_handlers[2] = (uintptr_t)lapic_periodic_timer_interrupt_handler;
     lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, ticks_per_millisecond);
     lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_PERODIC_MODE); 
-
-
     ioapic_initalize(sys->ioapic_virtual_address);
-    klog_debug("apic initalized");
   }
 
 

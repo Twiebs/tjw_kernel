@@ -121,7 +121,7 @@ typedef struct {
 } PCI_Info;
 
 static inline
-void pci_log_status(PCI_Device *pci_device){
+void pci_log_device_status(PCI_Device *pci_device){
   pci_set_config_address(pci_device->bus_number, pci_device->device_number, pci_device->function_number, 0x04);
   uint16_t status = 0, command = 0;
   pci_read_2x16(&status, &command);
@@ -209,7 +209,7 @@ void pci_scan_devices(){
             klog_debug("initalizing ehci controller at 0x%X", pci_info.ehci_physical_address);
             klog_debug("interrupt_pin: %u", (uint32_t)interrupt_pin);
             klog_debug("interrupt_line: %u", (uint32_t)interrupt_line);
-            ehci_initalize(pci_info.ehci_physical_address, &pci_info.ehci_pci_device);
+            ehci_initalize_host_controller(pci_info.ehci_physical_address, &pci_info.ehci_pci_device);
             return; //TODO(Torin 2016-10-07) Delete this test code!
           } else if (prog_if == XHCI_CONTROLLER){
             klog_debug("[pci] Found XHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);

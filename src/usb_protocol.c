@@ -30,14 +30,14 @@ static const uint16_t USB_DEVICE_CLASS_MASS_STORAGE = 0x08;
 static const uint8_t USB_MASS_STORAGE_PROTOCOL_BULK_ONLY = 0x50;
 
 typedef struct {
-  uint8_t device_address;
-  uint8_t device_class;
   uint16_t vendor_id;
   uint16_t product_id;
-  uint8_t vendor_string[126];
-  uint8_t product_string[126];
+  uint8_t device_address;
+  uint8_t device_class;
   uint8_t vendor_string_length;
   uint8_t product_string_length;
+  uint8_t vendor_string[128];
+  uint8_t product_string[128];
 } USB_Device;
 
 typedef struct {
@@ -52,6 +52,12 @@ typedef struct {
   uint32_t logical_block_size;
   uint64_t logical_block_count;
 } USB_Mass_Storage_Device;
+
+typedef enum {
+  USB_Speed_FULL = 0b00,
+  USB_Speed_LOW  = 0b01,
+  USB_Speed_HIGH = 0b10,
+} USB_Speed;
 
 //=========================================
 

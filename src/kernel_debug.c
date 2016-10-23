@@ -84,13 +84,3 @@ kdebug_log_virtual_address_info_2MB(const uintptr_t virtual_address){
   klog_debug(" p2_entry_info:");
   kdebug_log_page_table_entry_info(g_p2_table.entries[p2_index]);
 }
-
-static void
-kdebug_log_page_info() {
-  for(size_t i = 0; i < g_current_page_index; i++){
-    bool is_present = g_p2_table.entries[i] & 0b01;
-    uintptr_t physical_address = g_p2_table.entries[i] & ~(0b111111111111);
-    uintptr_t virtual_address = i * 1024 * 1024 * 2;
-    klog_debug("page_entry: virtual %lu mapped to %lu", virtual_address, physical_address);
-  }
-}
