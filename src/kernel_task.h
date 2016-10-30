@@ -8,8 +8,9 @@
 //brain dead.  It is a very bad implementation but that is the point
 
 typedef struct {
-  uintptr_t physical_address;
-  uintptr_t start_address;
+  uintptr_t executable_physical_address;
+  uintptr_t program_start_virtual_address;
+  uintptr_t process_p2_table;
   bool is_valid;
 } Process_Context;
 
@@ -31,6 +32,8 @@ typedef struct {
 
 uint64_t ktask_create_process(uintptr_t elf_executable, Task_Info *task_info);
 uint64_t ktask_create_thread(uint64_t pid, uintptr_t rip, Task_Info *task_info);
+
+
 void ktask_context_switch(uint64_t thread_id, Task_Info *task_info);
 void ktask_destroy_process(uint64_t pid, Task_Info *task_info);
 void ktask_destroy_thread(Thread_Context *ctx);

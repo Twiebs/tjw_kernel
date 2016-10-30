@@ -30,6 +30,14 @@ void __memcpy(uint8_t *dest, uint8_t *src, size_t size) {
 }
 
 static inline
+void utf16_to_ascii(uint8_t *ascii, uint16_t *utf16, size_t utf16_length){
+  size_t step_count = utf16_length / 2;
+  for(size_t i = 0; i < step_count; i++){
+    ascii[i] = utf16[i];
+  } 
+}
+
+static inline
 size_t strlen(const char *str) {
 	size_t result = 0;
 	while (str[result] != 0)

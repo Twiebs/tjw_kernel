@@ -4,33 +4,10 @@
 //p2 is the PDE
 //p1 is the PTE
 
-typedef struct {
-	uintptr_t entries[512];
-} Page_Table;
-
 extern Page_Table g_p4_table;
 extern Page_Table g_p3_table;
 extern Page_Table g_p2_table;
 
-#if 0
-static uint32_t g_current_page_index;
-static uint32_t g_p1_table_count;
-static Page_Table g_p1_table __attribute__((aligned(4096)));
-#endif
-
-//Page table entry configuration bits
-static const uint64_t PAGE_PRESENT_BIT 		        = 1L << 0;
-static const uint64_t PAGE_WRITEABLE_BIT 	        = 1L << 1;
-static const uint64_t PAGE_USER_ACCESS_BIT        = 1L << 2;
-static const uint64_t PAGE_WRITE_TROUGH_CACHE_BIT = 1L << 3;
-static const uint64_t PAGE_DISABLE_CACHE_BIT      = 1L << 4;
-static const uint64_t PAGE_ACCESSED_BIT           = 1L << 5;
-static const uint64_t PAGE_DIRY_BIT               = 1L << 6;
-static const uint64_t PAGE_HUGE_BIT 			        = 1L << 7;
-static const uint64_t PAGE_GLOBAL_BIT             = 1L << 8;
-static const uint64_t PAGE_NO_EXECUTE_BIT         = 1L << 63;
-
-//=============================================================================================
 static inline
 void kdebug_kmem_log_memory_state(Kernel_Memory_State *mem){
   klog_debug("Kernel_Memory_State:");
@@ -138,6 +115,28 @@ uintptr_t kmem_allocate_persistant_kernel_memory(Kernel_Memory_State *memstate, 
   memstate->kernel_memory_used_page_count += page_count;
   klog_debug("[KMEM] Allocated %lu pages of persistant memory mapped to 0x%X", page_count, virtual_address);
   return virtual_address;
+}
+
+uintptr_t kmem_push_temporary_kernel_memory(uintptr_t physical_address){
+  Kernel_Memory_State *memstate = &globals.memory_state;
+  uint64_t p2_table_offset = memstate->kernel_memory_start_virtual_address / 0x200000;
+  uint64_t p2_table_index = (memstate->kernel_memory_used_page_count / 512) + p2_table_offset;
+  uint64_t p1_table_index = memstate->kernel_memory_used_page_count % 512;
+  if(p1_table_index + 1 > 512){
+    klog_debug("must allocated adittional pages");
+    kpanic();
+  }
+
+  Page_Table *pt = (Page_Table *)((uintptr_t)g_p2_table.entries[p2_table_index] & ~0xFFF);
+  pt->entries[p1_table_index] = physical_address | PAGE_PRESENT_BIT | PAGE_WRITEABLE_BIT;
+  uintptr_t virtual_address = memstate->kernel_memory_start_virtual_address + (memstate->kernel_memory_used_page_count*4096); 
+  memstate->kernel_memory_used_page_count += 1;
+  return virtual_address;
+}
+
+void kmem_pop_temporary_kernel_memory(){
+  Kernel_Memory_State *memstate = &globals.memory_state;
+  memstate->kernel_memory_used_page_count--;
 }
 
 static inline

@@ -7,7 +7,10 @@
 //and executable section of the process that is to be created but for now
 //It will simply be hardcoded for elf values
 
-uint64_t ktask_create_process(uintptr_t elf_executable, Task_Info *task_info){
+//TODO(Torin 2016-10-27) This model is funadmentaly fucked for executables with
+//code size > 4096 which is a very common case!
+
+uint64_t ktask_create_process(uintptr_t executable_physical, Task_Info *task_info){
   uint64_t result_pid = KTASK_INVALID_PID;
   Process_Context *process = 0;
 
@@ -22,22 +25,24 @@ uint64_t ktask_create_process(uintptr_t elf_executable, Task_Info *task_info){
 
   if(process == 0) return result_pid;
 
-  ELF64Header *header = (ELF64Header *)elf_executable;
+
+  uintptr_t executable_virtual = kmem_push_temporary_kernel_memory(executable_physical);
+  ELF64Header *header = (ELF64Header *)executable_virtual;
   if(header->magicNumber != ELF64_MAGIC_NUMBER){
     klog_error("invalid elf file was provided");
     return KTASK_INVALID_PID;
   }
+  process->program_start_virtual_address = header->programEntryOffset;
+  kmem_pop_temporary_kernel_memory();
 
-  //TODO(Torin 2016-10-20) Currently Broken process creation 
-#if 0
-  uintptr_t elf_start_address = header->programEntryOffset;
-  uintptr_t executable_physical_address = 0x00A00000;
-  uintptr_t executable_virtual_address = 0x00400000;
-  kmem_map_physical_to_virtual_2MB_ext(executable_physical_address, executable_virtual_address, PAGE_USER_ACCESS_BIT);
-  memcpy(executable_virtual_address, TEST_PROGRAM_ELF, sizeof(TEST_PROGRAM_ELF));
-  process->start_address = elf_start_address;
+  uintptr_t process_page_table = 0;
+  kmem_allocate_physical_pages(&globals.memory_state, 1, &process_page_table);
+  Page_Table *pt = (Page_Table *)kmem_push_temporary_kernel_memory(process_page_table);
+  pt->entries[2] = executable_physical | PAGE_PRESENT_BIT | PAGE_USER_ACCESS_BIT; 
+  kmem_pop_temporary_kernel_memory();
+
+  process->process_p2_table = process_page_table;
   process->is_valid = true;
-#endif
   return result_pid;
 }
 

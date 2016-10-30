@@ -1,1 +1,0 @@
-int ehci_initalize_host_controller(uintptr_t hc_physical_address, PCI_Device *pci_device);

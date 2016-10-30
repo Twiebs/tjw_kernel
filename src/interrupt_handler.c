@@ -27,7 +27,6 @@ extern void kprocess_destroy(){
   uint64_t pid = running_thread->pid;
   ktask_destroy_process(pid, &globals.task_info); 
   klog_debug("destroyed pid: %lu", pid);
-  lapic_configure_timer(globals.system_info.lapic_virtual_address, 0xFFFF, 0x20, 1);
   asm volatile("int $0x20");
   while(1) { asm volatile("hlt"); }
 }
@@ -135,7 +134,7 @@ irq_handler_keyboard(void) {
 }
 
 static void 
-klog_process_keyevents(Keyboard_State *keyboard, Circular_Log *log){
+process_keyevents(Keyboard_State *keyboard, Circular_Log *log){
   for(size_t i = 0; i < keyboard->scancode_event_stack_count; i++){
     uint8_t scancode = keyboard->scancode_event_stack[i];
 
@@ -184,15 +183,5 @@ lapic_periodic_timer_interrupt_handler(void){
 
 static void
 lapic_timer_interrupt(void){
-  Keyboard_State *keyboard = &globals.keyboard;
-  if(globals.keyboard.scancode_event_stack_count > 0){
-    klog_process_keyevents(keyboard, &globals.log); 
-    if(keyboard->scancode_event_stack == keyboard->scancode_event_stack0){
-      keyboard->scancode_event_stack = keyboard->scancode_event_stack1;
-    } else { keyboard->scancode_event_stack = keyboard->scancode_event_stack0; }
-    memset(keyboard->scancode_event_stack, 0x00, sizeof(keyboard->scancode_event_stack0));
-    keyboard->scancode_event_stack_count = 0;
-  }
-
-	kgfx_draw_log_if_dirty(&globals.log);
+  globals.lapic_timer_ticks += 1;
 }

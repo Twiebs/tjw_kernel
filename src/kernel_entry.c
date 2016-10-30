@@ -6,17 +6,34 @@
 // CPU into longmode with a longmode GDT; however, an longmode
 // IDT still must be initalized
 
+
+/*
+ 
+ ** Current Feature TODO List **
+- PCIe MMIO registers
+- MSI interrupts 
+- Create os specific bootloader
+- AHCI(SATA) Driver
+- XHCI Driver
+- OCHI Driver
+- UHCI Driver
+- Switch to real mode and properly change video modes
+*/
+
+
 typedef struct {
   Circular_Log log;
   VGA_Text_Terminal vga_text_term;
   Keyboard_State keyboard;
-
   Kernel_Memory_State memory_state;
-
   System_Info system_info;
   Framebuffer framebuffer;
-
   Task_Info task_info;
+  Ext2_Filesystem ext2_filesystem;
+
+  //TODO(Torin 2016-10-24) Dynamic USB_Devices
+  USB_Device usb_devices[8];
+  uint32_t usb_device_count;
 
   volatile uint64_t pit_timer_ticks;
   volatile uint64_t lapic_timer_ticks;
@@ -33,24 +50,8 @@ static Kernel_Globals globals;
 #define GDT_RING3_CODE 0x20
 #define GDT_TSS 0x28
 
-#include "kernel_graphics.c"
-#include "kernel_acpi.c"
 #include "kernel_apic.c"
-#include "kernel_descriptor.c"
-#include "kernel_exceptions.c"
 
-static IDT_Entry _idt[256];
-static uintptr_t _interrupt_handlers[256];
-
-static const uint8_t TRAMPOLINE_BINARY[] = {
-#include "trampoline.txt"
-};
-
-#if 1 
-static const uint8_t TEST_PROGRAM_ELF[] = {
-#include "test_program.txt" 
-};
-#endif
 
 static inline
 uint32_t get_cpu_id(){
@@ -62,6 +63,33 @@ uint32_t get_cpu_id(){
   kpanic();
   return 0;
 }
+
+
+#include "kernel_graphics.c"
+#include "kernel_acpi.c"
+#include "kernel_descriptor.c"
+#include "kernel_exceptions.c"
+#include "kernel_task.c"
+#include "kernel_pci.c"
+#include "kernel_memory.c"
+#include "kernel_debug.c"
+#include "usb_protocol.c"
+#include "usb_ehci.c"
+
+static IDT_Entry _idt[256];
+static uintptr_t _interrupt_handlers[256];
+
+static const uint8_t TRAMPOLINE_BINARY[] = {
+#include "trampoline.txt"
+};
+
+#if 1
+static const uint8_t TEST_PROGRAM_ELF[] = {
+#include "test_program.txt" 
+};
+#endif
+
+
 
 //TODO(Torin) Remove IDT Global variable
 static void
@@ -183,21 +211,11 @@ idt_install_all_interrupts(){
 
 #include "multiboot2.h"
 #include "hardware_serial.c"
-#include "kernel_memory.c"
 
 extern void
 ap_entry_procedure(void){
   asm volatile("hlt");
 }
-
-#include "kernel_pci.h"
-#include "usb_controller.h"
-
-#include "kernel_task.c"
-#include "kernel_pci.c"
-#include "kernel_debug.c"
-#include "usb_protocol.c"
-#include "usb_ehci.c"
 
 
 extern void 
@@ -249,6 +267,9 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     asm volatile ("lidt %0" : : "m"(idtr));
     asm volatile ("sti");
   }
+
+
+  log_disable(DEBUG0);
 
   //NOTE(Torin) Setup keyboard event stack
   globals.keyboard.scancode_event_stack = globals.keyboard.scancode_event_stack0;
@@ -310,7 +331,7 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
   }
 
   if(fb_mbtag->common.framebuffer_type != MULTIBOOT_FRAMEBUFFER_TYPE_RGB){
-    klog_info("this is a text buffer");
+    //NOTE(Torin) Text buffer
   } else {
 
     return;
@@ -475,7 +496,18 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
   pci_scan_devices();
 
   _interrupt_handlers[2] = (uintptr_t)lapic_timer_interrupt; 
-  lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x22, 1);
+  //lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x22, 1);
 
-	while(1) { asm volatile("hlt"); };
+	while(1) { 
+    Keyboard_State *keyboard = &globals.keyboard;
+    if(globals.keyboard.scancode_event_stack_count > 0){
+      process_keyevents(keyboard, &globals.log); 
+      if(keyboard->scancode_event_stack == keyboard->scancode_event_stack0){
+        keyboard->scancode_event_stack = keyboard->scancode_event_stack1;
+      } else { keyboard->scancode_event_stack = keyboard->scancode_event_stack0; }
+      memset(keyboard->scancode_event_stack, 0x00, sizeof(keyboard->scancode_event_stack0));
+      keyboard->scancode_event_stack_count = 0;
+    }
+    kgfx_draw_log_if_dirty(&globals.log);
+  };
 }

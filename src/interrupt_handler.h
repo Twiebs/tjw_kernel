@@ -41,3 +41,5 @@ static void irq_handler_keyboard();
 static void irq_handler_pit();
 static void lapic_timer_interrupt();
 static void lapic_periodic_timer_interrupt_handler(void);
+
+static void process_keyevents(Keyboard_State *keyboard, Circular_Log *log);

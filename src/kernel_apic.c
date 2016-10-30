@@ -80,6 +80,17 @@ uint32_t lapic_get_id(uintptr_t lapic_virtual_address){
 }
 
 static void
+lapic_configure_one_shot_timer(uintptr_t lapic_virtual_address, uint32_t inital_count, uint32_t irq_number){
+  static const uint32_t LAPIC_TIMER_IRQ_REGISTER = 0x320; 
+  static const uint32_t LAPIC_TIMER_INITAL_COUNT_REGISTER = 0x380;
+  static const uint32_t LAPIC_TIMER_DIVIDE_CONFIG_REGISTER = 0x3E0;
+  lapic_write_register(lapic_virtual_address, LAPIC_TIMER_DIVIDE_CONFIG_REGISTER, 0x00); 
+  lapic_write_register(lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, inital_count);
+  lapic_write_register(lapic_virtual_address, LAPIC_TIMER_IRQ_REGISTER, irq_number);
+}
+
+#if 0
+static void
 lapic_configure_timer(uintptr_t lapic_virtual_address, uint32_t inital_count, uint32_t irq_number, uint32_t mode){
   static const uint32_t TIMER_IRQ_REGISTER = 0x320;
   
@@ -100,6 +111,7 @@ lapic_configure_timer(uintptr_t lapic_virtual_address, uint32_t inital_count, ui
   lapic_write_register(lapic_virtual_address, TIMER_DIVIDE_CONFIG_REGISTER, TIMER_DIVIDE_BY_16);
   lapic_write_register(lapic_virtual_address, TIMER_IRQ_REGISTER, irq_number | mode_mask);
 }
+#endif
 
 static void
 lapic_wait_milliseconds(uint32_t ms){
@@ -108,6 +120,9 @@ lapic_wait_milliseconds(uint32_t ms){
     asm volatile("nop"); 
   }
 }
+
+//TODO(Torin 2016-10-30) This should be an inlined procedure that only exists in the entry procedure and is 
+//run as soon as possible
 
 //NOTE(Torin) Called from the bootstrap processor to send A SIPI signal to the target application processor 
 static void 

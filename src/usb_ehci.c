@@ -196,7 +196,7 @@ static void ehci_init_qtd(EHCI_QTD *previous_td, EHCI_QTD *current_td, uintptr_t
   //TODO(Torin 2016-09-20) Larger than one page transfers
   //TODO(Torin 2016-10-03) Do a check on the HC to make sure that the HC is capable 
   //of supporting 64bit pointers
-  kassert(size < 4096);
+  kassert(size <= 4096);
   current_td->buffer_pointer_low[0] = (uint32_t)data_physical_address;
   current_td->buffer_pointer_high[0] = (uint32_t)(data_physical_address >> 32);
 }
@@ -278,7 +278,6 @@ void ehci_enable_asynch_schedule(EHCI_Controller *hc){
   EHCI_Queue_Head *qh = &hc->asynch_qh;
   EHCI_QTD *setup_qtd = &hc->qtd_array[0];
   EHCI_QTD *status_qtd = &hc->qtd_array[1];
-  uintptr_t qh_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, asynch_qh) - 4096;
   uintptr_t setup_qtd_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[0]) - 4096;
   uintptr_t status_qtd_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[1]) - 4096;
 
@@ -319,7 +318,6 @@ int ehci_control_transfer_with_data(EHCI_Controller *hc, uint8_t device_address,
   EHCI_QTD *setup_qtd = &hc->qtd_array[0];
   EHCI_QTD *data_qtd = &hc->qtd_array[1];
   EHCI_QTD *status_qtd = &hc->qtd_array[2];
-  uintptr_t qh_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, asynch_qh) - 4096;
   uintptr_t setup_qtd_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[0]) - 4096;
   uintptr_t data_qtd_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[1]) - 4096; 
   uintptr_t status_qtd_physical = hc->second_page_physical_address + offsetof(EHCI_Controller, qtd_array[2]) - 4096; 
@@ -372,10 +370,11 @@ int ehci_bulk_transfer_with_data(EHCI_Controller *hc, USB_Mass_Storage_Device *m
   static const uint8_t CSW_COMMAND_FAILED = 0x01;
   static const uint8_t CSW_STATUS_INVALID = 0xFF; //NOTE(Torin) Valued used by kernel to determine if status was not recieved correctly
   USB_Command_Status_Wrapper csw = {};
-  csw.status = CSW_COMMAND_FAILED;
+  csw.status = CSW_STATUS_INVALID;
   //Preallocate Required data strucutres
 
   EHCI_Queue_Head *out_qh = &hc->asynch_qh;
+  EHCI_Queue_Head *in_qh = &hc->asynch_qh;
   EHCI_QTD *out_data_qtd = &hc->qtd_array[0];
   EHCI_QTD *in_data_qtd = &hc->qtd_array[1];
   EHCI_QTD *in_status_qtd = &hc->qtd_array[2];
@@ -389,11 +388,13 @@ int ehci_bulk_transfer_with_data(EHCI_Controller *hc, USB_Mass_Storage_Device *m
   msd->out_toggle_value = !msd->out_toggle_value;
 
   ehci_disable_asynch_schedule(hc);
+  lapic_wait_milliseconds(1); //TODO(Torin 2016-10-29) Change to size of microframe
   ehci_initalize_qh(out_qh, out_data_physical, msd->device_number, msd->out_endpoint, USB_Speed_HIGH, msd->out_endpoint_max_packet_size);
   ehci_enable_asynch_schedule(hc);
   wait_for_condition(ehci_check_qh_status(out_qh), 125){}
   ehci_disable_asynch_schedule(hc);
   int status = ehci_check_qh_status(out_qh);
+
   if(status == 0) {
     klog_error("bulk out transaction error");
     klog_debug("queue_head:");
@@ -401,9 +402,8 @@ int ehci_bulk_transfer_with_data(EHCI_Controller *hc, USB_Mass_Storage_Device *m
     kdebug_log_qtd(out_data_qtd);
     return 0;
   } 
-
-  EHCI_Queue_Head *in_qh = &hc->asynch_qh;
   ehci_disable_asynch_schedule(hc);
+  lapic_wait_milliseconds(1); //Change to microframe size
   ehci_initalize_qh(in_qh, in_data_physical, msd->device_number, msd->in_endpoint, USB_Speed_HIGH, msd->in_endpoint_max_packet_size);
   ehci_enable_asynch_schedule(hc);
   wait_for_condition(ehci_check_qh_status(in_qh), 1000) {}
@@ -529,13 +529,6 @@ int ehci_bulk_transfer_no_data(EHCI_Controller *hc, USB_Mass_Storage_Device *msd
 }
 
 //=====================================================================
-static inline
-void utf16_to_ascii(uint8_t *ascii, uint16_t *utf16, size_t utf16_length){
-  size_t step_count = utf16_length / 2;
-  for(size_t i = 0; i < step_count; i++){
-    ascii[i] = utf16[i];
-  } 
-}
 
 static inline
 int ehci_get_descriptor(EHCI_Controller *hc, uint8_t descriptor_type, uint8_t descriptor_index, uint16_t langid, uint16_t length, void *data){
@@ -589,13 +582,14 @@ static int ehci_read_to_physical_address(EHCI_Controller *hc, USB_Mass_Storage_D
     klog_debug(" logical_block_address: %u", (uint32_t)logical_block_address);
     return 0;
   } 
-
+  
   return 1;
 }
 
+static inline
+void ehci_initalize_mass_storage_device(){
 
-static Ext2_Filesystem g_ext2;
-
+}
 
 int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
   USB_Device_Descriptor device_descriptor = {};
@@ -645,8 +639,7 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
     }
   }
 
-  USB_Mass_Storage_Device _msd = {};
-  USB_Mass_Storage_Device *msd = &_msd;
+  USB_Mass_Storage_Device *msd = &device->msd;
 
   uint8_t configuration_value = 0;
   uint8_t configuration_buffer[256] = {};
@@ -724,18 +717,6 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
     return 0;
   }
 
-  klog_debug("usb_device_info:");
-  klog_debug(" device_address: 0x%X", (uint64_t)device->device_address);
-  klog_debug(" device_class: 0x%X", (uint64_t)device->device_class);
-  klog_debug(" vendor_id: 0x%X", (uint64_t)device->vendor_id);
-  klog_debug(" product_id: 0x%X", (uint64_t)device->product_id);
-  klog_debug(" vendor_string: %.*s", device->vendor_string_length, device->vendor_string);
-  klog_debug(" product_string: %.*s", device->product_string_length, device->product_string);
-
-  klog_debug("out_endpoint: %u", (uint32_t)msd->out_endpoint);
-  klog_debug("in_endpoint: %u", (uint32_t)msd->in_endpoint);
-  klog_debug("out_max_packet_size: %u", (uint32_t)msd->out_endpoint_max_packet_size);
-  klog_debug("in_max_packet_size: %u", (uint32_t)msd->in_endpoint_max_packet_size);
 
   USB_Device_Request msd_reset_request = {};
   msd_reset_request.recipient = USB_REQUEST_RECIPIENT_INTERFACE;
@@ -745,17 +726,34 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
   msd_reset_request.index_low = msd->interface_number;
   if(ehci_control_transfer_without_data(hc, device->device_address, &msd_reset_request) == 0){
     klog_error("usb mass storage device failed bulk reset");
-  }
-
-  uint8_t inquiry_buffer[36] = {};
-  SCSI_Inquiry_Command inquiry_command = {};
-  scsi_create_inquiry(&inquiry_command, 36);
-  if(ehci_bulk_transfer_with_data(hc, msd, &inquiry_command.cbw, sizeof(inquiry_command), inquiry_buffer, sizeof(inquiry_buffer)) == 0){
-    klog_error("inquiry bulk transfer error!");
     return 0;
   }
 
-  SCSI_Inquiry_Data *inquiry_data = (SCSI_Inquiry_Data *)inquiry_buffer;
+  //NOTE(Torin) After the MSD reset we need to reset the data toggles
+  msd->in_toggle_value = 0;
+  msd->out_toggle_value = 0;
+
+
+  uint8_t read_buffer[1024] = {};
+  const uintptr_t buffer_physical_address = (uintptr_t)read_buffer;
+
+  SCSI_Inquiry_Command inquiry_command = {
+    .cbw.signature = USB_CBW_SIGNATURE,
+    .cbw.tag = 0x12,
+    .cbw.transfer_length = 36,
+    .cbw.length = 6,
+    .cbw.direction = 1,
+    .operation_code = 0x12,
+    .allocation_length = 36
+  };
+
+  if(ehci_bulk_transfer_with_data(hc, msd, &inquiry_command.cbw, sizeof(inquiry_command), (void *)buffer_physical_address, 36) == 0){
+    klog_error("inquiry bulk transfer error!");
+    klog_error("large phalic symbol");
+    return 0;
+  }
+
+  SCSI_Inquiry_Data *inquiry_data = (SCSI_Inquiry_Data *)read_buffer;
   klog_debug("version: %u", (uint32_t)inquiry_data->version);
 
   SCSI_Test_Unit_Ready_Command test_unit_ready_command = {
@@ -802,11 +800,6 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
     return 0;
   }
 
-
-
-  uint8_t read_buffer[1024] = {};
-  const uintptr_t buffer_physical_address = (uintptr_t)read_buffer;
-  
   MBR_Partition_Table *pt = (MBR_Partition_Table *)(mbr_partition_table_buffer + 0x1BE);
   for(size_t partition_index = 0; partition_index < 4; partition_index++){
      //NOTE(Torin) If a partition is unused all fields will be zero.
@@ -828,7 +821,7 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
 
     //Read the EXT2 Superblock 
 
-    Ext2_Filesystem *extfs = &g_ext2;
+    Ext2_Filesystem *extfs = &globals.ext2_filesystem;
     uint32_t superblock_location = partition_info.first_block + 2;
     klog_debug("superblock_location: %u", superblock_location);
     if(ehci_read_to_physical_address(hc, msd, buffer_physical_address, superblock_location, 1) == 0){
@@ -855,6 +848,11 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
     extfs->block_count_per_group = superblock->blocks_per_group;
     extfs->superblock_sector = superblock_location;
     extfs->required_features = superblock->required_features;
+
+    extfs->storage_device.type = Storage_Device_EHCI;
+    extfs->storage_device.device_ptr = device;
+    extfs->storage_device.controller_ptr = hc;
+
     strict_assert(buffer_physical_address  + 4096 < 0x200000);
     if(extfs->required_features & EXT2_REQUIRED_FEATURE_COMPRESSION)
       klog_warning("FILESYSTEM USES COMPRESSION!");
@@ -898,8 +896,6 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
     klog_debug("allocated_block_count: %u", allocated_block_count);
     klog_debug("allocated_inode_count: %u", allocated_inode_count);
 
-    ext2_read_inode(2, extfs);
-
     uint32_t inode_table_sector = ext2fs_get_sector_location(block_group_descriptor->inode_table_block_number, extfs);
     klog_debug("inode_table_sector: %u", inode_table_sector);
     if(ehci_read_to_physical_address(hc, msd, buffer_physical_address, inode_table_sector, 1) == 0){
@@ -917,12 +913,6 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
 
     //TODO(Torin 2016-10-16) Consider renaming direct_block_pointer to direct_block_number for clarity
     uint32_t directory_entries_location = ext2fs_get_sector_location(root_inode->direct_block_pointer_0, extfs);
-    klog_debug("directory_entries_location: %u", directory_entries_location);
-    klog_debug("root_size: %u", root_inode->size_low);
-    klog_debug("first_ptr: %u", root_inode->direct_block_pointer_0);
-    klog_debug("second_ptr: %u", root_inode->direct_block_pointer_1);
-    klog_debug("third_ptr: %u", root_inode->direct_block_pointer_2);
-
     if(ehci_read_to_physical_address(hc, msd, buffer_physical_address, directory_entries_location, 1) == 0){
       klog_debug("failed to read directory entriies");
       return 0;
@@ -952,27 +942,21 @@ ehci_reset_port(volatile uint32_t *port){
   kassert(*port & EHCI_PORT_RESET_BIT);
   //NOTE(Torin 2016-09-17) Must Wait Max 50ms (USB2.0 spec 10.2.8.1)
   lapic_wait_milliseconds(50);
-  klog_debug("waited 50ms");
   *port = *port & ~EHCI_PORT_RESET_BIT;
   //NOTE(Torin 2016-09-25) The HC has 2ms to set RESET bit to 0
-  wait_for_condition((*port & EHCI_PORT_RESET_BIT) == 0, 2){}
-  kassert((*port & EHCI_PORT_RESET_BIT) == 0);
-  klog_debug("port was reset");
-
-  if(*port & EHCI_PORT_ENABLED_BIT) {
-    klog_debug("port was enabled");
-    return true;
+  wait_for_condition((*port & EHCI_PORT_RESET_BIT) == 0, 2){
+    klog_error("echi hc failed to finalize the port reset process");
+    return false;
   }
 
   if(*port & EHCI_PORT_ENABLED_CHANGED_BIT){
-    *port = *port & EHCI_PORT_ENABLED_CHANGED_BIT;
-    if(*port & EHCI_PORT_ENABLED_BIT) {
-      klog_debug("port was enabled with the changed bit set?");
-      return true;
-    }
+    *port &= ~EHCI_PORT_ENABLED_CHANGED_BIT;
+    if(*port & EHCI_PORT_ENABLED_BIT) return true;
+  } else {
+    if(*port & EHCI_PORT_ENABLED_BIT) return true;
   }
 
-  return false;
+   return false;
 }
 
 static inline
@@ -1108,8 +1092,9 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
     klog_debug("ehci controller was started");
   }
 
-  lapic_wait_milliseconds(2); //TODO(Torin 2016-10-06) Check what the right value for this wait should be
-  //Is this where we should wait 100ms for the ports power state to stabialize?
+  //NOTE(Torin) Must wait 100ms for port power to stabalize
+  //after the host controler begins to report port device connects
+  lapic_wait_milliseconds(100); 
 
   { //NOTE(Torin 2016-09-06) Enumerating the ports managed by this controler
     for(size_t port_index = 0; port_index < hc->port_count; port_index++) {
@@ -1133,29 +1118,30 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
       if(*port_reg & PORT_CONNECT_STATUS_CHANGED_BIT){
         *port_reg = *port_reg | PORT_CONNECT_STATUS_CHANGED_BIT; //clears out connect status change
         wait_for_condition((*port_reg & PORT_CONNECT_STATUS_CHANGED_BIT) == 0, 1) {}
+        
         if(*port_reg & PORT_CONNECT_STATUS_BIT){
-          lapic_wait_milliseconds(100);
-          klog_debug("USB_Device connected on port %lu", port_index);
-          bool is_port_enabled = *port_reg & PORT_ENABLED_BIT;
-          if(is_port_enabled == false) {
-            if(*port_reg & PORT_LINE_STATUS_LOW_SPEED_DEVICE){
-              klog_error("port is a low speed device!");
-            }
-            kassert(ehci_is_hc_halted(hc->op_regs) == 0);
-            is_port_enabled = ehci_reset_port(port_reg);
+          if(*port_reg & PORT_LINE_STATUS_LOW_SPEED_DEVICE){
+            klog_warning("port %lu is a low speed device", port_index);
+            continue;
           }
+
+          if(*port_reg & PORT_ENABLED_BIT){
+            klog_error("unexpected enabled port: %lu", port_index);
+            continue;
+          }
+
+          bool is_port_enabled = ehci_reset_port(port_reg); 
           if(is_port_enabled == false){
             klog_debug("Port %lu failed to enable", port_index);
           } else {
             klog_debug("Port %lu enabled sucuessfuly", port_index);
-            lapic_wait_milliseconds(10);
             //TODO(Torin 2016-10-15) Put this inside of the EHCI controler struct!
-            USB_Device device = {};
-            ehci_initalize_device(hc, &device);
+            USB_Device *device = &globals.usb_devices[globals.usb_device_count];
+            globals.usb_device_count++;
+            ehci_initalize_device(hc, device);
           }
         }
       }
-      klog_debug("no device connected on port %lu", port_index);
     }
   }
   klog_debug("echi was initalized");

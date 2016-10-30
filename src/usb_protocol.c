@@ -30,38 +30,6 @@ static const uint16_t USB_DEVICE_CLASS_MASS_STORAGE = 0x08;
 static const uint8_t USB_MASS_STORAGE_PROTOCOL_BULK_ONLY = 0x50;
 
 typedef struct {
-  uint16_t vendor_id;
-  uint16_t product_id;
-  uint8_t device_address;
-  uint8_t device_class;
-  uint8_t vendor_string_length;
-  uint8_t product_string_length;
-  uint8_t vendor_string[128];
-  uint8_t product_string[128];
-} USB_Device;
-
-typedef struct {
-  uint8_t device_number;
-  uint8_t interface_number;
-  uint8_t out_endpoint;
-  uint8_t in_endpoint;
-  uint8_t out_toggle_value;
-  uint8_t in_toggle_value;
-  uint16_t out_endpoint_max_packet_size;
-  uint16_t in_endpoint_max_packet_size;
-  uint32_t logical_block_size;
-  uint64_t logical_block_count;
-} USB_Mass_Storage_Device;
-
-typedef enum {
-  USB_Speed_FULL = 0b00,
-  USB_Speed_LOW  = 0b01,
-  USB_Speed_HIGH = 0b10,
-} USB_Speed;
-
-//=========================================
-
-typedef struct {
   uint8_t descriptor_length;
   uint8_t descriptor_type;
 } __attribute((packed)) USB_Descriptor_Common;
@@ -174,11 +142,14 @@ static const uint8_t SCSI_PAGE_CODE_RIGID_DRIVE_GEOMETRY = 0x04;
 typedef struct {
   USB_Command_Block_Wrapper cbw;
   uint8_t operation_code; //0x12
+  //=============================
   uint8_t enable_vital_product_data : 1;
-  uint8_t reserved0 : 7;
+  uint8_t optional_command_support_data : 1;
+  uint8_t reserved0 : 6;
+  //=============================
   uint8_t page_code;
-  uint8_t allocation_length_1;
-  uint8_t allocation_length_0;
+  uint8_t reserved1;
+  uint8_t allocation_length;
   uint8_t control;
   uint8_t padding[10];
 } __attribute((packed)) SCSI_Inquiry_Command;
@@ -347,20 +318,6 @@ typedef struct {
   uint8_t drive_serial_number_0;
 } __attribute((packed)) SCSI_Inquiry_Data;
 
-
-static inline
-void scsi_create_inquiry(SCSI_Inquiry_Command *inquiry, const uint16_t length){
-  static const uint8_t SCSI_COMMAND_INQUIRY = 0x12;
-  inquiry->cbw.signature = USB_CBW_SIGNATURE;
-  inquiry->cbw.tag = 0xFFFF0000; //TODO(Torin 2016-10-06) This can be whatever I want???
-  inquiry->cbw.transfer_length = length;
-  inquiry->cbw.direction = 1; //NOTE(Torin) Device to host
-  inquiry->cbw.length = 6;
-  inquiry->operation_code = SCSI_COMMAND_INQUIRY;
-  inquiry->allocation_length_1 = (length >> 8) & 0xFF;
-  inquiry->allocation_length_0 = (length & 0xFF);
-}
-
 static const char *USB_REQUEST_NAMES[] = {
   "GET_STATUS",
   "CLEAR_FEATURE",
@@ -399,6 +356,17 @@ void kdebug_log_usb_request(USB_Device_Request *request){
   } else {
      klog_debug("request: %s", request_name);
   }
+}
+
+static inline
+void kdebug_log_usb_device_info(USB_Device *device){
+  klog_debug("usb_device_info:");
+  klog_debug("  device_address: 0x%X", (uint64_t)device->device_address);
+  klog_debug("  device_class: 0x%X", (uint64_t)device->device_class);
+  klog_debug("  vendor_id: 0x%X", (uint64_t)device->vendor_id);
+  klog_debug("  product_id: 0x%X", (uint64_t)device->product_id);
+  klog_debug("  vendor_string: %.*s", device->vendor_string_length, device->vendor_string);
+  klog_debug("  product_string: %.*s", device->product_string_length, device->product_string);
 }
 
 static inline

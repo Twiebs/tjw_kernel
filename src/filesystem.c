@@ -73,7 +73,8 @@ typedef struct {
   uint16_t unallocated_block_count;
   uint16_t unallocated_inode_count;
   uint16_t directory_count;
-  uint32_t unused;
+  uint16_t padding;
+  uint8_t reserved[12];
 } __attribute((packed)) Ext2_Block_Group_Descriptor;
 
 typedef struct {
@@ -170,24 +171,6 @@ static const char *DIRECTORY_ENTRY_TYPE_NAMES[] = {
 
 //===================================================================================================
 
-typedef struct {
-  uint32_t inode_count_per_group;
-  uint32_t block_count_per_group;
-  uint32_t inode_size;
-  uint32_t block_size;
-  uint32_t sectors_per_block;
-  uint32_t partition_first_sector;
-  uint32_t superblock_sector;
-  uint32_t required_features;
-  //uintptr_t buffer_physical_address; //The physical address of the buffer below
-  //uint8_t buffer[4096];
-} Ext2_Filesystem;
-
-typedef struct {
-  uint8_t partition_type;
-  uint64_t first_block;
-  uint64_t block_count;
-} Partition_Info;
 
 static inline
 void kdebug_ext2_log_directory_entry(Ext2_Filesystem *fs, Ext2_Directory_Entry *directory_entry){
@@ -219,6 +202,16 @@ void kdebug_ext2_log_inode(Ext2_Inode *inode){
 }
 
 static inline
+void ext2fs_log_group_descriptor(Ext2_Block_Group_Descriptor *descriptor){
+  klog_debug("block_usage_bitmap_block_number: %u", descriptor->block_usage_bitmap_block_number);
+  klog_debug("inode_usage_bitmap_block_number: %u", descriptor->inode_usage_bitmap_block_number);
+  klog_debug("inode_table_block_number: %u", descriptor->inode_table_block_number);
+  //uint16_t unallocated_block_count;
+  //uint16_t unallocated_inode_count;
+  klog_debug("directory_count: %u", (uint32_t)descriptor->directory_count); 
+}
+
+static inline
 void ext2_log_fs_info(Ext2_Filesystem *extfs){
   klog_debug("extfs_info:");
   klog_debug(" inode_count_per_goup: %u", extfs->inode_count_per_group);
@@ -229,20 +222,131 @@ void ext2_log_fs_info(Ext2_Filesystem *extfs){
 }
 
 static inline
-void ext2_read_inode(uint32_t inode_number, Ext2_Filesystem *extfs){
-  strict_assert(extfs->inode_count_per_group > 0);
-  strict_assert(extfs->block_size > 0);
-  strict_assert(extfs->inode_size > 0);
-  uint32_t group_index = (inode_number - 1) / extfs->inode_count_per_group;
-  uint32_t inode_index = (inode_number - 1) % extfs->inode_count_per_group;
-  uint32_t block_index = (inode_index * extfs->inode_size) / extfs->block_size;
-  klog_debug("group_index: %u", group_index);
-  klog_debug("inode_index: %u", inode_index);
-  klog_debug("block_index: %u", block_index);
-}
-
-static inline
 uint32_t ext2fs_get_sector_location(uint32_t block_number, Ext2_Filesystem *extfs){
   uint32_t result = (block_number * extfs->sectors_per_block) + extfs->partition_first_sector;
   return result;
 }
+
+static int ehci_read_to_physical_address(EHCI_Controller *hc, USB_Mass_Storage_Device *msd, uintptr_t out_data, uint32_t start_block, uint16_t block_count);
+
+//TODO(Torin 2016-10-27) Change ehci_read size to be actual byte size rather than scalar of physical block
+//size because that size can vary
+
+static inline
+int storage_device_read(Storage_Device *sd, uint64_t block_index, uint64_t block_count, void *output_buffer){
+  switch(sd->type){
+    case Storage_Device_EHCI:{
+      EHCI_Controller *ehci_hc = (EHCI_Controller *)sd->controller_ptr;
+      USB_Device *device = (USB_Device *)sd->device_ptr; 
+      return ehci_read_to_physical_address(ehci_hc, &device->msd, (uintptr_t)output_buffer, block_index, block_count);
+    } break;
+
+    case Storage_Device_INVALID:{
+      klog_error("invalid storage device");
+    } break;
+
+    default:{
+      klog_error("usupported storage device");
+    } break;
+  }
+  
+  return 0;
+}
+
+static inline
+bool ext2fs_read_block(Ext2_Filesystem *extfs, uint32_t block_number, uint8_t *buffer){
+  uint32_t physical_storage_sector = (extfs->sectors_per_block * block_number) + extfs->partition_first_sector;
+  if(storage_device_read(&extfs->storage_device, physical_storage_sector, 1, buffer) == 0){
+    klog_error("failed to read from storage device");
+    return false; 
+  }
+  return true;
+}
+
+static inline
+int ext2_read_inode(uint32_t inode_number, Ext2_Filesystem *extfs, Ext2_Inode *out_inode){
+  strict_assert(extfs->inode_count_per_group > 0);
+  strict_assert(extfs->block_size > 0);
+  strict_assert(extfs->inode_size > 0);
+  uint32_t group_index = (inode_number - 1) / extfs->inode_count_per_group;
+  uint32_t group_descriptor_block_index = group_index / 32;
+  uint32_t group_block_offset = group_index - (group_descriptor_block_index * 32);
+  uint32_t inode_index = (inode_number - 1) % extfs->inode_count_per_group;
+  uint32_t inode_table_block_index = (inode_index * extfs->inode_size) / extfs->block_size;
+  uint32_t inode_block_offset = inode_index - (inode_table_block_index *(extfs->inode_size / extfs->block_size));
+
+  klog_debug("group_index: %u", group_index);
+  klog_debug("group_block_index: %u", group_descriptor_block_index);
+  klog_debug("group_block_offset: %u", group_block_offset);
+  klog_debug("inode_index: %u", inode_index);
+  klog_debug("inode_table_block_index: %u", inode_table_block_index);
+  klog_debug("inode_block_offset: %u", inode_block_offset);
+
+  uint8_t buffer[4096] = {};
+  if(ext2fs_read_block(extfs, group_descriptor_block_index + 1, buffer) == 0){
+    klog_error("failed to read group descriptor table");
+    return 0;
+  }
+   
+  Ext2_Block_Group_Descriptor *group_descriptor_table = (Ext2_Block_Group_Descriptor *)buffer; 
+  Ext2_Block_Group_Descriptor *group_descriptor = &group_descriptor_table[group_block_offset];
+  ext2fs_log_group_descriptor(group_descriptor);
+
+  if(ext2fs_read_block(extfs, group_descriptor->inode_table_block_number + inode_table_block_index, buffer) == 0){
+    klog_error("failed to read inode table");
+    return 0;
+  }
+
+  Ext2_Inode *inode = (Ext2_Inode *)(buffer + (inode_block_offset * extfs->inode_size)); 
+  *out_inode = *inode;
+ return 0;
+}
+
+static inline
+int ext2fs_read_file_to_physical(const char *path, size_t path_length, uintptr_t physical){
+  Ext2_Filesystem *extfs = &globals.ext2_filesystem; 
+
+  if(path[0] != '/'){
+    klog_error("malformed path.  Path's must begin with a '/'");
+    return 0;
+  }
+
+  size_t index = 0;
+  while(index < path_length){
+    if(path[index] != '/'){
+      klog_error("malformed path");
+    }
+
+    index++;
+    const char *current = &path[index];
+    while(path[index] != '/'){
+      if(index >= path_length) break;
+      index++;
+    }
+
+    size_t length = &path[index] - current;
+    klog_debug("%.*s", length, current); 
+  } 
+
+  Ext2_Inode current_inode = {};
+  ext2_read_inode(2, extfs, &current_inode); 
+  uint8_t buffer[4096] = {};
+  if(current_inode.type_and_permissions & EXT2_INODE_TYPE_DIRECTORY){
+    klog_debug("directory_entries: %u", (uint32_t)current_inode.hard_link_count);
+    uint16_t current_directory_index = 0;
+    if(ext2fs_read_block(extfs, current_inode.direct_block_pointer_0, buffer) == 0){
+      klog_error("failed to read directory entries");
+      return 0;
+    }
+
+    Ext2_Directory_Entry *directory_entry = (Ext2_Directory_Entry *)buffer;
+    while(((uintptr_t)directory_entry - (uintptr_t)buffer) < 4096 && (current_directory_index < current_inode.hard_link_count)){
+      if(directory_entry->entry_size == 0) break;
+      kdebug_ext2_log_directory_entry(extfs, directory_entry);
+      directory_entry = (Ext2_Directory_Entry *)((uintptr_t)directory_entry + directory_entry->entry_size);
+    } 
+  }
+
+  return 0;
+}
+

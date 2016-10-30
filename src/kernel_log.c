@@ -1,38 +1,3 @@
-
-#if 0
-static inline 
-void uint8_to_string_base16(char *dest, uint8_t value){
-  #define write_four_bits_base16(dest, four_bits) \
-	if (four_bits > 9) { *dest = 'A' + (four_bits - 10); }  \
-	else { *dest = '0' + four_bits; }
-	uint8_t top_4_bits = (uint8_t)(value >> 4);
-	uint8_t bottom_4_bits = (uint8_t)((uint8_t)(value << 4) >> 4);
-	write_four_bits_base16(&dest[0], top_4_bits);
-	write_four_bits_base16(&dest[1], bottom_4_bits);
-  #undef write_four_bits_base16
-}
-
-static inline
-void uint32_to_string_base16(char *dest, uint32_t value){
-	uint8_t byte3 = (uint8_t)(value >> 24);
-	uint8_t byte2 = (uint8_t)(value >> 16);
-	uint8_t byte1 = (uint8_t)(value >> 8);
-	uint8_t byte0 = (uint8_t)value;
-	uint8_to_string_base16(dest + 0, byte3);
-	uint8_to_string_base16(dest + 2, byte2);
-	uint8_to_string_base16(dest + 4, byte1);
-	uint8_to_string_base16(dest + 6, byte0);
-}
-
-static inline
-void uint64_to_string_base16(char *dest, uint64_t value){
-  uint32_t value0 = (uint32_t)(value >> 32);
-  uint32_t value1 = (uint32_t)(value);
-  uint32_to_string_base16(dest + 0, value1);
-  uint32_to_string_base16(dest + 8, value0);
-}
-#endif
-
 static inline
 void string_inplace_reverse(char *str, size_t length){
   size_t midpoint = length / 2;
@@ -54,25 +19,6 @@ size_t uint64_to_string(char *dest, uint64_t value, uint8_t base){
       static const char LOOKUP[] = "0123456789ABCDEF";
       dest[bytes_written++] = LOOKUP[value % base];
       value /= base;
-    }
-    string_inplace_reverse(dest, bytes_written);
-  }
-  return bytes_written;
-}
-
-
-
-static inline 
-size_t uint64_to_string_base16(char *dest, uint64_t value){
-  size_t bytes_written = 0;
-  if(value == 0) {
-    dest[0] = '0';
-    bytes_written = 1;
-  } else {
-    while(value > 0){
-      static const char LOOKUP[] = "0123456789ABCDEF";
-      dest[bytes_written++] = LOOKUP[value % 16];
-      value /= 16;
     }
     string_inplace_reverse(dest, bytes_written);
   }
@@ -185,8 +131,18 @@ void klog_write_string(Circular_Log *log, const char *string, size_t length){
   spinlock_release(&log->spinlock);
 }
 
-void klog_write_fmt(Circular_Log *log, const char *fmt, ...){
+void klog_enable_category(Circular_Log *log, Log_Category category){
+  log->category_states[category] = Log_Category_State_ENABLED;
+}
+
+void klog_disable_category(Circular_Log *log, Log_Category category){
+  log->category_states[category] = Log_Category_State_DISABLED;
+}
+
+void klog_write_fmt(Circular_Log *log, Log_Category category, const char *fmt, ...){
   if(globals.is_logging_disabled) return;
+  if(log->category_states[category] == Log_Category_State_DISABLED) return;
+
   asm volatile("cli");
   spinlock_aquire(&log->spinlock); 
   size_t entry_index = log->entry_write_position % CIRCULAR_LOG_ENTRY_COUNT;

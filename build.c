@@ -7,6 +7,8 @@ exit
 #define BUILD_DEBUG
 #define FORCE_REDRAW_ON_LOG_ENTRY 1
 
+#pragma GCC diagnostic error "-Wimplicit-function-declaration"
+
 #pragma GCC diagnostic warning "-Wall"
 #pragma GCC diagnostic warning "-Wextra"
 #pragma GCC diagnostic ignored "-Wunused-variable"
@@ -51,6 +53,12 @@ exit
 #include "src/kernel_graphics.h"
 #include "src/kernel_memory.h"
 #include "src/interrupt_handler.h"
+
+#include "src/kernel_pci.h"
+#include "src/usb.h"
+#include "src/filesystem.h"
+
+
 #include "src/kernel_debug.h"
 #include "src/kernel_task.h"
 
