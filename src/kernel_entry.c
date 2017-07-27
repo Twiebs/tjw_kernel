@@ -72,6 +72,7 @@ uint32_t get_cpu_id(){
 #include "kernel_pci.c"
 #include "kernel_memory.c"
 #include "kernel_debug.c"
+#include "hardware_keyboard.c"
 
 #include "filesystem.c"
 #include "filesystem_ext2.c"
@@ -297,10 +298,6 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
 
   //log_disable(DEBUG0);
 
-  //NOTE(Torin) Setup keyboard event stack
-  globals.keyboard.scancode_event_stack = globals.keyboard.scancode_event_stack0;
-
-
 	if (multiboot2_magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
 		klog_error("the kernel was not booted with a multiboot2 compliant bootloader!");
 		kpanic();
@@ -490,15 +487,8 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
   //lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x22, 1);
 
 	while(1) { 
-    Keyboard_State *keyboard = &globals.keyboard;
-    if(globals.keyboard.scancode_event_stack_count > 0){
-      process_keyevents(keyboard, &globals.log); 
-      if(keyboard->scancode_event_stack == keyboard->scancode_event_stack0){
-        keyboard->scancode_event_stack = keyboard->scancode_event_stack1;
-      } else { keyboard->scancode_event_stack = keyboard->scancode_event_stack0; }
-      memset(keyboard->scancode_event_stack, 0x00, sizeof(keyboard->scancode_event_stack0));
-      keyboard->scancode_event_stack_count = 0;
-    }
+    process_shell_keyboard_input(&globals.keyboard, &globals.log);
+    reset_keyboard_state(&globals.keyboard);
     kgfx_draw_log_if_dirty(&globals.log);
   };
 }

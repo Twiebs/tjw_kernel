@@ -1,10 +1,4 @@
-typedef struct {
-  uint8_t keystate[256];
-  size_t scancode_event_stack_count;
-  uint8_t *scancode_event_stack;
-  uint8_t scancode_event_stack0[32];
-  uint8_t scancode_event_stack1[32];
-} Keyboard_State;
+
 
 //NOTE(Torin: 2016-08-24) An error_code is always pushed
 //on to the stack in our execption and interrupt handling model
@@ -41,5 +35,3 @@ static void irq_handler_keyboard();
 static void irq_handler_pit();
 static void lapic_timer_interrupt();
 static void lapic_periodic_timer_interrupt_handler(void);
-
-static void process_keyevents(Keyboard_State *keyboard, Circular_Log *log);

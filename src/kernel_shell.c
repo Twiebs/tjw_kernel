@@ -102,3 +102,39 @@ void kshell_process_command(const char *input, size_t length){
 
   klog_error("%s is not a shell command", input);
 }
+
+void process_shell_keyboard_input(Keyboard_State *keyboard, Circular_Log *log) {
+  for (size_t i = 0; i < sizeof(keyboard->is_key_pressed); i++) {
+    if (keyboard->is_key_pressed[i]) {
+      uint8_t scancode = i;
+
+      if (scancode == KEYBOARD_SCANCODE1_BACKSPACE_PRESSED) {
+        klog_remove_last_input_character(log);
+      } else if (scancode == KEYBOARD_SCANCODE1_ENTER_PRESSED) {
+        klog_submit_input_to_shell(log);
+      } else if (scancode == KEYBOARD_SCANCODE1_UP_PRESSED) {
+        if(log->scroll_offset < log->current_entry_count - 1){
+          log->scroll_offset += 1;
+        }
+
+
+        log->is_dirty = true;
+      } else if (scancode == KEYBOARD_SCANCODE1_DOWN_PRESSED){
+        if(log->scroll_offset > 0){
+          log->scroll_offset -= 1;
+          log->is_dirty = true;
+        }
+      }
+
+      if (scancode < (int)sizeof(SCANCODE_TO_LOWERCASE_ACII)) {
+        char ascii_character = 0;
+        if(keyboard->is_key_down[KEYBOARD_SCANCODE1_LSHIFT] ||
+          keyboard->is_key_down[KEYBOARD_SCANCODE1_RSHIFT]){
+          ascii_character = SCANCODE_TO_UPERCASE_ACII[scancode];
+        } else { ascii_character = SCANCODE_TO_LOWERCASE_ACII[scancode]; }
+        if(ascii_character == 0) return;
+        klog_add_input_character(log, ascii_character);
+      }
+    }
+  }
+}

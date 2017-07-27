@@ -46,13 +46,18 @@ exit
 
 #include "src/utility.h"
 
+
+
 #include "src/descriptor_tables.h"
 #include "src/kernel_synch.h"
 #include "src/kernel.h"
-#include "src/kernel_shell.h"
+#include "src/hardware_keyboard.h"
 #include "src/kernel_log.h"
+#include "src/kernel_shell.h"
+
 #include "src/kernel_graphics.h"
 #include "src/kernel_memory.h"
+
 #include "src/interrupt_handler.h"
 
 #include "src/kernel_pci.h"
@@ -67,7 +72,7 @@ exit
 #include "src/kernel_debug.h"
 #include "src/kernel_task.h"
 
-#include "src/hardware_keyboard.h"
+
 
 #include "src/kernel_entry.c"
 #include "src/interrupt_handler.c"
