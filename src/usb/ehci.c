@@ -1,4 +1,4 @@
-#include "usb_ehci_debug.c"
+#include "usb/ehci_debug.c"
 
 static void ehci_init_qtd(EHCI_QTD *previous_td, EHCI_QTD *current_td, uintptr_t current_td_physical_address, bool toggle, uint8_t transfer_type, uint16_t size, uintptr_t data_physical_address) {
   kassert(size < 32767);
@@ -696,7 +696,7 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
 
     if(extfs->block_size % msd->logical_block_size != 0) { klog_error("filesystem block size not multiple of device logical block size"); }
     extfs->sectors_per_block = extfs->block_size / msd->logical_block_size;
-    ext2fs_log_fs_info(extfs);
+    ext2fs_debug_log_fs_info(extfs);
 
 #if 0
     klog_debug("inode_count: %u", (uint32_t)superblock->inode_count);

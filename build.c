@@ -62,11 +62,11 @@ exit
 
 #include "src/kernel_pci.h"
 
-#include "src/usb.h"
-#include "src/usb_ehci.h"
+#include "src/usb/usb.h"
+#include "src/usb/ehci.h"
 
-#include "src/filesystem.h"
-#include "src/filesystem_ext2.h"
+#include "src/filesystem/filesystem.h"
+#include "src/filesystem/filesystem_ext2.h"
 
 
 #include "src/kernel_debug.h"

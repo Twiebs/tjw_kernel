@@ -74,11 +74,11 @@ uint32_t get_cpu_id(){
 #include "kernel_debug.c"
 #include "hardware_keyboard.c"
 
-#include "filesystem.c"
-#include "filesystem_ext2.c"
+#include "filesystem/filesystem.c"
+#include "filesystem/filesystem_ext2.c"
 
-#include "usb_protocol.c"
-#include "usb_ehci.c"
+#include "usb/usb_protocol.c"
+#include "usb/ehci.c"
 
 static IDT_Entry _idt[256];
 static uintptr_t _interrupt_handlers[256];

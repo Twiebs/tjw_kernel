@@ -7,22 +7,19 @@
 #define PCI_SUBCLASS_USB_CONTROLLER 0x03
 
 
-static inline
-void unpack_32_2x16(uint32_t value, uint16_t *a, uint16_t *b){
+static inline void unpack_32_2x16(uint32_t value, uint16_t *a, uint16_t *b){
   *a = (value >> 16) & 0xFFFF;
   *b = (value & 0xFFFF);
 }
 
-static inline
-void unpack_32_4x8(uint32_t value, uint8_t *a, uint8_t *b, uint8_t *c, uint8_t *d){
+static inline void unpack_32_4x8(uint32_t value, uint8_t *a, uint8_t *b, uint8_t *c, uint8_t *d){
   *a = (value >> 24) & 0xFF;
   *b = (value >> 16) & 0xFF;
   *c = (value >>  8) & 0xFF;
   *d = (value >>  0) & 0xFF;
 }
 
-static inline
-void pci_set_config_address(uint8_t bus_number, uint8_t device_number, uint8_t function_number, uint8_t register_number){
+static inline void pci_set_config_address(uint8_t bus_number, uint8_t device_number, uint8_t function_number, uint8_t register_number){
   struct PCI_Config_Adress {
     union {
       struct {
@@ -47,99 +44,28 @@ void pci_set_config_address(uint8_t bus_number, uint8_t device_number, uint8_t f
   write_port_uint32(PCI_CONFIG_ADDRESS_PORT, config_address.packed);
 }
 
-static inline
-uint32_t pci_read_uint32(){
+static inline uint32_t pci_read_uint32(){
   const uint16_t PCI_CONFIG_DATA_PORT = 0x0CFC;
   uint32_t result = read_port_uint32(PCI_CONFIG_DATA_PORT);
   return result;
 }
 
-static inline
-void pci_read_2x16(uint16_t *a, uint16_t *b){
+static inline void pci_read_2x16(uint16_t *a, uint16_t *b){
   uint32_t value = pci_read_uint32();
   unpack_32_2x16(value, a, b);
 }
 
-static inline
-void pci_read_4x8(uint8_t *a, uint8_t *b, uint8_t *c, uint8_t *d){
+static inline void pci_read_4x8(uint8_t *a, uint8_t *b, uint8_t *c, uint8_t *d){
   uint32_t value = pci_read_uint32();
   unpack_32_4x8(value, a, b, c, d);
 }
 
-static inline
-void pci_write_uint32(volatile uint32_t value){
+static inline void pci_write_uint32(volatile uint32_t value){
   const uint16_t PCI_CONFIG_DATA_PORT = 0x0CFC;
   write_port_uint32(PCI_CONFIG_DATA_PORT, value);
 }
 
-
-
-
-#if 0
-static inline
-void pci_log_device_info(uint8_t bus_number, uint8_t slot_number){
-  pci_set_config_address(bus_number, slot_number, 0, 0);
-  uint16_t vendor, device;
-  pci_read_2x16(&vendor, &device);
-  if(vendor == 0xFFFF) { return; }
-
-  pci_set_config_address(bus_number, slot_number, 0, 0x08);
-  uint8_t class_code, subclass, prog_if, revision_id;
-  pci_read_4x8(&class_code, &subclass, &prog_if, &revision_id);
-  if(class_code == PCI_CLASS_SERIAL_BUS_CONTROLLER && subclass == PCI_SUBCLASS_USB_CONTROLLER){
-
-    klog_debug("PCI Slot: 0x%X", (uint64_t)slot_number);
-    klog_debug("  vendor: 0x%X", (uint64_t)vendor);
-    klog_debug("  device: 0x%X", (uint64_t)device);
-    klog_debug("  class_code: 0x%X", (uint64_t)class_code);
-    klog_debug("  subclass: 0x%X", (uint64_t)subclass);
-    klog_debug("  prog_if: 0x%X", (uint64_t)prog_if);
-
-
-
-    pci_set_config_address(bus_number, slot_number, 0, 0x10);
-    uint32_t usb_register_address = pci_read_uint32();
-    klog_debug(" usb_register_address: 0x%X", usb_register_address);
-
-    uintptr_t usb_virtual_page = 0x1000000; 
-    uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_2MB(usb_register_address, usb_virtual_page, 0); 
-    uintptr_t usb_virtual = usb_virtual_page + page_offset;
-    ehci_initalize(usb_virtual); 
-  }
-}
-#endif
-
-typedef struct {
-  uintptr_t uhci_physical_address;
-  uintptr_t ohci_physical_address;
-  uintptr_t ehci_physical_address;
-  uintptr_t xhci_physical_address;
-  PCI_Device uhci_pci_device;
-  PCI_Device ohci_pci_device;
-  PCI_Device ehci_pci_device;
-  PCI_Device xhci_pci_device;
-} PCI_Info;
-
-static inline
-void pci_log_device_status(PCI_Device *pci_device){
-  pci_set_config_address(pci_device->bus_number, pci_device->device_number, pci_device->function_number, 0x04);
-  uint16_t status = 0, command = 0;
-  pci_read_2x16(&status, &command);
-  static const uint16_t PCI_STATUS_DETECTED_PARITY_ERROR = 1 << 15;
-  static const uint16_t PCI_STATUS_SIGNALED_SYSTEM_ERROR = 1 << 14;
-  static const uint16_t PCI_STATUS_RECEIVED_MASTER_ABORT = 1 << 13;
-  static const uint16_t PCI_STATUS_RECEIVED_TARGET_ABORT = 1 << 12;
-  static const uint16_t PCI_STATUS_SIGNALED_TARGET_ABORT = 1 << 11;
-  static const uint16_t PCI_STATUS_MASTER_DATA_PARITY_ERROR = 1 << 8;
-  klog_debug("detected_parity_error: %u", status & PCI_STATUS_DETECTED_PARITY_ERROR);
-  klog_debug("signaled_system_error: %u", status & PCI_STATUS_SIGNALED_SYSTEM_ERROR);
-  klog_debug("received_master_abort: %u", status & PCI_STATUS_RECEIVED_MASTER_ABORT);
-  klog_debug("received_target_abort: %u", status & PCI_STATUS_RECEIVED_TARGET_ABORT);
-  klog_debug("master_data_parity_error: %u", status & PCI_STATUS_MASTER_DATA_PARITY_ERROR); 
-}
-
-static inline
-void pci_scan_devices(){
+static inline void pci_scan_devices() {
   PCI_Info pci_info = {};
 
   for(size_t bus_number = 0; bus_number < 256; bus_number++){
@@ -158,7 +84,7 @@ void pci_scan_devices(){
       static const uint8_t HEADER_TYPE_MULTIPLE_FUNCTIONS_BIT = 1 << 7;
       if(header_type & HEADER_TYPE_MULTIPLE_FUNCTIONS_BIT) function_limit = 8; 
 
-      for(function_number = 0; function_number < function_limit; function_number++) {
+      for (function_number = 0; function_number < function_limit; function_number++) {
         uint16_t vendor, device;
         pci_set_config_address(bus_number, device_number, function_number, 0x00);
         pci_read_2x16(&vendor, &device);
@@ -180,23 +106,23 @@ void pci_scan_devices(){
         pci_read_4x8(&max_latency, &min_grant, &interrupt_pin, &interrupt_line);
 
         //NOTE(Torin 2016-09-13) Get the base addressess of the USB Host Controllers 
-        if(class_code == PCI_CLASS_SERIAL_BUS_CONTROLLER && subclass == PCI_SUBCLASS_USB_CONTROLLER){
+        if (class_code == PCI_CLASS_SERIAL_BUS_CONTROLLER && subclass == PCI_SUBCLASS_USB_CONTROLLER) {
           static const uint8_t UHCI_CONTROLLER = 0x00;
           static const uint8_t OHCI_CONTROLLER = 0x10;
           static const uint8_t EHCI_CONTROLLER = 0x20;
           static const uint8_t XHCI_CONTROLLER = 0x30;
-          if(prog_if == UHCI_CONTROLLER){
+          if (prog_if == UHCI_CONTROLLER) {
             klog_debug("[pci] Found UHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
             pci_set_config_address(bus_number, device_number, function_number, 0x20);
             uint32_t uhci_registers_address = pci_read_uint32(); 
             pci_info.uhci_physical_address = uhci_registers_address;
-          } else if (prog_if == OHCI_CONTROLLER){
+          } else if (prog_if == OHCI_CONTROLLER) {
             klog_debug("[pci] Found OHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
             pci_set_config_address(bus_number, device_number, function_number, 0x10);
             uint32_t ohci_bar_register = pci_read_uint32();
             uint32_t ohci_register_address = ohci_bar_register & ~0xFFF;
             pci_info.ohci_physical_address = ohci_register_address;
-          } else if (prog_if == EHCI_CONTROLLER){ 
+          } else if (prog_if == EHCI_CONTROLLER) { 
             klog_debug("[pci] Found EHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
             pci_set_config_address(bus_number, device_number, function_number, 0x10);
             uint32_t ehci_registers_address = pci_read_uint32(); 
@@ -211,7 +137,7 @@ void pci_scan_devices(){
             klog_debug("interrupt_line: %u", (uint32_t)interrupt_line);
             ehci_initalize_host_controller(pci_info.ehci_physical_address, &pci_info.ehci_pci_device);
             return; //TODO(Torin 2016-10-07) Delete this test code!
-          } else if (prog_if == XHCI_CONTROLLER){
+          } else if (prog_if == XHCI_CONTROLLER) {
             klog_debug("[pci] Found XHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
             pci_set_config_address(bus_number, device_number, function_number, 0x10);
             uint32_t xhci_address_high = pci_read_uint32();

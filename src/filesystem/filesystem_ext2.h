@@ -1,5 +1,4 @@
 
-
 typedef struct {
   uint32_t inode_count_per_group;
   uint32_t block_count_per_group;
@@ -112,8 +111,6 @@ typedef struct {
   char name[0];
 } __attribute((packed)) Ext2_Directory_Entry;
 
-static const uint8_t PARTITION_TYPE_LINUX_FILESYSTEM = 0x83;
-
 static const uint16_t EXT2_SUPERBLOCK_SIGNATURE = 0xEF53;
 static const uint16_t EXT2_FILESYSTEM_STATE_CLEAN = 0x01;
 static const uint16_t EXT2_FILESYSTEM_STATE_ERRORS = 0x02;
@@ -153,11 +150,16 @@ static const uint8_t EXT2_DIRECTORY_ENTRY_TYPE_FIFO             = 5;
 static const uint8_t EXT2_DIRECTORY_ENTRY_TYPE_SOCKET           = 6;
 static const uint8_t EXT2_DIRECTORY_ENTRY_TYPE_SYMBOLIC_LINK    = 7;
 
+static const char *DIRECTORY_ENTRY_TYPE_NAMES[] = {
+  "UNKNOWN_TYPE",     //0
+  "REGULAR_FILE",     //1
+  "DIRECTORY",        //2
+  "CHARACTER_DEVICE", //3
+  "BLOCK_DEVICE",     //4
+  "FIFO",             //5
+  "SCOKET",           //6
+  "SYMBOLIC_LINK"     //7
+};
+
 bool ext2fs_read_block(Ext2_Filesystem *extfs, uint32_t block_number, uintptr_t buffer_physical);
 int ext2fs_read_inode(Ext2_Filesystem *extfs, uint32_t inode_number, Ext2_Inode *out_inode);
-
-//=========== Debug ===============================
-
-void ext2fs_log_directory_entry(Ext2_Filesystem *fs, Ext2_Directory_Entry *directory_entry);
-void ext2fs_log_inode(Ext2_Inode *inode);
-void ext2fs_log_fs_info(Ext2_Filesystem *extfs);

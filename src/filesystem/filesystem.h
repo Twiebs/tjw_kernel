@@ -42,7 +42,7 @@ typedef struct {
   uint32_t sector_count;
 } __attribute((packed)) MBR_Partition_Table;
 
-
+static const uint8_t PARTITION_TYPE_LINUX_FILESYSTEM = 0x83;
 
 int fs_read_file(File_Handle *h, uint64_t offset, uint64_t size, uintptr_t *physical_pages);
 int fs_obtain_file_handle(const char *path, uint64_t path_length, File_Handle *in_handle);
