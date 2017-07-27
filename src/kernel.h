@@ -39,45 +39,37 @@
 	asm volatile ("cli"); \
 	asm volatile ("hlt")
 
-static inline 
-void write_port_uint8(uint16_t port, uint8_t value) {
+static inline void write_port_uint8(uint16_t port, uint8_t value) {
 	asm volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
 }
 
-static inline
-void write_port_uint32(volatile uint16_t port, volatile uint32_t value){
+static inline void write_port_uint32(volatile uint16_t port, volatile uint32_t value){
   asm volatile ("outl %0, %1" : : "a"(value), "Nd"(port));
 }
 
-
-static inline
-uint8_t read_port_uint8(uint16_t port) {
+static inline uint8_t read_port_uint8(uint16_t port) {
 	uint8_t result;
 	asm volatile ("inb %1, %0" : "=a"(result) : "Nd"(port));
 	return result;
 }
 
-static inline
-uint16_t read_port_uint16(uint16_t port){
+static inline uint16_t read_port_uint16(uint16_t port){
   uint16_t result;
   asm volatile("inw %1, %0" : "=a"(result) : "Nd"(port));
   return result;
 }
 
-static inline
-uint32_t read_port_uint32(uint16_t port){
+static inline uint32_t read_port_uint32(uint16_t port){
 	uint32_t result;
 	asm volatile ("inl %1, %0" : "=a"(result) : "Nd"(port));
 	return result;
 }
 
-static inline 
-void cpuid(int code, uint32_t *a, uint32_t *d) {
+inline void cpuid(int code, uint32_t *a, uint32_t *d) {
   asm volatile("cpuid":"=a"(*a),"=d"(*d):"a"(code):"ecx","ebx");
 }
 
-static inline 
-void cpu_get_msr(uint32_t msr, uint32_t *lo, uint32_t *hi) {
+inline void cpu_get_msr(uint32_t msr, uint32_t *lo, uint32_t *hi) {
    asm volatile("rdmsr" : "=a"(*lo), "=d"(*hi) : "c"(msr));
 }
 
@@ -96,19 +88,27 @@ kernel_reboot() {
 
 #define SYSTEM_MAX_CPU_COUNT 16
 
+
+typedef struct {
+  uintptr_t kernel_stack_top;
+  Task_State_Segment tss;
+} CPU_Info;
+
 typedef struct {
   uintptr_t lapic_physical_address;
   uintptr_t ioapic_physical_address;
   uintptr_t lapic_virtual_address;
   uintptr_t ioapic_virtual_address;
 
-  //TODO(Torin 2016-08-29) Set for each core
-  uintptr_t kernel_stack_address;
+  uint64_t total_cpu_count;
+  uint64_t running_cpu_count;
+  uint64_t cpu_lapic_ids[32];
+  CPU_Info cpu_infos[32];
+  Spin_Lock cpu_info_lock;
 
-  uint32_t cpu_lapic_ids[SYSTEM_MAX_CPU_COUNT];
-  uint32_t cpu_count;
-  uint32_t running_cpu_count;
-  Spin_Lock smp_lock;
+  //Memory Information and managment
+  uintptr_t kernel_end;
+  uintptr_t memory_begin;
 } System_Info;
 
 typedef struct {

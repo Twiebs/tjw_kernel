@@ -2,15 +2,94 @@
 #define ELF64_IMPLEMENTATION
 #include "elf64.h"
 
-//===============================================================================
-//TODO(Torin 2016-09-01) Make this take sizes for the data section
-//and executable section of the process that is to be created but for now
-//It will simply be hardcoded for elf values
+static inline
+void ktask_log_process_info(Process_Context *p){
+  klog_debug("executable_physical_address: 0x%X", p->executable_physical_address);
+  klog_debug("program_start_virtual_address: 0x%X", p->program_start_virtual_address);
+  klog_debug("is_valid: %u", (uint32_t)p->is_valid);
+}
 
-//TODO(Torin 2016-10-27) This model is funadmentaly fucked for executables with
-//code size > 4096 which is a very common case!
+#define exit_if(condition, message) if((condition)){klog_error(message);return false;}
 
-uint64_t ktask_create_process(uintptr_t executable_physical, Task_Info *task_info){
+static inline
+bool extract_elf_executable_load_info(uintptr_t executable_virtual, Executable_Load_Info *info){
+  ELF64_Header *elf_header = (ELF64_Header *)executable_virtual;
+  exit_if(elf_header->magic_number != ELF64_MAGIC_NUMBER, "ELF executable magic number mismatch");
+  exit_if(elf_header->elf_class != ELF_CLASS_64, "ELF executable must be 64bit format");
+  exit_if(elf_header->data_encoding != ELF_DATA_ENCODING_LITTLE_ENDIAN, "ELF Executable must be endcoded Little Endian");
+  exit_if(elf_header->abi_type != ELF_ABI_TYPE_SYSTEMV, "ELF executable must use SystemV ABI");
+  
+  info->entry_address = elf_header->entry_address;
+
+  ELF64_Program_Header *program_header = (ELF64_Program_Header *)(executable_virtual + elf_header->program_header_offset);
+  for(size_t i = 0; i < elf_header->program_header_entry_count; i++){
+    if(program_header->segment_type == ELF_Segment_Type_LOAD){
+      if(info->code_location != 0x00){
+        klog_error("unhandled multipule load case");
+        return false;
+      }
+
+      info->code_location = program_header->virtual_address;
+      info->code_offset = program_header->offset_in_file;
+    }
+
+    program_header = (ELF64_Program_Header *)(((uintptr_t)program_header) + elf_header->program_header_entry_size);
+  }
+
+  return true;
+}
+
+//NOTE(Torin 2016-11-28) Need p4 table for each cpu core
+
+bool ktask_run_program(const char *program_path, size_t path_length){
+  File_Handle handle = {};
+  if(fs_obtain_file_handle(program_path, path_length, &handle) == 0){
+    klog_error("failed to open program executable: %.*s", path_length, program_path);
+    return false;
+  }
+
+  //TODO(Torin) Make this smater for potentional overflows
+  uint64_t required_memory = ((handle.file_size + 0xFFF) & ~0xFFF);
+  uint64_t required_pages = required_memory / 4096;
+  if(required_pages > 4096) {
+    klog_error("Executable is too large for current physical page allocation method");
+    return false;
+  }
+
+  uintptr_t physical_pages[required_pages];
+  memset(physical_pages, 0x00, sizeof(physical_pages));
+  if(kmem_allocate_physical_pages(&globals.memory_state, required_pages, physical_pages) == 0){
+    klog_error("System is out of physical memory.  Not enough RAM to run program: %.*s", path_length, program_path);
+    return false;
+  }
+
+  if(fs_read_file(&handle, 0, handle.file_size, physical_pages) == 0){
+    klog_error("failed to read file");
+    return false;
+  }
+
+  Executable_Load_Info load_info = {};
+  uintptr_t executable_virtual = kmem_push_temporary_kernel_memory(physical_pages[0]);
+  extract_elf_executable_load_info(executable_virtual, &load_info);
+  kmem_pop_temporary_kernel_memory();
+  uint64_t pid = ktask_create_process(&load_info, &globals.task_info);
+
+  if (pid == KTASK_INVALID_PID){
+    klog_error("failed to create process");
+    return false;
+  }
+
+
+  Process_Context *p = &globals.task_info.processess[pid];
+  ktask_log_process_info(p);
+  
+  //uint64_t thread_id = ktask_create_thread(pid, p->start_address, &globals.task_info);
+  //ktask_context_switch(thread_id, &globals.task_info);
+  return true;
+}
+
+
+uint64_t ktask_create_process(Executable_Load_Info *load_info, Task_Info *task_info){
   uint64_t result_pid = KTASK_INVALID_PID;
   Process_Context *process = 0;
 
@@ -26,36 +105,27 @@ uint64_t ktask_create_process(uintptr_t executable_physical, Task_Info *task_inf
   if(process == 0) return result_pid;
 
 
-  uintptr_t executable_virtual = kmem_push_temporary_kernel_memory(executable_physical);
-  ELF64Header *header = (ELF64Header *)executable_virtual;
-  if(header->magicNumber != ELF64_MAGIC_NUMBER){
-    klog_error("invalid elf file was provided");
-    return KTASK_INVALID_PID;
-  }
-  process->program_start_virtual_address = header->programEntryOffset;
+  process->program_start_virtual_address = load_info->entry_address;
+
+  uintptr_t process_page_table_physical = 0;
+  kmem_allocate_physical_pages(&globals.memory_state, 1, &process_page_table_physical);
+  Page_Table *pt = (Page_Table *)kmem_push_temporary_kernel_memory(process_page_table_physical);
+  pt->entries[2] = load_info->code_location | PAGE_PRESENT_BIT | PAGE_USER_ACCESS_BIT; 
   kmem_pop_temporary_kernel_memory();
 
-  uintptr_t process_page_table = 0;
-  kmem_allocate_physical_pages(&globals.memory_state, 1, &process_page_table);
-  Page_Table *pt = (Page_Table *)kmem_push_temporary_kernel_memory(process_page_table);
-  pt->entries[2] = executable_physical | PAGE_PRESENT_BIT | PAGE_USER_ACCESS_BIT; 
-  kmem_pop_temporary_kernel_memory();
-
-  process->process_p2_table = process_page_table;
+  process->p2_table_physical = process_page_table_physical;
   process->is_valid = true;
   return result_pid;
 }
 
-//TODO(Torin 2016-09-01) Need a real physical frame allocator
-
 uint64_t ktask_create_thread(uint64_t pid, uintptr_t rip, Task_Info *task_info){
-  uint64_t result_tid = KTASK_INVALID_TID;
+  uint64_t result_thread_id = KTASK_INVALID_TID;
   Thread_Context *thread = 0;
   for(size_t i = 0; i < KTASK_MAX_THREADS; i++){
     Thread_Context *t = &task_info->threads[i];
     if(t->is_valid == false){
       thread = t;
-      result_tid = i;
+      result_thread_id = i;
     }
   }
 
@@ -64,12 +134,13 @@ uint64_t ktask_create_thread(uint64_t pid, uintptr_t rip, Task_Info *task_info){
     kpanic();
   }
 
-  //TODO(Torin 2016-10-20) Broken Thread Creation!
-
 #if 0
-  uintptr_t thread_physical_stack = 0x00C00000;
-  uintptr_t thread_virtual_stack = 0x00600000;
-  kmem_map_physical_to_virtual_2MB_ext(thread_physical_stack, thread_virtual_stack, PAGE_USER_ACCESS_BIT);
+  Process_Context *p = &globals.task_info.processess[pid];
+  uintptr_t thread_data_stack_physical_pages[512] = {};
+  kmem_allocate_physical_pages(&globals.memory_state, 512, thread_data_stack_physical_pages);
+  Page_Table *pt = (Page_Table *)kmem_push_temporary_kernel_memory(p->p2_table_physical);
+  pt->entries[3] = thread_data_stack_physical_pages  
+
   uintptr_t rsp_begin =  thread_virtual_stack + 0x1FFFFF;
 
   thread->stack_physical_address = thread_physical_stack;
@@ -81,7 +152,7 @@ uint64_t ktask_create_thread(uint64_t pid, uintptr_t rip, Task_Info *task_info){
 
 
 
-  return result_tid;
+  return result_thread_id;
 }
 
 //TODO(Torin 2016-09-01) There is a high probabilty that the cpu_id

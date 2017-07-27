@@ -21,6 +21,7 @@
 */
 
 
+
 typedef struct {
   Circular_Log log;
   VGA_Text_Terminal vga_text_term;
@@ -44,21 +45,18 @@ typedef struct {
 
 static Kernel_Globals globals;
 
-#define GDT_RING0_DATA 0x08
-#define GDT_RING3_DATA 0x10
-#define GDT_RING0_CODE 0x18
-#define GDT_RING3_CODE 0x20
-#define GDT_TSS 0x28
+
 
 #include "kernel_apic.c"
 
 
-static inline
 uint32_t get_cpu_id(){
+  System_Info *system = &globals.system_info;
   uint32_t lapic_id = lapic_get_id(globals.system_info.lapic_virtual_address);
-  for(size_t i = 0; i < globals.system_info.cpu_count; i++){
-    if(globals.system_info.cpu_lapic_ids[0] == lapic_id) return i;
+  for (size_t i = 0; i < system->total_cpu_count; i++) {
+    if (system->cpu_lapic_ids[i] == lapic_id) { return i; }
   }
+
   klog_error("UNREGISTER LAPIC ID WAS USED TO GFT CPU ID");
   kpanic();
   return 0;
@@ -67,12 +65,17 @@ uint32_t get_cpu_id(){
 
 #include "kernel_graphics.c"
 #include "kernel_acpi.c"
-#include "kernel_descriptor.c"
+//#include "kernel_descriptor.c"
+#include "descriptor_tables.c"
 #include "kernel_exceptions.c"
 #include "kernel_task.c"
 #include "kernel_pci.c"
 #include "kernel_memory.c"
 #include "kernel_debug.c"
+
+#include "filesystem.c"
+#include "filesystem_ext2.c"
+
 #include "usb_protocol.c"
 #include "usb_ehci.c"
 
@@ -90,33 +93,12 @@ static const uint8_t TEST_PROGRAM_ELF[] = {
 #endif
 
 
-
-//TODO(Torin) Remove IDT Global variable
-static void
-idt_install_interrupt(const uint32_t irq_number, const uint64_t irq_handler_addr){
-	static const uint64_t PRIVILEGE_LEVEL_0 = 0b00000000;
-	static const uint64_t PRIVILEGE_LEVEL_3 = 0b01100000;
-	static const uint64_t PRESENT_BIT = (1 << 7); 
-	
-	static const uint64_t TYPE_TASK_GATE_64 = 0x5;
-	static const uint64_t TYPE_INTERRUPT_GATE_64 = 0xE;
-	static const uint64_t TYPE_TRAP_GATE_64 = 0xF;
-
-	_idt[irq_number].offset_0_15 = (uint16_t)(irq_handler_addr & 0xFFFF);
-	_idt[irq_number].offset_16_31 = (uint16_t)((irq_handler_addr >> 16) & 0xFFFF);
-	_idt[irq_number].offset_32_63 = (uint32_t)((irq_handler_addr >> 32) & 0xFFFFFFFF);
-	_idt[irq_number].type_and_attributes = PRESENT_BIT | TYPE_INTERRUPT_GATE_64 | PRIVILEGE_LEVEL_0; 
-	_idt[irq_number].code_segment_selector = GDT_RING0_CODE;
-	_idt[irq_number].ist = 0;
-}
-
-static void
-idt_install_all_interrupts(){
+static void idt_install_all_interrupts() {
   extern void asm_double_fault_handler();
   extern void asm_debug_handler();
   
 	for (uint32_t i = 0; i < 256; i++) {
-		idt_install_interrupt(i, (uintptr_t)asm_debug_handler);
+		idt_install_interrupt(_idt, i, (uintptr_t)asm_debug_handler);
 		_interrupt_handlers[i] = 0x00;
 	}
 
@@ -153,38 +135,38 @@ idt_install_all_interrupts(){
 		extern void asm_isr30(void);
 		extern void asm_isr31(void);
 
-		idt_install_interrupt(0, (uintptr_t)asm_isr0);
-		idt_install_interrupt(1, (uintptr_t)asm_isr1);
-		idt_install_interrupt(2, (uintptr_t)asm_isr2);
-		idt_install_interrupt(3, (uintptr_t)asm_isr3);
-		idt_install_interrupt(4, (uintptr_t)asm_isr4);
-		idt_install_interrupt(5, (uintptr_t)asm_isr5);
-		idt_install_interrupt(6, (uintptr_t)asm_isr6);
-		idt_install_interrupt(7, (uintptr_t)asm_isr7);
-		idt_install_interrupt(8, (uintptr_t)asm_double_fault_handler);
-		idt_install_interrupt(9, (uintptr_t)asm_isr9);
-		idt_install_interrupt(10, (uintptr_t)asm_isr10);
-		idt_install_interrupt(11, (uintptr_t)asm_isr11);
-		idt_install_interrupt(12, (uintptr_t)asm_isr12);
-		idt_install_interrupt(13, (uintptr_t)asm_isr13);
-		idt_install_interrupt(14, (uintptr_t)asm_isr14);
-		idt_install_interrupt(15, (uintptr_t)asm_isr15);
-		idt_install_interrupt(16, (uintptr_t)asm_isr16);
-		idt_install_interrupt(17, (uintptr_t)asm_isr17);
-		idt_install_interrupt(18, (uintptr_t)asm_isr18);
-		idt_install_interrupt(19, (uintptr_t)asm_isr19);
-		idt_install_interrupt(20, (uintptr_t)asm_isr20);
-		idt_install_interrupt(21, (uintptr_t)asm_isr21);
-		idt_install_interrupt(22, (uintptr_t)asm_isr22);
-		idt_install_interrupt(23, (uintptr_t)asm_isr23);
-		idt_install_interrupt(24, (uintptr_t)asm_isr24);
-		idt_install_interrupt(25, (uintptr_t)asm_isr25);
-		idt_install_interrupt(26, (uintptr_t)asm_isr26);
-		idt_install_interrupt(27, (uintptr_t)asm_isr27);
-		idt_install_interrupt(28, (uintptr_t)asm_isr28);
-		idt_install_interrupt(29, (uintptr_t)asm_isr29);
-		idt_install_interrupt(30, (uintptr_t)asm_isr30);
-		idt_install_interrupt(31, (uintptr_t)asm_isr31);
+		idt_install_interrupt(_idt, 0, (uintptr_t)asm_isr0);
+		idt_install_interrupt(_idt, 1, (uintptr_t)asm_isr1);
+		idt_install_interrupt(_idt, 2, (uintptr_t)asm_isr2);
+		idt_install_interrupt(_idt, 3, (uintptr_t)asm_isr3);
+		idt_install_interrupt(_idt, 4, (uintptr_t)asm_isr4);
+		idt_install_interrupt(_idt, 5, (uintptr_t)asm_isr5);
+		idt_install_interrupt(_idt, 6, (uintptr_t)asm_isr6);
+		idt_install_interrupt(_idt, 7, (uintptr_t)asm_isr7);
+		idt_install_interrupt(_idt, 8, (uintptr_t)asm_double_fault_handler);
+		idt_install_interrupt(_idt, 9, (uintptr_t)asm_isr9);
+		idt_install_interrupt(_idt, 10, (uintptr_t)asm_isr10);
+		idt_install_interrupt(_idt, 11, (uintptr_t)asm_isr11);
+		idt_install_interrupt(_idt, 12, (uintptr_t)asm_isr12);
+		idt_install_interrupt(_idt, 13, (uintptr_t)asm_isr13);
+		idt_install_interrupt(_idt, 14, (uintptr_t)asm_isr14);
+		idt_install_interrupt(_idt, 15, (uintptr_t)asm_isr15);
+		idt_install_interrupt(_idt, 16, (uintptr_t)asm_isr16);
+		idt_install_interrupt(_idt, 17, (uintptr_t)asm_isr17);
+		idt_install_interrupt(_idt, 18, (uintptr_t)asm_isr18);
+		idt_install_interrupt(_idt, 19, (uintptr_t)asm_isr19);
+		idt_install_interrupt(_idt, 20, (uintptr_t)asm_isr20);
+		idt_install_interrupt(_idt, 21, (uintptr_t)asm_isr21);
+		idt_install_interrupt(_idt, 22, (uintptr_t)asm_isr22);
+		idt_install_interrupt(_idt, 23, (uintptr_t)asm_isr23);
+		idt_install_interrupt(_idt, 24, (uintptr_t)asm_isr24);
+		idt_install_interrupt(_idt, 25, (uintptr_t)asm_isr25);
+		idt_install_interrupt(_idt, 26, (uintptr_t)asm_isr26);
+		idt_install_interrupt(_idt, 27, (uintptr_t)asm_isr27);
+		idt_install_interrupt(_idt, 28, (uintptr_t)asm_isr28);
+		idt_install_interrupt(_idt, 29, (uintptr_t)asm_isr29);
+		idt_install_interrupt(_idt, 30, (uintptr_t)asm_isr30);
+		idt_install_interrupt(_idt, 31, (uintptr_t)asm_isr31);
 	}
 
 	{ //Hardware Interrupts
@@ -201,8 +183,8 @@ idt_install_all_interrupts(){
 		_interrupt_handlers[0] = (uintptr_t)irq_handler_pit;
 		_interrupt_handlers[1] = (uintptr_t)irq_handler_keyboard;
     _interrupt_handlers[2] = (uintptr_t)lapic_timer_interrupt;
-		idt_install_interrupt(IRQ_PIT, (uintptr_t)asm_irq0);
-		idt_install_interrupt(IRQ_KEYBOARD, (uintptr_t)asm_irq1);
+		idt_install_interrupt(_idt, IRQ_PIT, (uintptr_t)asm_irq0);
+		idt_install_interrupt(_idt, IRQ_KEYBOARD, (uintptr_t)asm_irq1);
     idt_encode_entry((uintptr_t)&_idt[0x22], (uintptr_t)asm_irq2, true);
     idt_encode_entry((uintptr_t)&_idt[0x80], (uintptr_t)asm_syscall_handler, true);
     idt_encode_entry((uintptr_t)&_idt[0x31], (uintptr_t)asm_spurious_interrupt_handler, true);
@@ -218,9 +200,56 @@ ap_entry_procedure(void){
 }
 
 
-extern void 
-kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
-{
+
+void initalize_task_state_segment(CPU_Info *cpu_info) {
+  //NOTE(Torin: 2017-07-26) Kernel stack must be initalized
+  kassert(cpu_info->kernel_stack_top != 0);
+  //TODO(Torin: 2017-07-26) Better names / Comments for TSS Members
+  memset(&cpu_info->tss, 0x00, sizeof(Task_State_Segment));
+  cpu_info->tss.rsp0 = cpu_info->kernel_stack_top;
+  //TODO(Torin: 2017-07-27) I think this is unused
+  cpu_info->tss.ist1 = cpu_info->kernel_stack_top; 
+
+  //TODO(Torin: 2017-07-27) Consider inlining tss_ldr and refactoring GDT location
+  uint8_t *gdt = (uint8_t *)&GDT64;
+  gdt_encode_system_descriptor((uintptr_t)&cpu_info->tss, 0xFF, 
+    GDT_DESCRIPTOR_TYPE_TSS, 3, (uintptr_t)(gdt + GDT_TSS_ENTRY_OFFSET));
+  tss_ldr(GDT_TSS_ENTRY_OFFSET);
+}
+
+
+void initalize_cpu_info_and_start_secondary_cpus(System_Info *system) {
+  klog_info("initalizing cpu infos...");
+  extern uintptr_t stack_top; //This is the temp stack created in asm
+  CPU_Info *cpu_info = &system->cpu_infos[0];
+  cpu_info->kernel_stack_top = stack_top;
+  initalize_task_state_segment(cpu_info);
+
+
+#if 0 //NOTE(Torin) Setup tramponline code and startup SMP processors
+  klog_debug("copying trampoline code to 0x1000");
+  memcpy(0x1000, TRAMPOLINE_BINARY, sizeof(TRAMPOLINE_BINARY));
+  uintptr_t *p4_table_address = (uintptr_t *)0x2000;
+  uintptr_t *trampoline_exit = (uintptr_t *)0x2008;
+  uintptr_t *cpu_id = (uintptr_t *)0x2010;
+  *p4_table_address = (uintptr_t)&g_p4_table;
+  *trampoline_exit = (uintptr_t)ap_entry_procedure;
+  for(size_t i = 0; i < sys->cpu_count; i++){
+    *cpu_id = i;
+    //lapic_startup_ap(lapic_virtual_address, sys->cpu_lapic_ids[i], 0x01);
+    //TODO(Torin) For now this assumes that the CPU will initalize correctly which is bad
+    while(1) {
+      spinlock_aquire(&sys->smp_lock);
+      if(sys->cpu_count > i) {
+        spinlock_release(&sys->smp_lock);
+      }
+    }
+  }
+  #endif
+}
+
+
+extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
 	serial_debug_init();
   //NOTE(Torin 2016-09-02) At this point the kernel has been called into by our
   //bootstrap assembly and interrupts are disabled.  A Longmode GDT has been loaded
@@ -255,10 +284,7 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     write_port_uint8(PIC2_DATA_PORT, 0b11111111);
   }
 
-  { //NOTE(Torin) Initalize the IDT
-    //NOTE(Torin 2016-09-02) At some point in the future this should just be 
-    //A simple load on the staticly baked IDT table that will be created with an
-    //Ofline tool.  For now it is just done a runtime for simplicity
+  {
     idt_install_all_interrupts();
     struct {
       uint16_t limit;
@@ -269,7 +295,7 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
   }
 
 
-  log_disable(DEBUG0);
+  //log_disable(DEBUG0);
 
   //NOTE(Torin) Setup keyboard event stack
   globals.keyboard.scancode_event_stack = globals.keyboard.scancode_event_stack0;
@@ -359,26 +385,11 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
   }
 
   System_Info *sys = &globals.system_info;
-  if(parse_root_system_descriptor((RSDP_Descriptor_1*)rsdp_physical_address, sys) == 0){
+  if (parse_root_system_descriptor((RSDP_Descriptor_1*)rsdp_physical_address, sys) == 0) {
     klog_error("unabled to parse root system descriptor");
     return; 
   }
 
-
-  {
-    //TODO(Torin 2016-08-29) This should probably be established after
-    //the other cpus are initalized
-    extern uintptr_t stack_top;
-    uintptr_t stack_top_ptr = (uintptr_t)&stack_top;
-    sys->kernel_stack_address = stack_top_ptr;
-    memset(&g_tss_entry, 0x00, sizeof(g_tss_entry));
-    g_tss_entry.rsp0 = stack_top_ptr;
-    g_tss_entry.ist1 = stack_top_ptr;
-    //klog_debug("tss rsp0: 0x%X", g_tss_entry.rsp0);
-    uint8_t *gdt = (uint8_t *)&GDT64;
-    gdt_encode_system_descriptor((uintptr_t)&g_tss_entry, 0xFF, GDT_DESCRIPTOR_TYPE_TSS, 3, (uintptr_t)(gdt + GDT_TSS));
-    tss_ldr(GDT_TSS);
-  }
 
   { //NOTE(Torin) Initalize the lapic and configure the lapic timer
     //NOTE(Torin) Arbitrarly maps the lapic and ioapic into the kernels virtual addresss space
@@ -401,7 +412,6 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     uint32_t lapic_max_lvt_entries = (lapic_version_register >> 16) & 0xFF;
     klog_debug("lapic_version: %u", lapic_version);
     klog_debug("lapic_max_lvt_entries: %u", lapic_max_lvt_entries);
-
 
     static const uint32_t LAPIC_TIMER_IRQ_NUMBER_REGISTER = 0x320;
     static const uint32_t LAPIC_TIMER_INITAL_COUNT_REGISTER = 0x380;
@@ -471,27 +481,8 @@ kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address)
     ioapic_initalize(sys->ioapic_virtual_address);
   }
 
+  initalize_cpu_info_and_start_secondary_cpus(sys); 
 
-#if 0 //NOTE(Torin) Setup tramponline code and startup SMP processors
-  klog_debug("copying trampoline code to 0x1000");
-  memcpy(0x1000, TRAMPOLINE_BINARY, sizeof(TRAMPOLINE_BINARY));
-  uintptr_t *p4_table_address = (uintptr_t *)0x2000;
-  uintptr_t *trampoline_exit = (uintptr_t *)0x2008;
-  uintptr_t *cpu_id = (uintptr_t *)0x2010;
-  *p4_table_address = (uintptr_t)&g_p4_table;
-  *trampoline_exit = (uintptr_t)ap_entry_procedure;
-  for(size_t i = 0; i < sys->cpu_count; i++){
-    *cpu_id = i;
-    //lapic_startup_ap(lapic_virtual_address, sys->cpu_lapic_ids[i], 0x01);
-    //TODO(Torin) For now this assumes that the CPU will initalize correctly which is bad
-    while(1) {
-      spinlock_aquire(&sys->smp_lock);
-      if(sys->cpu_count > i) {
-        spinlock_release(&sys->smp_lock);
-      }
-    }
-  }
-  #endif
 
   pci_scan_devices();
 

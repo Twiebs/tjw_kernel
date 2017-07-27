@@ -46,6 +46,7 @@ exit
 
 #include "src/utility.h"
 
+#include "src/descriptor_tables.h"
 #include "src/kernel_synch.h"
 #include "src/kernel.h"
 #include "src/kernel_shell.h"
@@ -55,8 +56,12 @@ exit
 #include "src/interrupt_handler.h"
 
 #include "src/kernel_pci.h"
+
 #include "src/usb.h"
+#include "src/usb_ehci.h"
+
 #include "src/filesystem.h"
+#include "src/filesystem_ext2.h"
 
 
 #include "src/kernel_debug.h"

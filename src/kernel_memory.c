@@ -8,23 +8,11 @@ extern Page_Table g_p4_table;
 extern Page_Table g_p3_table;
 extern Page_Table g_p2_table;
 
-static inline
-void kdebug_kmem_log_memory_state(Kernel_Memory_State *mem){
-  klog_debug("Kernel_Memory_State:");
-  uint64_t total_usable_memory_mb = mem->total_usable_memory / (1024*1024);
-  klog_debug("  total_usable_memory: %luMB", total_usable_memory_mb);
-  for(size_t i = 0; i < mem->usable_range_count; i++){
-    Memory_Range *range = &mem->usable_range[i];
-    uintptr_t range_end = range->address + range->size;
-    uint64_t range_size_mb = range->size / (1024*1024);
-    klog_debug("  0x%X - 0x%X: %luMB", range->address, range_end, range_size_mb);
-  }
-}
 
-static inline
-void kmem_clear_page(void *page){
-  //TODO(Torin) Make this a global function pointer
-  //And create SSE and AVX variants
+//TODO(Torin) Make this a global function pointer
+//And create SSE and AVX variants
+static inline void kmem_clear_page(void *page){
+
   memset(page, 0x00, 4096);
 }
 
@@ -149,10 +137,8 @@ void kmem_flush_tlb(){
 
 void kmem_initalize_memory_state(Kernel_Memory_State *memstate){
   extern uint32_t _KERNEL_END;
-  uintptr_t kernel_end = 0x100000 + _KERNEL_END;
-  uintptr_t memory_begin = (kernel_end + 0x200000) & ~0x1FFFFF;
-  klog_debug("kernel_end: 0x%X", kernel_end);
-  klog_debug("memory_begin: 0x%X", memory_begin);
+  globals.system_info.kernel_end = 0x100000 + _KERNEL_END;
+  uintptr_t memory_begin = (globals.system_info.kernel_end + 0x200000) & ~0x1FFFFF;
   memstate->allocator_start = memory_begin; 
   //NOTE(Torin) The kernel is currently identity mapped!
   memstate->kernel_memory_start_virtual_address = memstate->allocator_start;
@@ -183,6 +169,7 @@ void kmem_initalize_memory_state(Kernel_Memory_State *memstate){
   memstate->kernel_memory_used_page_count = memstate->page_usage_bitmap_page_count + 1;
   memstate->kernel_memory_allocated_page_table_count = 1;
   kmem_flush_tlb();
+  klog_debug("[Memory] Kernel Memory Manager initalized");
 }
 
 uintptr_t kmem_map_physical_mmio(Kernel_Memory_State *memstate, uintptr_t physical_address, uint64_t page_count){

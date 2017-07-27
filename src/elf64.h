@@ -8,8 +8,6 @@
 
 #define ELF64_MAGIC_NUMBER (('F' << 24) | ('L' << 16) | ('E' << 8) | 0x7F)
 
-#define ELF_DATA_ENCODING_LITTLE_ENDIAN 1
-#define ELF_DATA_ENCODING_BIG_ENDIAN 2
 
 #define ELF_OBJ_TYPE_NONE 0
 #define ELF_OBJ_TYPE_RELOCATABLE 1
@@ -37,30 +35,50 @@
 #define ELF_SYMBOL_TYPE_SECTION 3
 #define ELF_SYMBOL_TYPE_FILE 4
 
+static const uint8_t ELF_CLASS_32 = 1;
+static const uint8_t ELF_CLASS_64 = 2;
+static const uint8_t ELF_DATA_ENCODING_LITTLE_ENDIAN = 1;
+static const uint8_t ELF_DATA_ENCODING_BIG_ENDIAN = 2;
+static const uint8_t ELF_ABI_TYPE_SYSTEMV = 0;
+static const uint8_t ELF_ABI_TYPE_HPUX = 1;
+static const uint8_t ELF_ABI_TYPE_STANDALONE = 255; 
+
 typedef struct {
-  uint32_t magicNumber;
-  uint8_t bitType;
-  uint8_t dataEncoding;
-  uint8_t elfVersion;
-  uint8_t osABI;
-  uint8_t padding[8];
+  uint32_t magic_number; //0-3
+  uint8_t elf_class;     //4
+  uint8_t data_encoding; //5
+  uint8_t elf_version;   //6
+  uint8_t abi_type;      //7
+  uint8_t abi_version;   //8
+  uint8_t padding[7];    //9-15
 
-  uint16_t objectFileType;
-  uint16_t instructionSet;
-  uint32_t elfVersion11;
-
-  uint64_t programEntryOffset;
-  uint64_t programHeaderOffset;
-  uint64_t sectionHeaderOffset;
-
+  uint16_t object_type;
+  uint16_t machine_type;
+  uint32_t object_version;
+  
+  uint64_t entry_address; 
+  uint64_t program_header_offset;
+  uint64_t section_header_offset;
   uint32_t flags;
-  uint16_t elfHeaderSize;
-  uint16_t programHeaderEntrySize;
-  uint16_t programHeaderEntryCount;
-  uint16_t sectionHeaderEntrySize;
-  uint16_t sectionHeaderEntryCount;
-  uint16_t sectionStringTableSectionIndex;
-} ELF64Header;
+
+  uint16_t elf_header_size;
+  uint16_t program_header_entry_size;
+  uint16_t program_header_entry_count;
+  uint16_t section_header_entry_size;
+  uint16_t section_header_entry_count;
+  uint16_t section_name_string_table_index;
+} __attribute((packed)) ELF64_Header;
+
+typedef struct {
+  uint32_t segment_type;
+  uint32_t flags;
+  uint64_t offset_in_file; 
+  uint64_t virtual_address;
+  uint64_t undefined;
+  uint64_t segment_file_size;
+  uint64_t segment_memory_size;
+  uint64_t alignment;
+} __attribute((packed)) ELF64_Program_Header;
 
 typedef struct {
   uint32_t nameOffset;
@@ -77,17 +95,6 @@ typedef struct {
 } ELFSectionHeader;
 
 typedef struct {
-  uint32_t segment_type;
-  uint32_t flags;
-  uint64_t offset_in_file; 
-  uint64_t virtual_address;
-  uint64_t undefined;
-  uint64_t segment_file_size;
-  uint64_t segment_memory_size;
-  uint64_t alignment;
-} ELF64ProgramHeader;
-
-typedef struct {
   uint32_t nameOffset;
   uint8_t type    : 4;
   uint8_t binding : 4;
@@ -98,11 +105,22 @@ typedef struct {
 } ELFSymbol;
 
 typedef enum {
+  ELF_Segment_Type_NULL = 0,
+  ELF_Segment_Type_LOAD = 1,
+  ELF_Segment_Type_DYNAMIC = 2,
+  ELF_Segment_Type_INTERP = 3,
+  ELF_Segment_Type_NOTE = 4,
+  ELF_Segment_Type_SHLIB = 5,
+  ELF_Segment_Type_PHDR = 6,
+  ELF_Segment_Type_LOPROC = 0x70000000,
+  ELF_Segment_Type_HIPROC = 0x7FFFFFFF 
+} ELF_Segment_Type;
+
+typedef enum {
   ELF_SECTION_TEXT,
   ELF_SECTION_BSS,
   ELF_SECTION_DATA,
 } ELFSection;
-
 
 #define DW_TAG_META_LIST                                                       \
   _(DW_TAG_array_type, 0x01)                                                   \

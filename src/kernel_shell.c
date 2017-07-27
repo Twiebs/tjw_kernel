@@ -9,7 +9,8 @@ _(help, kshell_help) \
 _(hardware_info, kshell_hardware_info)\
 _(time, kshell_unimplemented_command)\
 _(ioapic_irq_map, kshell_ioapic_irq_map)\
-_(run, kshell_run)
+_(run, kshell_run)\
+_(test, kshell_test)
 
 typedef enum {
   KShell_Command_Invalid,
@@ -30,6 +31,7 @@ static void kshell_hardware_info(const char *text, size_t length);
 static void kshell_unimplemented_command(const char *text, size_t length);
 static void kshell_ioapic_irq_map(const char *text, size_t length);
 static void kshell_run(const char *text, size_t length);
+static void kshell_test(const char *text, size_t length);
 
 typedef void(*KShell_Command_Proc)(const char *, size_t);
 static const KShell_Command_Proc KShell_Command_Handler[] = {
@@ -51,23 +53,27 @@ kshell_help(const char *input, size_t length){
 
 static void
 kshell_run(const char *text, size_t length){
-  uintptr_t executable_physical_page;
-  kmem_allocate_physical_pages(&globals.memory_state, 1, &executable_physical_page);
-  if(ext2fs_read_file_to_physical(string_and_length("/programs/test_program"), executable_physical_page)){
-    klog_error("failed to read program executable");
+  ktask_run_program("/programs/test_program", strlen("/programs/test_program"));
+}
+
+static void
+kshell_test(const char *text, size_t length){
+  File_Handle f = {};
+  if(fs_obtain_file_handle(string_and_length("/user/short_story.txt"), &f) == 0){
+    klog_error("failed to open test file");
+    return;
+  } 
+
+#if 0
+  uint8_t buffer[4096] = {};
+  if(fs_read_file(&f, 0, f.file_size, (uintptr_t)buffer) == 0){
+    klog_error("failed to read test file");
     return;
   }
+#endif
 
 
-  uint64_t pid = ktask_create_process(executable_physical_page, &globals.task_info);
-  if(pid == KTASK_INVALID_PID) {
-    klog_error("failed to create process");
-    return;
-  }
-
-  Process_Context *p = &globals.task_info.processess[pid];
-  //uint64_t thread_id = ktask_create_thread(pid, p->start_address, &globals.task_info);
-  //ktask_context_switch(thread_id, &globals.task_info);
+  //klog_debug("%s", buffer);
 }
 
 static void

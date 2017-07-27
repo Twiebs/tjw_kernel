@@ -13,7 +13,7 @@ typedef struct {
 	uint32_t top_entry_index;
 	int32_t scroll_count;
 	uint32_t last_entry_count;
-} VGA_Text_Terminal; 
+} VGA_Text_Terminal;
 
 typedef struct {
   uint32_t width;

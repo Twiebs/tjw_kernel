@@ -36,12 +36,13 @@ static uint64_t syscall_handler_print_string(const char *string, size_t length){
   return 0;
 }
 
-static uint64_t syscall_handler_exit_process(Interrupt_Stack_Frame_Basic stack){
+uint64_t syscall_handler_exit_process(volatile Interrupt_Stack_Frame_Basic stack){
   extern void asm_exit_usermode(void);
-  stack.ss = GDT_RING0_DATA;
-  stack.cs = GDT_RING0_CODE;
+  uint32_t cpu_id = get_cpu_id();
+  stack.ss = GDT_RING0_DATA_ENTRY_OFFSET;
+  stack.cs = GDT_RING0_CODE_ENTRY_OFFSET;
   stack.rip = (uintptr_t)asm_exit_usermode;
-  stack.rsp = (uintptr_t)globals.system_info.kernel_stack_address;
+  stack.rsp = (uintptr_t)globals.system_info.cpu_infos[cpu_id].kernel_stack_top;
   asm volatile("mov $0x00, %rdi");
   return 0;
 }

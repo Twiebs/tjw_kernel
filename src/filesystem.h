@@ -20,14 +20,29 @@ typedef struct {
 } Storage_Device;
 
 typedef struct {
-  uint32_t inode_count_per_group;
-  uint32_t block_count_per_group;
-  uint32_t inode_size;
-  uint32_t block_size;
-  uint32_t sectors_per_block;
-  uint32_t partition_first_sector;
-  uint32_t superblock_sector;
-  uint32_t required_features;
-  uint32_t root_inode;
-  Storage_Device storage_device;
-} Ext2_Filesystem;
+  uint64_t fs_reference;
+  uint64_t file_size;
+  uint64_t creation_time;
+  uint64_t accessed_time;
+  uint64_t modified_time; 
+} File_Handle;
+
+typedef struct {
+  uint8_t boot_indicator;
+  uint8_t starting_head;
+  uint8_t starting_sector : 6;
+  uint8_t starting_cylinder_high : 2;
+  uint8_t starting_cylinder_low;
+  uint8_t system_id;
+  uint8_t ending_head;
+  uint8_t ending_sector : 6;
+  uint8_t ending_cylinder_high : 2;
+  uint8_t ending_cylinder_low;
+  uint32_t start_sector;
+  uint32_t sector_count;
+} __attribute((packed)) MBR_Partition_Table;
+
+
+
+int fs_read_file(File_Handle *h, uint64_t offset, uint64_t size, uintptr_t *physical_pages);
+int fs_obtain_file_handle(const char *path, uint64_t path_length, File_Handle *in_handle);
