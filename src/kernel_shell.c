@@ -59,7 +59,7 @@ kshell_run(const char *text, size_t length){
 static void
 kshell_test(const char *text, size_t length){
   File_Handle f = {};
-  if(fs_obtain_file_handle(string_and_length("/user/short_story.txt"), &f) == 0){
+  if (fs_obtain_file_handle(string_and_length("/user/short_story.txt"), &f) == 0){
     klog_error("failed to open test file");
     return;
   } 
@@ -112,6 +112,12 @@ void process_shell_keyboard_input(Keyboard_State *keyboard, Circular_Log *log) {
         klog_remove_last_input_character(log);
       } else if (scancode == KEYBOARD_SCANCODE1_ENTER_PRESSED) {
         klog_submit_input_to_shell(log);
+      } else if (scancode == KEYBOARD_SCANCODE1_RIGHT_PRESSED) {
+        log->character_number++;
+        log->is_dirty = true;
+      } else if (scancode == KEYBOARD_SCANCODE1_LEFT_PRESSED) {
+        if (log->character_number > 0) log->character_number--;
+        log->is_dirty = true;
       } else if (scancode == KEYBOARD_SCANCODE1_UP_PRESSED) {
         if(log->scroll_offset < log->current_entry_count - 1){
           log->scroll_offset += 1;

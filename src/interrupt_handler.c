@@ -32,7 +32,7 @@ extern void kprocess_destroy(){
 }
 
 static uint64_t syscall_handler_print_string(const char *string, size_t length){
-  klog_write_string(&globals.log, string, length);
+  klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_INFO, "%.*s", length, string);
   return 0;
 }
 

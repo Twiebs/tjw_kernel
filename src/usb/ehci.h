@@ -99,6 +99,7 @@ typedef struct {
   volatile uint16_t reserved1 : 9; // 23-31
 } __attribute((packed)) EHCI_Port;
 
+
 typedef struct {
   uint32_t periodic_frame_list[1024]; //4096 bytes
   //====================================================== PAGE BOUNDRAY
@@ -120,4 +121,5 @@ typedef struct {
 
 static_assert(sizeof(EHCI_Controller) < 4096*2);
 
-int ehci_read_to_physical_address(EHCI_Controller *hc, USB_Mass_Storage_Device *msd, uintptr_t out_data, uint32_t start_block, uint16_t block_count);
+int ehci_initalize_host_controller(uintptr_t hc_physical_address, PCI_Device *pci_device);
+Error_Code ehci_read_to_physical_address(EHCI_Controller *hc, USB_Mass_Storage_Device *msd, uintptr_t out_data, uint32_t start_block, uint16_t block_count);

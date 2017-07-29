@@ -1,34 +1,4 @@
 
-//TODO(Torin 2016-10-27) Change ehci_read size to be actual byte size rather than scalar of physical block
-//size because that size can vary
-
-static inline
-int storage_device_read(Storage_Device *sd, uint64_t block_index, uint64_t block_count, uintptr_t buffer_physical){
-  switch(sd->type){
-    case Storage_Device_EHCI:{
-      EHCI_Controller *ehci_hc = (EHCI_Controller *)sd->controller_ptr;
-      USB_Device *device = (USB_Device *)sd->device_ptr; 
-      for(size_t i = 0; i < 8; i++){
-        //TODO(Torin 2016-10-31) Figure out why this is mad janky yo.
-        int status = ehci_read_to_physical_address(ehci_hc, &device->msd, buffer_physical + (i * 512), block_index + i, 1);
-        if(status == 0) return 0;
-      }
-      return 1;
-    } break;
-
-    case Storage_Device_INVALID:{
-      klog_error("invalid storage device");
-    } break;
-
-    default:{
-      klog_error("usupported storage device");
-    } break;
-  }
-  
-  return 0;
-}
-
-
 
 int fs_read_file(File_Handle *h, uint64_t offset, uint64_t size, uintptr_t *physical_pages){
   if((offset + size) > h->file_size) return 0;
@@ -61,7 +31,7 @@ int fs_read_file(File_Handle *h, uint64_t offset, uint64_t size, uintptr_t *phys
 
 int fs_obtain_file_handle(const char *path, uint64_t path_length, File_Handle *in_handle){
   Ext2_Filesystem *extfs = &globals.ext2_filesystem; 
-  if(path[0] != '/'){
+  if (path[0] != '/') {
     klog_error("malformed path.  Path's must begin with a '/'");
     return 0;
   }

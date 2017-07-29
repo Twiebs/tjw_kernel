@@ -81,8 +81,7 @@ void kgfx_draw_character(char c, size_t x_orign, size_t y_origin, Framebuffer *f
 }
 #endif
 
-static inline
-void vga_set_char(char c, uint8_t color, int x, int y){
+static inline void vga_set_char(char c, uint8_t color, int x, int y){
   static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
 	static const uint8_t VGA_TEXT_ROW_COUNT = 25;
 	static uint8_t *VGA_TEXT_BUFFER = (uint8_t*)(0xB8000);
@@ -91,29 +90,40 @@ void vga_set_char(char c, uint8_t color, int x, int y){
   VGA_TEXT_BUFFER[vga_index+1] = color;
 }
 
-static inline
-void draw_vga_text_terminal(Circular_Log *log){
+
+static inline void draw_vga_text_terminal(Circular_Log *log){
   static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
 	static const uint8_t VGA_TEXT_ROW_COUNT = 25;
-	static uint8_t *VGA_TEXT_BUFFER = (uint8_t*)(0xB8000);
-  memset(VGA_TEXT_BUFFER, 0x00, VGA_TEXT_COLUMN_COUNT*VGA_TEXT_ROW_COUNT*2);
+	static uint8_t *VGA_TEXT_BUFFER = (uint8_t *)0xB8000;
+  memset(VGA_TEXT_BUFFER, 0x00, VGA_TEXT_COLUMN_COUNT * VGA_TEXT_ROW_COUNT * 2);
 
   size_t entries_to_draw = min((uint32_t)(VGA_TEXT_ROW_COUNT - 1), (uint32_t)log->current_entry_count);
-  for(size_t i = 0; i < entries_to_draw; i++){
+  for (size_t i = 0; i < entries_to_draw; i++) {
     size_t entry_offset = entries_to_draw - i; 
     size_t entry_index = (log->entry_write_position - entry_offset - log->scroll_offset) % CIRCULAR_LOG_ENTRY_COUNT;
-    Circular_Log_Entry *entry = &log->entries[entry_index];  
-    size_t chars_to_write = min(entry->length, VGA_TEXT_COLUMN_COUNT);
-    for(size_t j = 0; j < chars_to_write; j++){
-      vga_set_char(entry->message[j], VGAColor_GREEN, j, i);
+    Circular_Log_Entry *entry = &log->entries[entry_index];
+
+    int chars_to_write = entry->length;
+    chars_to_write -= log->character_number;
+    chars_to_write = max(0, chars_to_write);
+    chars_to_write = min(chars_to_write, VGA_TEXT_COLUMN_COUNT);
+
+    VGA_Color color = VGA_Color_LIGHT_GRAY;
+    if (entry->level == Log_Level_ERROR) color = VGA_Color_RED;
+    else if (entry->level == Log_Level_WARNING) color = VGA_Color_YELLOW;
+    else if (entry->level == Log_Level_INFO) color = VGA_Color_CYAN;
+    
+    for (int j = 0; j < chars_to_write; j++) {
+      vga_set_char(entry->message[j + log->character_number], color, j, i);
     }
   }
 
   size_t input_buffer_to_write = min(VGA_TEXT_COLUMN_COUNT, log->input_buffer_count);
   for(size_t i = 0; i < input_buffer_to_write; i++){
-    vga_set_char(log->input_buffer[i], VGAColor_RED, i, VGA_TEXT_ROW_COUNT - 1); 
+    vga_set_char(log->input_buffer[i], VGA_Color_RED, i, VGA_TEXT_ROW_COUNT - 1); 
   } 
 }
+
 
 #if 0
 static inline

@@ -7,12 +7,13 @@ typedef enum {
   PCI_Device_Type_XHCI,
 } PCI_Device_Type;
 
-//TODO(Torin: 2017-07-27) What is this exactly
 typedef struct {
   uint8_t reserved0;
   uint8_t function_number;
   uint8_t device_number;
   uint8_t bus_number;
+  uint8_t interrupt_pin;
+  uint8_t interrupt_line;
 } PCI_Device;
 
 typedef struct {

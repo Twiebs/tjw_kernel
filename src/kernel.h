@@ -14,13 +14,13 @@
 #define KLOG_VERBOSITY KLOG_DEBUG
 
 #if KLOG_VERBOSITY >= KLOG_DEBUG
-#define klog_debug(...) klog_write_fmt(&globals.log, Log_Category_DEFAULT, __VA_ARGS__)
+#define klog_debug(...) klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_DEBUG, __VA_ARGS__)
 #else//KLOG_VERBOSITY >= KLOG_DEBUG
 #define klog_debug(...)
 #endif//KLOG_VERBOSITY >= KLOG_DEBUG
-#define klog_warning(...) klog_write_fmt(&globals.log, Log_Category_DEFAULT, __VA_ARGS__)
-#define klog_info(...)    klog_write_fmt(&globals.log, Log_Category_DEFAULT, __VA_ARGS__)
-#define klog_error(...)   klog_write_fmt(&globals.log, Log_Category_DEFAULT, __VA_ARGS__)
+#define klog_info(...)    klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_INFO, __VA_ARGS__)
+#define klog_warning(...) klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_WARNING, __VA_ARGS__)
+#define klog_error(...)   klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_ERROR, __VA_ARGS__)
 
 #define log_enable(group) klog_enable_category(&globals.log, Log_Category_##group)
 #define log_disable(group) klog_disable_category(&globals.log, Log_Category_##group)

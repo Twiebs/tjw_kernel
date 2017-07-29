@@ -98,7 +98,7 @@ static inline void pci_scan_devices() {
         pci_set_config_address(bus_number, device_number, function_number, 0x04);
         pci_read_2x16(&status, &command);
         static const uint16_t STATUS_CAPABILITIES_BIT = 1 << 4;
-        if(status & STATUS_CAPABILITIES_BIT){
+        if (status & STATUS_CAPABILITIES_BIT) {
           klog_debug("pci has extended capabilities");
         }
 
@@ -123,20 +123,17 @@ static inline void pci_scan_devices() {
             uint32_t ohci_register_address = ohci_bar_register & ~0xFFF;
             pci_info.ohci_physical_address = ohci_register_address;
           } else if (prog_if == EHCI_CONTROLLER) { 
-            klog_debug("[pci] Found EHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
             pci_set_config_address(bus_number, device_number, function_number, 0x10);
             uint32_t ehci_registers_address = pci_read_uint32(); 
             pci_info.ehci_physical_address = ehci_registers_address;
             pci_info.ehci_pci_device.bus_number = bus_number;
             pci_info.ehci_pci_device.device_number = device_number;
             pci_info.ehci_pci_device.function_number = function_number;
+            pci_info.ehci_pci_device.interrupt_pin = interrupt_pin;
+            pci_info.ehci_pci_device.interrupt_line = interrupt_line;
             //TODO(Torin 2016-10-04) Initalizing the EHCI controller should be defered until
             //after PCI bus enumeration has completed.
-            klog_debug("initalizing ehci controller at 0x%X", pci_info.ehci_physical_address);
-            klog_debug("interrupt_pin: %u", (uint32_t)interrupt_pin);
-            klog_debug("interrupt_line: %u", (uint32_t)interrupt_line);
             ehci_initalize_host_controller(pci_info.ehci_physical_address, &pci_info.ehci_pci_device);
-            return; //TODO(Torin 2016-10-07) Delete this test code!
           } else if (prog_if == XHCI_CONTROLLER) {
             klog_debug("[pci] Found XHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
             pci_set_config_address(bus_number, device_number, function_number, 0x10);
@@ -156,6 +153,4 @@ static inline void pci_scan_devices() {
       } 
     }
   }
-
-  klog_debug("pci enumeration complete");
 }

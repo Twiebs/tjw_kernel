@@ -24,7 +24,7 @@
 
 typedef struct {
   Circular_Log log;
-  VGA_Text_Terminal vga_text_term;
+  //VGA_Text_Terminal vga_text_term;
   Keyboard_State keyboard;
   Kernel_Memory_State memory_state;
   System_Info system_info;
@@ -32,9 +32,14 @@ typedef struct {
   Task_Info task_info;
   Ext2_Filesystem ext2_filesystem;
 
+
   //TODO(Torin 2016-10-24) Dynamic USB_Devices
   USB_Device usb_devices[8];
   uint32_t usb_device_count;
+  //TODO(Torin: 2017-07-28) Dynamic Storage_Devices
+  Storage_Device storage_devices[8];
+  uint64_t storage_device_count;
+
 
   volatile uint64_t pit_timer_ticks;
   volatile uint64_t lapic_timer_ticks;
@@ -45,7 +50,15 @@ typedef struct {
 
 static Kernel_Globals globals;
 
+//TODO(Torin: 2017-07-28) This is temporary
+Storage_Device *create_storage_device() {
+  if (globals.storage_device_count > ARRAY_COUNT(globals.storage_devices)) {
+    return NULL;
+  }
 
+  Storage_Device *result = &globals.storage_devices[globals.storage_device_count++];
+  return result;
+}
 
 #include "kernel_apic.c"
 
@@ -76,6 +89,7 @@ uint32_t get_cpu_id(){
 
 #include "filesystem/filesystem.c"
 #include "filesystem/filesystem_ext2.c"
+#include "filesystem/storage_device.c"
 
 #include "usb/usb_protocol.c"
 #include "usb/ehci.c"

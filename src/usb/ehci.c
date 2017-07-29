@@ -371,10 +371,11 @@ static inline int ehci_get_descriptor(EHCI_Controller *hc, uint8_t descriptor_ty
   return result;
 }
 
-int ehci_read_to_physical_address(EHCI_Controller *hc, USB_Mass_Storage_Device *msd, uintptr_t out_data, uint32_t start_block, uint16_t block_count){
-  if (msd->logical_block_count < (start_block + block_count)){
-    klog_error("usb read excedes device maximums");
-    return 0;
+Error_Code ehci_read_to_physical_address(EHCI_Controller *hc, USB_Mass_Storage_Device *msd, uintptr_t out_data, uint32_t start_block, uint16_t block_count){
+  if (msd->logical_block_count < (start_block + block_count)) {
+    klog_error("[USB] Read from mass storage device from blocks[%u-%u] exceedes device maximum blocks of %u",
+      start_block, start_block + block_count, msd->logical_block_count);
+    return Error_Code_FAILED_READ;
   }
 
   SCSI_Read_Command read_command = {
@@ -404,17 +405,17 @@ int ehci_read_to_physical_address(EHCI_Controller *hc, USB_Mass_Storage_Device *
     klog_debug(" cbw.transfer_length: %u", (uint32_t)read_command.cbw.transfer_length);
     klog_debug(" transfer_length: %u", (uint32_t)transfer_length);
     klog_debug(" logical_block_address: %u", (uint32_t)logical_block_address);
-    return 0;
-  } 
+    return Error_Code_FAILED_READ;
+  }
   
-  return 1;
+  return Error_Code_NONE;
 }
 
 
-int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
+int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device) {
   USB_Device_Descriptor device_descriptor = {};
-  if(ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_DEVICE, 0, 0, 64, &device_descriptor) == 0){
-    klog_debug("failed to get device descriptor");
+  if (ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_DEVICE, 0, 0, 64, &device_descriptor) == 0){
+    klog_error("failed to get device descriptor");
     return 0;
   }
   
@@ -422,9 +423,9 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
   device->product_id = device_descriptor.product_id;
   device->device_class = device_descriptor.device_class;
 
-  {
+  { //Get Vendor and product strings
     uint8_t string_descriptor_buffer[256] = {};
-    if(ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_STRING, 0, 0, 8, string_descriptor_buffer) == 0){
+    if (ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_STRING, 0, 0, 8, string_descriptor_buffer) == 0){
       klog_debug("failed to get string descriptor list");
       return 0;
     }
@@ -553,7 +554,6 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
   msd->in_toggle_value = 0;
   msd->out_toggle_value = 0;
 
-
   uint8_t read_buffer[1024] = {};
   const uintptr_t buffer_physical_address = (uintptr_t)read_buffer;
 
@@ -567,7 +567,7 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
     .allocation_length = 36
   };
 
-  if(ehci_bulk_transfer_with_data(hc, msd, &inquiry_command.cbw, sizeof(inquiry_command), (void *)buffer_physical_address, 36) == 0){
+  if (ehci_bulk_transfer_with_data(hc, msd, &inquiry_command.cbw, sizeof(inquiry_command), (void *)buffer_physical_address, 36) == 0) {
     klog_error("inquiry bulk transfer error!");
     klog_error("large phalic symbol");
     return 0;
@@ -582,7 +582,7 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
     .cbw.length = 6
   };
 
-  if(ehci_bulk_transfer_no_data(hc, msd, &test_unit_ready_command.cbw) == 0){
+  if (ehci_bulk_transfer_no_data(hc, msd, &test_unit_ready_command.cbw) == 0) {
     klog_error("test_unit_ready failed for usb_device");
     return 0;
   }
@@ -601,7 +601,6 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
     klog_error("failed to execute read capacity command!");
     return 0;
   }
-
   
   msd->logical_block_count = read_capacity_data.logical_block_address_0;
   msd->logical_block_count |= read_capacity_data.logical_block_address_1 << 8;
@@ -613,151 +612,14 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device){
   msd->logical_block_size |= read_capacity_data.block_size_2 << 16; 
   msd->logical_block_size |= read_capacity_data.block_size_3 << 24;
 
-  uint8_t mbr_partition_table_buffer[512] = {};
-  uintptr_t mbr_partition_table_buffer_physical_address = (uintptr_t)mbr_partition_table_buffer;
-  if(ehci_read_to_physical_address(hc, msd, mbr_partition_table_buffer_physical_address, 0x00, 1) == 0){
-    klog_error("failed to read msd partition table");
-    return 0;
-  }
-
-  MBR_Partition_Table *pt = (MBR_Partition_Table *)(mbr_partition_table_buffer + 0x1BE);
-  for(size_t partition_index = 0; partition_index < 4; partition_index++){
-     //NOTE(Torin) If a partition is unused all fields will be zero.
-    //The partition table is 16 bytes so we do two 8byte compares
-    uint64_t *raw_data = (uint64_t *)pt;
-    if(raw_data[0] == 0 && raw_data[1] == 0) continue; 
-
-    if(pt->system_id != PARTITION_TYPE_LINUX_FILESYSTEM){
-      klog_error("currently only support for linux fs");
-      continue;
-    }
-
-    Partition_Info partition_info = {};
-    partition_info.partition_type = pt->system_id;
-    partition_info.first_block = pt->start_sector;
-    partition_info.block_count = pt->sector_count;
-    klog_debug("partiton_start_block: %u", (uint32_t)partition_info.first_block);
-    klog_debug("partition_block_count: %u", (uint32_t)partition_info.block_count);
-
-    //Read the EXT2 Superblock 
-
-    Ext2_Filesystem *extfs = &globals.ext2_filesystem;
-    uint32_t superblock_location = partition_info.first_block + 2;
-    klog_debug("superblock_location: %u", superblock_location);
-    if (ehci_read_to_physical_address(hc, msd, buffer_physical_address, superblock_location, 1) == 0) {
-      klog_error("failed to read superblock from ext2 partition");
-      return 0;
-    }
-
-    Ext2_Superblock *superblock = (Ext2_Superblock *)read_buffer;
-    if (superblock->ext2_signature != EXT2_SUPERBLOCK_SIGNATURE) {
-      klog_error("superblock has invalid signature");
-      return 0;
-    }
-
-    if (superblock->version_major < 1) {
-      klog_error("ext2 uses version 0");
-    }
-
-    klog_debug("superblock_version: %u.%u", (uint32_t)superblock->version_major, (uint32_t)superblock->version_minor);
-
-    extfs->partition_first_sector = partition_info.first_block;
-    //extfs->buffer_physical_address = (uintptr_t)extfs->buffer;
-    extfs->inode_size = superblock->inode_struct_size;
-    extfs->block_size = 1024 << superblock->block_size_shift_count;
-    extfs->inode_count_per_group = superblock->inodes_per_group;
-    extfs->block_count_per_group = superblock->blocks_per_group;
-    extfs->superblock_sector = superblock_location;
-    extfs->required_features = superblock->required_features;
-
-    extfs->storage_device.type = Storage_Device_EHCI;
-    extfs->storage_device.device_ptr = device;
-    extfs->storage_device.controller_ptr = hc;
-
-    strict_assert(buffer_physical_address  + 4096 < 0x200000);
-    if(extfs->required_features & EXT2_REQUIRED_FEATURE_COMPRESSION)
-      klog_warning("FILESYSTEM USES COMPRESSION!");
-    if(extfs->required_features & EXT2_REQUIRED_FEATURE_JOURNAL_DEVICE)
-      klog_warning("FILESYSTEM USES A JOURNAL DEVICE");
-    if(extfs->required_features & EXT2_REQUIRED_FEATURE_REPLAY_JOURNAL)
-      klog_warning("FILESYSTEM MUST REPLAY JOURNAL");
-
-    uint32_t group_count_calculated_from_blocks = superblock->block_count / superblock->blocks_per_group;
-    uint32_t group_count_calculated_from_inodes = superblock->inode_count / superblock->inodes_per_group;
-    if(superblock->block_count % superblock->blocks_per_group != 0) group_count_calculated_from_blocks++;
-    if(superblock->inode_count % superblock->inodes_per_group != 0) group_count_calculated_from_inodes++;
-    if(group_count_calculated_from_blocks != group_count_calculated_from_inodes){
-      klog_error("INVALID EXT2 GROUP COUNT!");
-      return 0;
-    }
-
-    extfs->group_count = group_count_calculated_from_blocks;
-
-
-    if(extfs->block_size % msd->logical_block_size != 0) { klog_error("filesystem block size not multiple of device logical block size"); }
-    extfs->sectors_per_block = extfs->block_size / msd->logical_block_size;
-    ext2fs_debug_log_fs_info(extfs);
-
-#if 0
-    klog_debug("inode_count: %u", (uint32_t)superblock->inode_count);
-    klog_debug("block_count: %u", (uint32_t)superblock->block_count);
-    klog_debug("group_count: %u", (uint32_t)extfs->group_count);
-    
-    uint32_t current_block_count = superblock->block_count - superblock->unallocated_blocks;
-    uint32_t current_inode_count = superblock->inode_count - superblock->unallocated_inodes;
-    klog_debug("unallocated_inodes: %u", superblock->unallocated_inodes);
-    klog_debug("unallocated_blocks: %u", superblock->unallocated_blocks);
-    klog_debug("allocated_blocks: %u", current_block_count);
-    klog_debug("allocated_inodes: %u", current_inode_count);
-
-    uint32_t block_group_descriptor_table_sector = ext2fs_get_sector_location(1, extfs); 
-    klog_debug("bock_group_descriptor_table_sector: %u", block_group_descriptor_table_sector);
-    if(ehci_read_to_physical_address(hc, msd, buffer_physical_address, block_group_descriptor_table_sector, 1) == 0){
-      klog_error("failed to read block_group_descriptor_table");
-      return 0;
-    }
-
-    Ext2_Block_Group_Descriptor *block_group_descriptor = (Ext2_Block_Group_Descriptor *)read_buffer;
-    klog_debug("directory_count: %u", (uint32_t)block_group_descriptor->directory_count);
-
-    uint32_t allocated_block_count = extfs->block_count_per_group - block_group_descriptor->unallocated_block_count;
-    uint32_t allocated_inode_count = extfs->inode_count_per_group - block_group_descriptor->unallocated_inode_count;
-    klog_debug("unallocated_block_count: %u", (uint32_t)block_group_descriptor->unallocated_block_count);
-    klog_debug("unallocated_inode_count: %u", (uint32_t)block_group_descriptor->unallocated_inode_count);
-    klog_debug("allocated_block_count: %u", allocated_block_count);
-    klog_debug("allocated_inode_count: %u", allocated_inode_count);
-
-    uint32_t inode_table_sector = ext2fs_get_sector_location(block_group_descriptor->inode_table_block_number, extfs);
-    klog_debug("inode_table_sector: %u", inode_table_sector);
-    if(ehci_read_to_physical_address(hc, msd, buffer_physical_address, inode_table_sector, 1) == 0){
-      klog_error("failed to read inode table");
-      return 0;
-    }
-
-    Ext2_Inode *inode_table = (Ext2_Inode *)read_buffer;
-    Ext2_Inode *root_inode = (Ext2_Inode *)(read_buffer + extfs->inode_size);
-    if(root_inode->type != EXT2_INODE_TYPE_DIRECTORY){
-      klog_error("root_inode is not a directory!");
-      klog_debug("type: %u", (uint32_t)root_inode->type);
-      return 0;
-    }
-
-    //TODO(Torin 2016-10-16) Consider renaming direct_block_pointer to direct_block_number for clarity
-    uint32_t directory_entries_location = ext2fs_get_sector_location(root_inode->direct_block_pointers[0], extfs);
-    if(ehci_read_to_physical_address(hc, msd, buffer_physical_address, directory_entries_location, 1) == 0){
-      klog_debug("failed to read directory entriies");
-      return 0;
-    }
-
-    Ext2_Directory_Entry *directory_entry = (Ext2_Directory_Entry *)read_buffer;
-    while(((uintptr_t)directory_entry - (uintptr_t)read_buffer) < 4096){
-      if(directory_entry->entry_size == 0) break;
-      kdebug_ext2_log_directory_entry(extfs, directory_entry);
-      directory_entry = (Ext2_Directory_Entry *)((uintptr_t)directory_entry + directory_entry->entry_size);
-    }
-#endif
-
-    pt++;
+  //TODO(Torin: 2017-07-28) Unsure of how this should actually work
+  Storage_Device *storage_device = create_storage_device();
+  if (storage_device != NULL) {
+    storage_device->type = Storage_Device_Type_EHCI;
+    storage_device->controller_ptr = hc;
+    storage_device->device_ptr = device;
+    storage_device->block_size = msd->logical_block_size;
+    storage_device_initialize(storage_device);
   }
   
   return 1;
@@ -790,8 +652,7 @@ ehci_reset_port(volatile uint32_t *port){
    return false;
 }
 
-static inline
-int ehci_is_hc_halted(EHCI_Operational_Registers *op_regs){
+static inline int ehci_is_hc_halted(EHCI_Operational_Registers *op_regs){
   static const uint32_t USBSTATUS_CONTROLLER_HALTED = (1 << 12);
   int result = op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED;
   return result;
@@ -884,7 +745,7 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
     //NOTE(Torin 2016-10-04) Setup perodic framelist 
     uint32_t *periodic_frame_list = hc->periodic_frame_list;
     uintptr_t perodic_qh_physical_address = hc->first_page_physical_address;
-    for(size_t i = 0; i < 1024; i++) periodic_frame_list[i] = (uint32_t)perodic_qh_physical_address | EHCI_POINTER_TYPE_QH | EHCI_POINTER_TERMINATE;
+    for (size_t i = 0; i < 1024; i++) periodic_frame_list[i] = (uint32_t)perodic_qh_physical_address | EHCI_POINTER_TYPE_QH | EHCI_POINTER_TERMINATE;
   }
 
   { //NOTE(Torin 2016-09-13) Set nessecary registers and initalize the controller 

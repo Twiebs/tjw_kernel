@@ -7,9 +7,9 @@
 
 void update_keyboard_state(Keyboard_State *keyboard_state) {
   static const uint16_t KEYBOARD_DATA_PORT   = 0x0060;
-  static const uint16_t KEYBOARD_STATUS_PORT = 0x0064;
-  uint8_t keyboard_status = read_port_uint8(KEYBOARD_STATUS_PORT);
-  if (keyboard_status & 0x01) { //Keyboard has data ready
+  static const uint16_t KEYBOARD_KEY_PENDING_PORT = 0x0064;
+  uint8_t is_key_pending = read_port_uint8(KEYBOARD_KEY_PENDING_PORT);
+  if (is_key_pending & 0x01) { //Keyboard has data ready
     uint8_t scancode = read_port_uint8(KEYBOARD_DATA_PORT);
     if (scancode > 0x80) {  //NOTE(Torin)key release event 
       uint8_t base_scancode = scancode - 0x80;

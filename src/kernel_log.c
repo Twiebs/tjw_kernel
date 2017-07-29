@@ -25,9 +25,7 @@ size_t uint64_to_string(char *dest, uint64_t value, uint8_t base){
   return bytes_written;
 }
 
-static size_t 
-kernel_vsnprintf(char *buffer, size_t capacity, const char *fmt, va_list args) 
-{
+static size_t kernel_vsnprintf(char *buffer, size_t capacity, const char *fmt, va_list args) {
   size_t bytes_written = 0;
   size_t fmt_index = 0;
   while(fmt[fmt_index] != 0){
@@ -131,15 +129,15 @@ void klog_write_string(Circular_Log *log, const char *string, size_t length){
   spinlock_release(&log->spinlock);
 }
 
-void klog_enable_category(Circular_Log *log, Log_Category category){
+void klog_enable_category(Circular_Log *log, Log_Category category) {
   log->category_states[category] = Log_Category_State_ENABLED;
 }
 
-void klog_disable_category(Circular_Log *log, Log_Category category){
+void klog_disable_category(Circular_Log *log, Log_Category category) {
   log->category_states[category] = Log_Category_State_DISABLED;
 }
 
-void klog_write_fmt(Circular_Log *log, Log_Category category, const char *fmt, ...){
+void klog_write_fmt(Circular_Log *log, Log_Category category, Log_Level level, const char *fmt, ...) {
   if(globals.is_logging_disabled) return;
   if(log->category_states[category] == Log_Category_State_DISABLED) return;
 
@@ -147,6 +145,7 @@ void klog_write_fmt(Circular_Log *log, Log_Category category, const char *fmt, .
   spinlock_aquire(&log->spinlock); 
   size_t entry_index = log->entry_write_position % CIRCULAR_LOG_ENTRY_COUNT;
   Circular_Log_Entry *entry = &log->entries[entry_index];
+  entry->level = level;
   log->entry_write_position++;
   if(log->current_entry_count < CIRCULAR_LOG_ENTRY_COUNT){ log->current_entry_count++; }
   spinlock_release(&log->spinlock);

@@ -46,7 +46,7 @@ exit
 
 #include "src/utility.h"
 
-
+#include "src/error_code.h"
 
 #include "src/descriptor_tables.h"
 #include "src/kernel_synch.h"
@@ -62,13 +62,16 @@ exit
 
 #include "src/kernel_pci.h"
 
-#include "src/usb/usb.h"
-#include "src/usb/ehci.h"
-
+//Filesystem
 #include "src/filesystem/filesystem.h"
+#include "src/filesystem/storage_device.h"
 #include "src/filesystem/filesystem_ext2.h"
 
-
+//USB devices and drivers
+#include "src/usb/usb.h"
+#include "src/usb/ehci.h"
+#include "src/usb/usb_device.h"
+  
 #include "src/kernel_debug.h"
 #include "src/kernel_task.h"
 

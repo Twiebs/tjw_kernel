@@ -10,7 +10,7 @@ typedef struct {
   uint32_t superblock_sector;
   uint32_t required_features;
   uint32_t root_inode;
-  Storage_Device storage_device;
+  Storage_Device *storage_device;
 } Ext2_Filesystem;
 
 typedef struct {
@@ -163,3 +163,5 @@ static const char *DIRECTORY_ENTRY_TYPE_NAMES[] = {
 
 bool ext2fs_read_block(Ext2_Filesystem *extfs, uint32_t block_number, uintptr_t buffer_physical);
 int ext2fs_read_inode(Ext2_Filesystem *extfs, uint32_t inode_number, Ext2_Inode *out_inode);
+
+int ext2_file_system_initalize(Ext2_Filesystem *extfs, Storage_Device *storage_device, uint64_t partition_index);

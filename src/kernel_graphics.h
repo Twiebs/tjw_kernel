@@ -1,19 +1,21 @@
 typedef enum {
-  VGAColor_BLACK = 0,
-  VGAColor_BLUE  = 1,
-  VGAColor_GREEN = 2,
-  VGAColor_CYAN  = 3,
-  VGAColor_RED   = 4,
-  VGAColor_MAGENTA = 5,
-  VGAColor_BROWN = 6
-} VGAColor;
-
-typedef struct {
-	const char *top_entry;
-	uint32_t top_entry_index;
-	int32_t scroll_count;
-	uint32_t last_entry_count;
-} VGA_Text_Terminal;
+  VGA_Color_BLACK = 0,
+  VGA_Color_BLUE  = 1,
+  VGA_Color_GREEN = 2,
+  VGA_Color_CYAN  = 3,
+  VGA_Color_RED   = 4,
+  VGA_Color_MAGENTA = 5,
+  VGA_Color_BROWN = 6,
+  VGA_Color_LIGHT_GRAY = 7,
+  VGA_Color_DARK_GRAY = 8,
+  VGA_Color_LIGHT_BLUE = 9,
+  VGA_Color_LIGHT_GREEN = 10,
+  VGA_Color_LIGHT_CYAN = 11,
+  VGA_Color_LIGHT_RED = 12,
+  VGA_Color_LIGHT_MAGENTA = 13,
+  VGA_Color_YELLOW = 14,
+  VGA_Color_WHITE = 15,
+} VGA_Color;
 
 typedef struct {
   uint32_t width;

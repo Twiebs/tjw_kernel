@@ -2,6 +2,8 @@
 
 #define KEYBOARD_SCANCODE1_UP_PRESSED 0x48
 #define KEYBOARD_SCANCODE1_DOWN_PRESSED 0x50
+#define KEYBOARD_SCANCODE1_RIGHT_PRESSED 0x4D
+#define KEYBOARD_SCANCODE1_LEFT_PRESSED 0x4B
 #define KEYBOARD_SCANCODE1_BACKSPACE_PRESSED  0x0E
 #define KEYBOARD_SCANCODE1_BACKSPACE_RELEASED 0x8E
 #define KEYBOARD_SCANCODE1_ENTER_PRESSED 0x1C
@@ -21,6 +23,7 @@ static const char SCANCODE_TO_UPERCASE_ACII[] = {
   0,  'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0,  '|', 
   'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?',  0, 0, 0, ' ',  
 };
+
 
 typedef struct {
   uint8_t is_key_down[256];
