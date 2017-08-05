@@ -24,6 +24,7 @@
 
 typedef struct {
   Circular_Log log;
+  Command_Line_Shell shell;
   //VGA_Text_Terminal vga_text_term;
   Keyboard_State keyboard;
   Kernel_Memory_State memory_state;
@@ -50,6 +51,12 @@ typedef struct {
 
 static Kernel_Globals globals;
 
+void kernel_panic() {
+  shell_draw_if_required(&globals.shell, &globals.log);
+  asm volatile ("cli");
+  asm volatile ("hlt");
+}
+
 //TODO(Torin: 2017-07-28) This is temporary
 Storage_Device *create_storage_device() {
   if (globals.storage_device_count > ARRAY_COUNT(globals.storage_devices)) {
@@ -71,12 +78,10 @@ uint32_t get_cpu_id(){
   }
 
   klog_error("UNREGISTER LAPIC ID WAS USED TO GFT CPU ID");
-  kpanic();
+  kernel_panic();
   return 0;
 }
 
-
-#include "kernel_graphics.c"
 #include "kernel_acpi.c"
 //#include "kernel_descriptor.c"
 #include "descriptor_tables.c"
@@ -87,9 +92,7 @@ uint32_t get_cpu_id(){
 #include "kernel_debug.c"
 #include "hardware_keyboard.c"
 
-#include "filesystem/filesystem.c"
-#include "filesystem/filesystem_ext2.c"
-#include "filesystem/storage_device.c"
+
 
 #include "usb/usb_protocol.c"
 #include "usb/ehci.c"
@@ -220,7 +223,7 @@ void initalize_task_state_segment(CPU_Info *cpu_info) {
   //NOTE(Torin: 2017-07-26) Kernel stack must be initalized
   kassert(cpu_info->kernel_stack_top != 0);
   //TODO(Torin: 2017-07-26) Better names / Comments for TSS Members
-  memset(&cpu_info->tss, 0x00, sizeof(Task_State_Segment));
+  memory_set(&cpu_info->tss, 0x00, sizeof(Task_State_Segment));
   cpu_info->tss.rsp0 = cpu_info->kernel_stack_top;
   //TODO(Torin: 2017-07-27) I think this is unused
   cpu_info->tss.ist1 = cpu_info->kernel_stack_top; 
@@ -314,12 +317,12 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
 
 	if (multiboot2_magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
 		klog_error("the kernel was not booted with a multiboot2 compliant bootloader!");
-		kpanic();
+		kernel_panic();
 	}
 
 	if (multiboot2_address & 7) {
 		klog_error("unaligned multiboot_info!");
-		kpanic();
+		kernel_panic();
 	}
 
   uintptr_t rsdp_physical_address = 0;
@@ -501,8 +504,6 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
   //lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x22, 1);
 
 	while(1) { 
-    process_shell_keyboard_input(&globals.keyboard, &globals.log);
-    reset_keyboard_state(&globals.keyboard);
-    kgfx_draw_log_if_dirty(&globals.log);
+    shell_update(&globals.shell);
   };
 }

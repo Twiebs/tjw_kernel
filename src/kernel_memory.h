@@ -1,12 +1,36 @@
 
 typedef struct {
-  uintptr_t entries[512];
-} Page_Table;
+  uintptr_t value;
+} Physical_Address;
+
+typedef struct {
+  uintptr_t value;
+} Virtual_Address;
 
 typedef struct {
   uintptr_t address;
   uint64_t size;
 } Memory_Range;
+
+typedef struct {
+  uint64_t present : 1; //0
+  uint64_t writeable : 1; // 1
+  uint64_t user_accessible : 1; //2
+  uint64_t write_through_caching : 1; //3 Makes writes go directly to memory
+  uint64_t disable_cache : 1; //4
+  //CPU sets this bit when used.  DO NOT TOUCH
+  uint64_t accessed : 1; //5 
+  //CPU sets this bit when touched.  DONT TOUCH
+  uint64_t dirty : 1; //6
+  //This must be 0 in p4 and p1.  1GB in p3, 2MB in p2
+  uint64_t huge_page : 1; //7
+  uint64_t global : 1; // 8
+} __attribute((packed)) Page_Table_Entry;
+
+typedef struct {
+  uintptr_t entries[512];
+} Page_Table;
+
 
 //TODO(Torin 2016-10-27) It looks like memory ranges are obsolete
 //the physical memory layout can be simplified into one contigious region

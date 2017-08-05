@@ -16,7 +16,7 @@ static void ehci_init_qtd(EHCI_QTD *previous_td, EHCI_QTD *current_td, uintptr_t
     previous_td->alt_next_td = (uint32_t)(uintptr_t)current_td_physical_address;
   }
 
-  memset(current_td, 0x00, sizeof(EHCI_QTD));
+  memory_set(current_td, 0x00, sizeof(EHCI_QTD));
   current_td->next_td = QTD_POINTER_TERMINATE;
   current_td->alt_next_td = QTD_POINTER_TERMINATE;
   current_td->qtd_token = QTD_ACTIVE_BIT;
@@ -622,6 +622,7 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device) {
     storage_device_initialize(storage_device);
   }
   
+  klog_info("[USB] initalized usb device");
   return 1;
 }
 
@@ -728,8 +729,8 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
     static const uint32_t EHCI_POINTER_TYPE_QH = (1 << 1);
     EHCI_Queue_Head *asynch_qh = &hc->asynch_qh;
     EHCI_Queue_Head *periodic_qh = &hc->periodic_qh;
-    memset(asynch_qh, 0x00, sizeof(EHCI_Queue_Head));
-    memset(periodic_qh, 0x00, sizeof(EHCI_Queue_Head));
+    memory_set(asynch_qh, 0x00, sizeof(EHCI_Queue_Head));
+    memory_set(periodic_qh, 0x00, sizeof(EHCI_Queue_Head));
     //NOTE(Torin 2016-09-10) Setup the Asynch_Queue_Head
     uintptr_t asynch_qh_physical_address = hc->second_page_physical_address + offsetof(EHCI_Controller, asynch_qh) - 4096;
     asynch_qh->horizontal_link_pointer = ((uint32_t)(uintptr_t)(asynch_qh_physical_address)) | EHCI_POINTER_TYPE_QH;
@@ -836,6 +837,7 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
       }
     }
   }
-  klog_debug("echi was initalized");
+  
+  klog_info("[USB] echi host controller was initalized");
   return 1;
 }

@@ -44,28 +44,40 @@ exit
 #include <stddef.h>
 #include <stdbool.h>
 
-#include "src/utility.h"
+//Utilities
+#include "src/utils/error_code.h"
+#include "src/utils/math.h"
+#include "src/utils/memory.h"
+#include "src/utils/string.h"
 
-#include "src/error_code.h"
 
 #include "src/descriptor_tables.h"
 #include "src/kernel_synch.h"
 #include "src/kernel.h"
 #include "src/hardware_keyboard.h"
 #include "src/kernel_log.h"
-#include "src/kernel_shell.h"
 
-#include "src/kernel_graphics.h"
+
+
+
 #include "src/kernel_memory.h"
 
 #include "src/interrupt_handler.h"
 
 #include "src/kernel_pci.h"
 
+//Shell
+#include "src/shell/command_line_shell.h"
+#include "src/shell/shell_commands.h"
+
 //Filesystem
 #include "src/filesystem/filesystem.h"
 #include "src/filesystem/storage_device.h"
 #include "src/filesystem/filesystem_ext2.h"
+
+//Graphics
+#include "src/graphics/vga_mode_3.h"
+#include "src/graphics/vesa_framebuffer.h"
 
 //USB devices and drivers
 #include "src/usb/usb.h"
@@ -75,9 +87,27 @@ exit
 #include "src/kernel_debug.h"
 #include "src/kernel_task.h"
 
-
+//  Source Files
+//===========================
 
 #include "src/kernel_entry.c"
 #include "src/interrupt_handler.c"
 #include "src/kernel_log.c"
-#include "src/kernel_shell.c"
+
+//Utilities Source Files
+#include "src/utils/math.c"
+#include "src/utils/memory.c"
+#include "src/utils/string.c"
+
+//Filesystem Source files
+#include "src/filesystem/filesystem.c"
+#include "src/filesystem/filesystem_ext2.c"
+#include "src/filesystem/storage_device.c"
+
+//Shell Source files
+#include "src/shell/command_line_shell.c"
+#include "src/shell/shell_commands.c"
+
+//Graphics Source files
+#include "src/graphics/vga_mode_3.c"
+#include "src/graphics/vesa_framebuffer.c"

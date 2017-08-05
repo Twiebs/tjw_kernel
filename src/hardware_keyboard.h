@@ -1,5 +1,3 @@
-
-
 #define KEYBOARD_SCANCODE1_UP_PRESSED 0x48
 #define KEYBOARD_SCANCODE1_DOWN_PRESSED 0x50
 #define KEYBOARD_SCANCODE1_RIGHT_PRESSED 0x4D
@@ -24,6 +22,25 @@ static const char SCANCODE_TO_UPERCASE_ACII[] = {
   'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?',  0, 0, 0, ' ',  
 };
 
+typedef enum {
+  Keyboard_Keycode_INVALID,
+} Keyboard_Keycode;
+
+typedef enum {
+  Keyboard_Key_State_PRESSED,
+  Keyboard_Key_State_RELEASED,
+} Keyboard_Key_State;
+
+typedef struct {
+  Keyboard_Keycode keycode;
+  Keyboard_Key_State key_state;
+} Keyboard_Event;
+
+typedef struct {
+  Keyboard_Event data[256];
+  uint64_t read;
+  uint64_t write;
+} Keyboard_Event_Queue;
 
 typedef struct {
   uint8_t is_key_down[256];
@@ -31,5 +48,7 @@ typedef struct {
   uint8_t is_key_released[256];
 } Keyboard_State;
 
-void update_keyboard_state(Keyboard_State *keyboard_state);
-void reset_keyboard_state(Keyboard_State *keyboard_state);
+bool keyboard_event_queue_try_push(Keyboard_Event_Queue *event_queue, Keyboard_Event *event);
+bool keyboard_event_queue_try_pop(Keyboard_Event_Queue *event_queue, Keyboard_Event *event);
+void keyboard_state_update_from_ps2_device(Keyboard_State *keyboard_state);
+void keyboard_state_reset(Keyboard_State *keyboard_state);

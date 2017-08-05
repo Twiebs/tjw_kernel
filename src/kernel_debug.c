@@ -31,7 +31,7 @@ kdebug_ioapic_log_irq_map(uintptr_t ioapic_base){
   }
 }
 
-void kdebug_log_interrupt_stack_frame(Interrupt_Stack_Frame *frame){
+void kdebug_log_interrupt_stack_frame(Interrupt_Stack_Frame *frame) {
   Register_State *state = &frame->register_state;
   klog_debug("interrupt_register_state:");
   klog_debug(" rax: 0x%X, r8: 0x%X", state->rax, state->r8);

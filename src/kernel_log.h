@@ -32,20 +32,17 @@ typedef struct {
   Log_Level level;
   uint64_t length;
   char message[CIRCULAR_LOG_MESSAGE_SIZE];
-} Circular_Log_Entry;
+} Log_Entry;
 
 //TODO(Torin) Change is_dirty to last_event_timestamp
 typedef struct {
   uint8_t category_states[Log_Category_COUNT];
-  Circular_Log_Entry entries[CIRCULAR_LOG_ENTRY_COUNT];
-  size_t entry_write_position;
-  size_t current_entry_count;
-  size_t scroll_offset;
-  size_t character_number;
-  char input_buffer[256];
-  size_t input_buffer_count;
+
+  Log_Entry entries[CIRCULAR_LOG_ENTRY_COUNT];
+  uint64_t entries_front;
+  uint64_t entries_back;
+
   Spin_Lock spinlock;
-  bool is_dirty;
 } Circular_Log;
 
 
@@ -54,8 +51,6 @@ void klog_write_fmt(Circular_Log *log, Log_Category category, Log_Level level, c
 
 void klog_enable_category(Circular_Log *log, Log_Category category);
 void klog_disable_category(Circular_Log *log, Log_Category category);
-
-
 
 void klog_add_input_character(Circular_Log *log, const char c);
 void klog_remove_last_input_character(Circular_Log *log);

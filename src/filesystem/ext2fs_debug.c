@@ -9,8 +9,11 @@ void ext2fs_debug_log_directory_entry(Ext2_Filesystem *fs, Ext2_Directory_Entry 
   klog_debug("  size: %u", (uint32_t)directory_entry->entry_size);
   uint32_t name_length = 0;
   if(fs->required_features & EXT2_REQUIRED_FEATURE_DIRECTORY_ENTRYIES_CONTAIN_TYPE){
-    if(directory_entry->type > 7) klog_debug("  directory_entry has invalid type: %u", (uint32_t)directory_entry->type);
-    else klog_debug("  type: %s", DIRECTORY_ENTRY_TYPE_NAMES[directory_entry->type]);
+    if (directory_entry->type > 7) { 
+      klog_debug("  directory_entry has invalid type: %u", (uint32_t)directory_entry->type);
+    } else { 
+      klog_debug("  type: %s", DIRECTORY_ENTRY_TYPE_NAMES[directory_entry->type]); 
+    }
     name_length = directory_entry->name_length;
   } else {
     klog_debug("  type: FEATURE UNUSED");

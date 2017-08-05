@@ -5,7 +5,7 @@
 
 #define strict_assert(expr) kassert(expr)
 #define static_assert(expr) _Static_assert(expr, "ASSERTION FAILED(" #expr ")")
-#define kassert(expr) if(!(expr)) { klog_error("ASSERTION FAILED(%s) on line %u of file %s", #expr, (uint32_t)(__LINE__), __FILE__); kpanic(); }
+#define kassert(expr) if(!(expr)) { klog_error("ASSERTION FAILED(%s) on line %u of file %s", #expr, (uint32_t)(__LINE__), __FILE__); kernel_panic(); }
 
 #define KLOG_ERROR 0
 #define KLOG_INFO  1
@@ -14,7 +14,10 @@
 #define KLOG_VERBOSITY KLOG_DEBUG
 
 #if KLOG_VERBOSITY >= KLOG_DEBUG
+
+//#define klog_debug(...) klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_DEBUG, "[%s:%u]", __FILE__, (uint32_t)__LINE__); klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_DEBUG, __VA_ARGS__)
 #define klog_debug(...) klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_DEBUG, __VA_ARGS__)
+
 #else//KLOG_VERBOSITY >= KLOG_DEBUG
 #define klog_debug(...)
 #endif//KLOG_VERBOSITY >= KLOG_DEBUG
@@ -34,10 +37,8 @@
   if(globals.lapic_timer_ticks >= timeout) { klog_debug("wait timed out: %s,  %s:%u", #x, __FILE__, __LINE__); }} \
   if(globals.lapic_timer_ticks >= timeout)
 
+void kernel_panic();
 
-#define kpanic() kgfx_draw_log_if_dirty(&globals.log); \
-	asm volatile ("cli"); \
-	asm volatile ("hlt")
 
 static inline void write_port_uint8(uint16_t port, uint8_t value) {
 	asm volatile ("outb %0, %1" : : "a"(value), "Nd"(port));

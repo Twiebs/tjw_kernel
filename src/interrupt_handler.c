@@ -80,7 +80,7 @@ irq_common_handler(Interrupt_Stack_Frame_No_Error stack) {
 }
 
 void irq_handler_keyboard(void) {
-  update_keyboard_state(&globals.keyboard);
+  keyboard_state_update_from_ps2_device(&globals.keyboard);
 }
 
 

@@ -57,7 +57,7 @@ bool ktask_run_program(const char *program_path, size_t path_length){
   }
 
   uintptr_t physical_pages[required_pages];
-  memset(physical_pages, 0x00, sizeof(physical_pages));
+  memory_set((void *)physical_pages, 0x00, sizeof(physical_pages));
   if(kmem_allocate_physical_pages(&globals.memory_state, required_pages, physical_pages) == 0){
     klog_error("System is out of physical memory.  Not enough RAM to run program: %.*s", path_length, program_path);
     return false;
@@ -131,7 +131,7 @@ uint64_t ktask_create_thread(uint64_t pid, uintptr_t rip, Task_Info *task_info){
 
   if(thread == 0) {
     klog_error("NO THREADS");
-    kpanic();
+    kernel_panic();
   }
 
 #if 0

@@ -75,12 +75,12 @@ isr_handler_general_protection_fault(Interrupt_Stack_Frame stack_frame) {
     klog_error(" external_to_cpu: %s", error_code.is_external_to_cpu ? "true" : "false");
     klog_error(" table_name: %s", TABLE_NAMES[error_code.table_index]);
     klog_error(" selector_index: 0x%X", error_code.selector_index);
-    kpanic();
+    kernel_panic();
   } else {
     //TODO(Torin: 2016-08-24) Need to determine if the exception was caused in usermode or kernelmode
     //And then attempt to recover from the error.  This can happen if usermode code attemps
     //to execute a privleged instruction!
-    kpanic();
+    kernel_panic();
   }
 }
 
@@ -115,10 +115,10 @@ isr_handler_page_fault(Interrupt_Stack_Frame stack_frame) {
 		//TODO(Torin) Need better painic mechanisim that handles this sort of thing manualy
 		//and mabye drops back into real mode to go back to old-school vga text buffer and
 		//does a blue-screen of death type of deal to insure that the error is reported properly
-    kpanic();
+    kernel_panic();
 	} else {
 		//TODO(TORIN) This was the userspace application lets kill it
     klog_error("UNHANDLED USERSPACE VIOLATION!!!");
-    kpanic();
+    kernel_panic();
 	}
 }

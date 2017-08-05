@@ -12,8 +12,7 @@ extern Page_Table g_p2_table;
 //TODO(Torin) Make this a global function pointer
 //And create SSE and AVX variants
 static inline void kmem_clear_page(void *page){
-
-  memset(page, 0x00, 4096);
+  memory_set(page, 0x00, 4096);
 }
 
 static inline
@@ -74,7 +73,7 @@ bool kmem_allocate_physical_pages(Kernel_Memory_State *memstate, uint64_t page_c
   }
 
   //TODO(Torin 2016-10-20) Recover from running out of physical frames
-  kpanic();
+  kernel_panic();
   return false;
 }
 
@@ -88,7 +87,7 @@ uintptr_t kmem_allocate_persistant_kernel_memory(Kernel_Memory_State *memstate, 
   if((memstate->kernel_memory_used_page_count % 512 + page_count) > 512){
     //TODO(Torin 2016-10-20) We need to allocate another Page_Table so we can map another 2MB
     klog_error("reached unimplemented feature");
-    kpanic();
+    kernel_panic();
   }
 
   uint64_t p2_table_offset = memstate->kernel_memory_start_virtual_address / 0x200000;
@@ -112,7 +111,7 @@ uintptr_t kmem_push_temporary_kernel_memory(uintptr_t physical_address){
   uint64_t p1_table_index = memstate->kernel_memory_used_page_count % 512;
   if(p1_table_index + 1 > 512){
     klog_debug("must allocated adittional pages");
-    kpanic();
+    kernel_panic();
   }
 
   Page_Table *pt = (Page_Table *)((uintptr_t)g_p2_table.entries[p2_table_index] & ~0xFFF);
@@ -179,12 +178,12 @@ uintptr_t kmem_map_physical_mmio(Kernel_Memory_State *memstate, uintptr_t physic
     //TODO(Torin 2016-10-20) Allocate a new page table to continue allocating kernel virtual memory addresses
     //NOTE(Torin 2016-10-20) UNIMPLEMENTED FEATURE WILL CURRENTLY BREAK TASKING SYSTEM WHICH EXPECTS EXECUTABLES AT 0x400000
     kassert(false);
-    kpanic();
+    kernel_panic();
   }
 
   if(kmem_usable_range_contains(memstate, physical_address, page_count*4096)){
     klog_error("cannot map physical address for MMIO because it is contained within the usable range of memory");
-    kpanic();
+    kernel_panic();
   }
 
   Page_Table *pt = (Page_Table *)memstate->kernel_memory_start_virtual_address; 

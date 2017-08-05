@@ -17,13 +17,5 @@ typedef enum {
   VGA_Color_WHITE = 15,
 } VGA_Color;
 
-typedef struct {
-  uint32_t width;
-  uint32_t height;
-  uint32_t pitch;
-  uint8_t  depth;
-  uint8_t *buffer; 
-} Framebuffer;
-
-void kgfx_draw_log_if_dirty(Circular_Log *log);
-void kgfx_draw_character(char c, size_t x_orign, size_t y_origin, Framebuffer *fb);
+void vga_set_char(char c, VGA_Color color, int x, int y);
+void vga_clear_screen();
