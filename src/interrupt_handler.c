@@ -57,8 +57,7 @@ const uintptr_t g_syscall_procedures[] = {
   (uintptr_t)syscall_handler_get_framebuffer,
 };
 
-extern void 
-isr_common_handler(Interrupt_Stack_Frame stack) {
+extern void isr_common_handler(Interrupt_Stack_Frame stack) {
   if(g_exception_handlers[stack.interrupt_number] != 0){
     g_exception_handlers[stack.interrupt_number](stack);
   } else {
@@ -68,8 +67,7 @@ isr_common_handler(Interrupt_Stack_Frame stack) {
   }
 }
 
-extern void 
-irq_common_handler(Interrupt_Stack_Frame_No_Error stack) {
+extern void irq_common_handler(Interrupt_Stack_Frame_No_Error stack) {
   if(_interrupt_handlers[stack.interrupt_number] == 0x00){
 		klog_error("unregistered interrupt handler");
   } else {
@@ -80,23 +78,20 @@ irq_common_handler(Interrupt_Stack_Frame_No_Error stack) {
 }
 
 void irq_handler_keyboard(void) {
-  keyboard_state_update_from_ps2_device(&globals.keyboard);
+  keyboard_state_add_scancodes_from_ps2_device(&globals.keyboard);
 }
 
 
-static void 
-irq_handler_pit(void){
+static void irq_handler_pit(void){
   globals.pit_timer_ticks += 1;
   write_port_uint8(0x20, 0x20);
 }
 
-static void
-lapic_periodic_timer_interrupt_handler(void){
+static void lapic_periodic_timer_interrupt_handler(void){
   globals.lapic_timer_ticks += 1;
 }
 
 
-static void
-lapic_timer_interrupt(void){
+static void lapic_timer_interrupt(void) {
   globals.lapic_timer_ticks += 1;
 }

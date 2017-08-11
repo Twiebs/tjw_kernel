@@ -1,10 +1,10 @@
 
 
-int storage_device_initialize(Storage_Device *storage_device) {
+Error_Code storage_device_initialize(Storage_Device *storage_device) {
   uint8_t temporary_buffer[512];
-  if (storage_device_read_to_physical(storage_device, 0, 1, (uintptr_t)temporary_buffer)) {
+  if (storage_device_read(storage_device, 0, 1, temporary_buffer)) {
     klog_error("failed to read storage_device");
-    return 1;
+    return Error_Code_FAILED_READ;
   }
 
   MBR_Partition_Table *partition_table = (MBR_Partition_Table *)(temporary_buffer + 0x1BE);
@@ -30,31 +30,56 @@ int storage_device_initialize(Storage_Device *storage_device) {
     }
     partition_table++;
   }
-  return 0;
+
+  return Error_Code_NONE;
 }
 
-int storage_device_read_to_physical(Storage_Device *storage_device, uint64_t block_number, uint64_t block_count, uintptr_t physical_address) {
+Error_Code storage_device_read(Storage_Device *storage_device, uint64_t block_number, uint64_t block_count, uint8_t *buffer) {
   switch (storage_device->type) {
     case Storage_Device_Type_EHCI: {
       EHCI_Controller *ehci_hc = (EHCI_Controller *)storage_device->controller_ptr;
       USB_Device *usb_device = (USB_Device *)storage_device->device_ptr;
       USB_Mass_Storage_Device *msd = &usb_device->msd;
-      if (ehci_read_to_physical_address(ehci_hc, msd, physical_address, block_number, block_count)) {
-        klog_error("[Storage_Device] Read failed");
+
+      //TODO(Torin: 2017-08-10) Make sure block_size == pow2 at init
+      //TODO(Torin: 2017-08-11) This is soooooooooo slooooooooowwwwwwwwww
+      // but it handles all cases!
+      uint64_t blocks_per_page = 4096 / storage_device->block_size;
+      uint64_t pages_to_read = block_count / blocks_per_page;
+      uint64_t remainder_blocks_to_read = block_count % blocks_per_page;
+      uint8_t *temporary_memory = cpu_get_temporary_page();
+      uintptr_t physical_address = kmem_get_physical_address((uintptr_t)temporary_memory);
+      uint64_t current_block_number = block_number;
+      uint8_t *write_ptr = buffer;
+
+      //TODO(Torin: 2017-08-10) Make ehci_read_to_physical_address handle multiple block reads internaly
+      for (size_t i = 0; i < pages_to_read; i++) {
+        for (size_t j = 0; j < blocks_per_page; j++) {
+          ehci_read_to_physical_address(ehci_hc, msd, physical_address + (j * storage_device->block_size),current_block_number + j, 1);
+        }
+        memory_copy(write_ptr, temporary_memory, 4096);
+        write_ptr += 4096;
+        current_block_number += blocks_per_page;
       }
 
+      for (size_t i = 0; i < remainder_blocks_to_read; i++) {
+        ehci_read_to_physical_address(ehci_hc, msd, physical_address + (i * storage_device->block_size), current_block_number + i, 1);
+      }
+
+      memory_copy(write_ptr, temporary_memory, remainder_blocks_to_read * storage_device->block_size);
+      return Error_Code_NONE;
     } break;
 
     case Storage_Device_Type_INVALID:{
       klog_error("invalid storage device");
-      return 1;
+      return Error_Code_INVALID_DATA;
     } break;
 
     default:{
       klog_error("usupported storage device");
-      return 1;
+      return Error_Code_UNSUPORTED_FEATURE;
     } break;
   }
 
-  return 0;
+  return Error_Code_NONE;
 }

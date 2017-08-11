@@ -40,5 +40,5 @@ typedef struct {
   void *controller_ptr;
 } Storage_Device;
 
-int storage_device_initialize(Storage_Device *device);
-int storage_device_read_to_physical(Storage_Device *device, uint64_t block_number, uint64_t block_count, uintptr_t physical_address);
+Error_Code storage_device_initialize(Storage_Device *device);
+Error_Code storage_device_read(Storage_Device *device, uint64_t block_number, uint64_t block_count, uint8_t *buffer);

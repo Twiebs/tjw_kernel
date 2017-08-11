@@ -40,10 +40,10 @@ bool extract_elf_executable_load_info(uintptr_t executable_virtual, Executable_L
 }
 
 //NOTE(Torin 2016-11-28) Need p4 table for each cpu core
-
+#if 0
 bool ktask_run_program(const char *program_path, size_t path_length){
-  File_Handle handle = {};
-  if(fs_obtain_file_handle(program_path, path_length, &handle) == 0){
+  VFS_Node_Handle handle = {};
+  if (vfs_aquire_node_handle(program_path, path_length, &handle)) {
     klog_error("failed to open program executable: %.*s", path_length, program_path);
     return false;
   }
@@ -51,19 +51,19 @@ bool ktask_run_program(const char *program_path, size_t path_length){
   //TODO(Torin) Make this smater for potentional overflows
   uint64_t required_memory = ((handle.file_size + 0xFFF) & ~0xFFF);
   uint64_t required_pages = required_memory / 4096;
-  if(required_pages > 4096) {
+  if (required_pages > 4096) {
     klog_error("Executable is too large for current physical page allocation method");
     return false;
   }
 
   uintptr_t physical_pages[required_pages];
   memory_set((void *)physical_pages, 0x00, sizeof(physical_pages));
-  if(kmem_allocate_physical_pages(&globals.memory_state, required_pages, physical_pages) == 0){
+  if (kmem_allocate_physical_pages(&globals.memory_state, required_pages, physical_pages) == 0){
     klog_error("System is out of physical memory.  Not enough RAM to run program: %.*s", path_length, program_path);
     return false;
   }
 
-  if(fs_read_file(&handle, 0, handle.file_size, physical_pages) == 0){
+  if (vfs_node_read_file(&handle, 0, handle.file_size, physical_pages)){
     klog_error("failed to read file");
     return false;
   }
@@ -87,7 +87,7 @@ bool ktask_run_program(const char *program_path, size_t path_length){
   //ktask_context_switch(thread_id, &globals.task_info);
   return true;
 }
-
+#endif
 
 uint64_t ktask_create_process(Executable_Load_Info *load_info, Task_Info *task_info){
   uint64_t result_pid = KTASK_INVALID_PID;

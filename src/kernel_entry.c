@@ -7,21 +7,6 @@
 // IDT still must be initalized
 
 
-/*
- 
- ** Current Feature TODO List **
-- PCIe MMIO registers
-- MSI interrupts 
-- Create os specific bootloader
-- AHCI(SATA) Driver
-- XHCI Driver
-- OCHI Driver
-- UHCI Driver
-- Switch to real mode and properly change video modes
-*/
-
-
-
 typedef struct {
   Circular_Log log;
   Command_Line_Shell shell;
@@ -83,7 +68,6 @@ uint32_t get_cpu_id(){
 }
 
 #include "kernel_acpi.c"
-//#include "kernel_descriptor.c"
 #include "descriptor_tables.c"
 #include "kernel_exceptions.c"
 #include "kernel_task.c"
@@ -103,13 +87,6 @@ static uintptr_t _interrupt_handlers[256];
 static const uint8_t TRAMPOLINE_BINARY[] = {
 #include "trampoline.txt"
 };
-
-#if 1
-static const uint8_t TEST_PROGRAM_ELF[] = {
-#include "test_program.txt" 
-};
-#endif
-
 
 static void idt_install_all_interrupts() {
   extern void asm_double_fault_handler();
@@ -495,8 +472,9 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
     ioapic_initalize(sys->ioapic_virtual_address);
   }
 
-  initalize_cpu_info_and_start_secondary_cpus(sys); 
 
+  initalize_cpu_info_and_start_secondary_cpus(sys);
+  shell_initialize(&globals.shell);
 
   pci_scan_devices();
 

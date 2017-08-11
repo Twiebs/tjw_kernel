@@ -106,7 +106,6 @@ typedef struct {
   EHCI_Queue_Head asynch_qh   __attribute((aligned(64)));   //128 Bytes 
   EHCI_Queue_Head periodic_qh __attribute((aligned(64)));   //128 Bytes
   EHCI_QTD qtd_array[4]       __attribute((aligned(64)));   //256 Bytes (4*64)
-
   uintptr_t first_page_physical_address;
   uintptr_t second_page_physical_address;
 

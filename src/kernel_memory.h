@@ -7,6 +7,12 @@ typedef struct {
   uintptr_t value;
 } Virtual_Address;
 
+typedef enum {
+  Memory_Range_Type_KERNEL;
+  Memory_Range_Type_USABLE,
+  Memory_Range_Type_UNUSABLE
+} Memory_Range_Type;
+
 typedef struct {
   uintptr_t address;
   uint64_t size;
@@ -31,18 +37,27 @@ typedef struct {
   uintptr_t entries[512];
 } Page_Table;
 
+//Generate Free_Page_Stack data structure
+#define DYNAMIC_SIZED_STACK_NAME Free_Page_Stack
+#define DYNAMIC_SIZED_STACK_PREFIX free_page_stack
+#define DYNAMIC_SIZED_STACK_ELEMENT uint64_t
+#include "utils/dynamic_sized_stack.h"
 
-//TODO(Torin 2016-10-27) It looks like memory ranges are obsolete
-//the physical memory layout can be simplified into one contigious region
-//of RAM followed by ACPI / MMIO regions then another full contigious region
-//of RAM
-//TODO(Torin 2016-10-27) Research memory controler for target supported motherboard and see if they will
-//all follow this behavior or if we need to check for strange cases if the hardware will do somthing different
-//If so pehaps we have two different mechanisims for keeping track of the available physical RAM
+
 typedef struct {
+  //Usable Memory Ranges
+  //NOTE(Torin 2017-08-11) Already initialized from
+  //multiboot2 information
   Memory_Range usable_range[8];
   uint64_t usable_range_count;
   uint64_t total_usable_memory;
+
+  //Physical Page Allocation
+  Memory_Range *current_usable_range;
+  uint64_t current_usable_range_index;
+  uint64_t next_free_physical_page_index_in_current_range;
+  Free_Page_Stack free_page_stack;
+
   uintptr_t allocator_start;
   uint32_t current_page_index;
   uint64_t *page_usage_bitmap;

@@ -14,6 +14,15 @@ size_t cstring_length(const char *cstring) {
   return result;
 }
 
+size_t cstring_substring_to_next_whitespace(const char *string) {
+  size_t substring_length = 0;
+  while (!char_is_whitespace(string[substring_length]) && string[substring_length] != 0) {
+    substring_length += 1;
+  }
+  return substring_length;
+}
+
+
 #define string_matches_literal(string, len, lit) strings_match(string,len, lit, LITERAL_STRLEN(lit))
 
 int string_equals_string(const char *stringA, size_t lengthA, const char *stringB, size_t lengthB) {
@@ -32,14 +41,44 @@ int string_matches_string(const char *str0, size_t length, const char *str1) {
   return 1;
 }
 
-int is_char_alpha(char c) {
-  if ((c >= 'A' && c <= 'Z') ||
-      (c >= 'a' && c <= 'z')) {
-    return 1;
+
+size_t string_seek_past_whitespaces(const char *string_begin, size_t start_offset, size_t max_seek_distance) {
+  size_t current_index = start_offset;
+  while (current_index < max_seek_distance) {
+    if (!char_is_whitespace(string_begin[current_index])) {
+      return current_index;
+    }
+    current_index++;
   }
 
-  return 0;
+  return max_seek_distance;
 }
+
+size_t string_seek_next_whitespace(const char *string_begin, size_t start_offset, size_t max_seek_distance) {
+  size_t current_index = start_offset;
+  while (current_index < max_seek_distance) {
+    if (char_is_whitespace(string_begin[current_index])) {
+      return current_index;
+    }
+    current_index++;
+  }
+  return max_seek_distance;
+}
+
+size_t string_substring_to_next_whitespace(const char *string, size_t offset, size_t length) {
+  size_t substring_length = 0;
+  size_t current_index = offset;
+  while (current_index < length) {
+    if (char_is_whitespace(string[current_index])) {
+      return substring_length;
+    }
+    substring_length++;
+    current_index++;
+  }
+
+  return length - offset;
+}
+
 
 void string_inplace_reverse(char *str, size_t length) {
   size_t midpoint = length / 2;
@@ -137,4 +176,18 @@ size_t vsnprintf(char *buffer, size_t capacity, const char *fmt, va_list args) {
     }
   }
   return bytes_written;
+}
+
+bool char_is_whitespace(char c) {
+  bool result = c == ' '  || c == '\n' || c == '\r' || c == '\t' || c == '\v';
+  return result;
+}
+
+bool char_is_alpha(char c) {
+  if ((c >= 'A' && c <= 'Z') ||
+      (c >= 'a' && c <= 'z')) {
+    return true;
+  }
+
+  return false;
 }

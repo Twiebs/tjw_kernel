@@ -11,19 +11,17 @@ extern Page_Table g_p2_table;
 
 //TODO(Torin) Make this a global function pointer
 //And create SSE and AVX variants
-static inline void kmem_clear_page(void *page){
+static inline void kmem_clear_page(void *page) {
   memory_set(page, 0x00, 4096);
 }
 
-static inline
-void kmem_set_page_state(Kernel_Memory_State *state, uint64_t index, bool used){
+static inline void kmem_set_page_state(Kernel_Memory_State *state, uint64_t index, bool used){
   uint64_t bitmap_index = index / 64; 
   uint64_t bit_index = index % 64;
   state->page_usage_bitmap[bitmap_index] |= used << bit_index;
 }
 
-static inline
-void kmem_add_usable_range(uintptr_t address, uint64_t size, Kernel_Memory_State *mem){
+static inline void kmem_add_usable_range(uintptr_t address, uint64_t size, Kernel_Memory_State *mem){
   if(mem->usable_range_count + 1 > ARRAY_COUNT(mem->usable_range)){
     uintptr_t range_end = address + size;
     klog_warning("maximum memory range entries was execeded.  Memory_Range 0x%X - 0x%X is unusable", address, range_end);
@@ -36,8 +34,7 @@ void kmem_add_usable_range(uintptr_t address, uint64_t size, Kernel_Memory_State
   mem->total_usable_memory += size;
 }
 
-static inline
-bool kmem_usable_range_contains(Kernel_Memory_State *memstate, uintptr_t address, size_t size){
+static inline bool kmem_usble_range_contains(Kernel_Memory_State *memstate, uintptr_t address, size_t size){
   uintptr_t target_end = address + size;
   for(size_t i = 0; i < memstate->usable_range_count; i++){
     Memory_Range *range = &memstate->usable_range[i];
@@ -47,7 +44,7 @@ bool kmem_usable_range_contains(Kernel_Memory_State *memstate, uintptr_t address
   return false;
 }
 
-bool kmem_allocate_physical_pages(Kernel_Memory_State *memstate, uint64_t page_count, uintptr_t *out){
+bool kmem_allocate_physical_pages(Kernel_Memory_State *memstate, uint64_t page_count, uintptr_t *out) {
   uint64_t current_page_count = 0;
   for(size_t value_index = 0; value_index < memstate->page_usage_bitmap_size / 8; value_index++){
     if(memstate->page_usage_bitmap[value_index] == 0xFFFFFFFFFFFFFFFF) continue;
@@ -109,7 +106,7 @@ uintptr_t kmem_push_temporary_kernel_memory(uintptr_t physical_address){
   uint64_t p2_table_offset = memstate->kernel_memory_start_virtual_address / 0x200000;
   uint64_t p2_table_index = (memstate->kernel_memory_used_page_count / 512) + p2_table_offset;
   uint64_t p1_table_index = memstate->kernel_memory_used_page_count % 512;
-  if(p1_table_index + 1 > 512){
+  if (p1_table_index + 1 > 512) {
     klog_debug("must allocated adittional pages");
     kernel_panic();
   }
@@ -126,15 +123,14 @@ void kmem_pop_temporary_kernel_memory(){
   memstate->kernel_memory_used_page_count--;
 }
 
-static inline
-void kmem_flush_tlb(){
+static inline void kmem_flush_tlb() {
   asm volatile(".intel_syntax noprefix");
   asm volatile("mov rax, cr3");
   asm volatile("mov cr3, rax");
   asm volatile(".att_syntax prefix");
 }
 
-void kmem_initalize_memory_state(Kernel_Memory_State *memstate){
+void kmem_initalize_memory_state(Kernel_Memory_State *memstate) {
   extern uint32_t _KERNEL_END;
   globals.system_info.kernel_end = 0x100000 + _KERNEL_END;
   uintptr_t memory_begin = (globals.system_info.kernel_end + 0x200000) & ~0x1FFFFF;
@@ -203,11 +199,12 @@ uintptr_t kmem_get_physical_address(uintptr_t virtual_address){
   uintptr_t p3_index = (virtual_address >> 30) & 0x1FF;
   uintptr_t p2_index = (virtual_address >> 21) & 0x1FF;
   uintptr_t p1_index = (virtual_address >> 12) & 0x1FF;
-  Page_Table *p4_table = (Page_Table *)&g_p4_table;
+  Page_Table *p4_table = (Page_Table *)&g_p4_table; //TODO(T) XXX FIXME BAD
   Page_Table *p3_table = (Page_Table *)(p4_table->entries[p4_index] & ~0xFFF);
   Page_Table *p2_table = (Page_Table *)(p3_table->entries[p3_index] & ~0xFFF);
   Page_Table *p1_table = (Page_Table *)(p2_table->entries[p2_index] & ~0xFFF);
   uintptr_t physical_address = p1_table->entries[p1_index] & ~0xFFF;
+  physical_address += virtual_address & 0xFFF;
   return physical_address;
 }
 

@@ -76,6 +76,8 @@ typedef struct {
   uint8_t reserved[12];
 } __attribute((packed)) Ext2_Block_Group_Descriptor;
 
+static_assert(sizeof(Ext2_Block_Group_Descriptor) == 32);
+
 typedef struct {
   uint16_t permissions : 12;
   uint16_t type : 4;
@@ -161,7 +163,11 @@ static const char *DIRECTORY_ENTRY_TYPE_NAMES[] = {
   "SYMBOLIC_LINK"     //7
 };
 
-bool ext2fs_read_block(Ext2_Filesystem *extfs, uint32_t block_number, uintptr_t buffer_physical);
-int ext2fs_read_inode(Ext2_Filesystem *extfs, uint32_t inode_number, Ext2_Inode *out_inode);
+Error_Code ext2_block_read(Ext2_Filesystem *ext2fs, uint32_t block_number, uint8_t *buffer);
+Error_Code ext2_inode_read(Ext2_Filesystem *extfs, uint32_t inode_number, Ext2_Inode *out_inode);
+Error_Code ext2_inode_read_data(Ext2_Filesystem *ext2fs, Ext2_Inode *inode, uint64_t offset, uint64_t size, uint8_t *buffer);
+Error_Code ext2_inode_get_data_block_number(Ext2_Filesystem *ext2fs, Ext2_Inode *inode, uint32_t block_index, uint32_t *result);
 
-int ext2_file_system_initalize(Ext2_Filesystem *extfs, Storage_Device *storage_device, uint64_t partition_index);
+Error_Code ext2_file_system_initalize(Ext2_Filesystem *extfs, Storage_Device *storage_device, uint64_t partition_index);
+Error_Code ext2_find_inode_in_directory_from_name_string(Ext2_Filesystem *ext2fs, Ext2_Inode *directory_inode, 
+  const char *name, size_t name_length, uint8_t *scratch_memory, uint32_t *result_inode_number);

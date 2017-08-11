@@ -32,8 +32,7 @@ typedef enum {
 } Keyboard_Key_State;
 
 typedef struct {
-  Keyboard_Keycode keycode;
-  Keyboard_Key_State key_state;
+  uint8_t scancode;
 } Keyboard_Event;
 
 typedef struct {
@@ -43,12 +42,15 @@ typedef struct {
 } Keyboard_Event_Queue;
 
 typedef struct {
-  uint8_t is_key_down[256];
-  uint8_t is_key_pressed[256];
-  uint8_t is_key_released[256];
+  bool is_key_down[256];
+  bool is_key_pressed[256];
+  bool is_key_released[256];
+  Keyboard_Event_Queue event_queue;
 } Keyboard_State;
 
 bool keyboard_event_queue_try_push(Keyboard_Event_Queue *event_queue, Keyboard_Event *event);
 bool keyboard_event_queue_try_pop(Keyboard_Event_Queue *event_queue, Keyboard_Event *event);
-void keyboard_state_update_from_ps2_device(Keyboard_State *keyboard_state);
+void keyboard_state_add_scancodes_from_ps2_device(Keyboard_State *keyboard_state);
+
+void keyboard_state_update(Keyboard_State *keyboard_state);
 void keyboard_state_reset(Keyboard_State *keyboard_state);

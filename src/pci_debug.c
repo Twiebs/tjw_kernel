@@ -1,5 +1,5 @@
 
-static inline void pci_log_device_status(PCI_Device *pci_device){
+void pci_log_device_status(PCI_Device *pci_device){
   pci_set_config_address(pci_device->bus_number, pci_device->device_number, pci_device->function_number, 0x04);
   uint16_t status = 0, command = 0;
   pci_read_2x16(&status, &command);

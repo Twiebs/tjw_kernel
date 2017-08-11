@@ -1,9 +1,5 @@
 
-void ext2fs_debug_log_directory_entry(Ext2_Filesystem *fs, Ext2_Directory_Entry *directory_entry);
-void ext2fs_debug_log_inode(Ext2_Inode *inode);
-void ext2fs_debug_log_fs_info(Ext2_Filesystem *extfs);
-
-void ext2fs_debug_log_directory_entry(Ext2_Filesystem *fs, Ext2_Directory_Entry *directory_entry){
+void ext2_debug_log_directory_entry(Ext2_Filesystem *fs, Ext2_Directory_Entry *directory_entry){
   klog_debug("directory_entry");
   klog_debug("  inode: %u", directory_entry->inode);
   klog_debug("  size: %u", (uint32_t)directory_entry->entry_size);
@@ -25,7 +21,7 @@ void ext2fs_debug_log_directory_entry(Ext2_Filesystem *fs, Ext2_Directory_Entry 
   klog_debug("  name: %.*s", name_length, directory_entry->name);
 }
 
-void ext2fs_debug_log_inode(Ext2_Inode *inode){
+void ext2_debug_log_inode(Ext2_Inode *inode){
   uint8_t type = inode->type;
   const char *type_name = "unknown";
   if(type == EXT2_INODE_TYPE_FIFO) type_name = "FIFO";
@@ -46,7 +42,7 @@ void ext2fs_debug_log_inode(Ext2_Inode *inode){
   klog_debug(" direct_block_pointer_0: %u", inode->direct_block_pointers[0]);
 }
 
-void ext2fs_debug_log_group_descriptor(Ext2_Block_Group_Descriptor *descriptor){
+void ext2_debug_log_group_descriptor(Ext2_Block_Group_Descriptor *descriptor){
   klog_debug("block_usage_bitmap_block_number: %u", descriptor->block_usage_bitmap_block_number);
   klog_debug("inode_usage_bitmap_block_number: %u", descriptor->inode_usage_bitmap_block_number);
   klog_debug("inode_table_block_number: %u", descriptor->inode_table_block_number);
@@ -55,7 +51,7 @@ void ext2fs_debug_log_group_descriptor(Ext2_Block_Group_Descriptor *descriptor){
   klog_debug("directory_count: %u", (uint32_t)descriptor->directory_count); 
 }
 
-void ext2fs_debug_log_fs_info(Ext2_Filesystem *extfs){
+void ext2_debug_log_fs_info(Ext2_Filesystem *extfs){
   klog_debug("extfs_info:");
   klog_debug(" inode_count_per_goup: %u", extfs->inode_count_per_group);
   klog_debug(" inode_size: %u", extfs->inode_size);

@@ -65,15 +65,18 @@ exit
 #include "src/interrupt_handler.h"
 
 #include "src/kernel_pci.h"
+#include "src/system.h"
 
 //Shell
 #include "src/shell/command_line_shell.h"
 #include "src/shell/shell_commands.h"
 
 //Filesystem
-#include "src/filesystem/filesystem.h"
+#include "src/filesystem/virtual_filesystem.h"
 #include "src/filesystem/storage_device.h"
-#include "src/filesystem/filesystem_ext2.h"
+#include "src/filesystem/ext2_filesystem.h"
+#include "src/filesystem/ext2_debug.h"
+
 
 //Graphics
 #include "src/graphics/vga_mode_3.h"
@@ -93,6 +96,7 @@ exit
 #include "src/kernel_entry.c"
 #include "src/interrupt_handler.c"
 #include "src/kernel_log.c"
+#include "src/system.c" 
 
 //Utilities Source Files
 #include "src/utils/math.c"
@@ -100,8 +104,8 @@ exit
 #include "src/utils/string.c"
 
 //Filesystem Source files
-#include "src/filesystem/filesystem.c"
-#include "src/filesystem/filesystem_ext2.c"
+#include "src/filesystem/virtual_filesystem.c"
+#include "src/filesystem/ext2_filesystem.c"
 #include "src/filesystem/storage_device.c"
 
 //Shell Source files

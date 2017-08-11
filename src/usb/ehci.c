@@ -84,7 +84,7 @@ static inline void ehci_disable_asynch_schedule(EHCI_Controller *hc){
   static const uint32_t USBCMD_ASYNCH_SCHEDULE_ENABLE_BIT = 1 << 5;
   static const uint32_t USBSTS_ASYNCH_SCHEDULE_STATUS_BIT = 1 << 15;
   hc->op_regs->usb_command = hc->op_regs->usb_command & ~USBCMD_ASYNCH_SCHEDULE_ENABLE_BIT;
-  wait_for_condition((hc->op_regs->usb_status & USBSTS_ASYNCH_SCHEDULE_STATUS_BIT) == 0, 2){
+  wait_for_condition((hc->op_regs->usb_status & USBSTS_ASYNCH_SCHEDULE_STATUS_BIT) == 0, 2) {
     klog_error("asynchrous shedule failed to disable");
   }
 }
@@ -93,7 +93,7 @@ static inline void ehci_enable_asynch_schedule(EHCI_Controller *hc){
   static const uint32_t USBCMD_ASYNCH_SCHEDULE_ENABLE_BIT = 1 << 5;
   static const uint32_t USBSTS_ASYNCH_SCHEDULE_STATUS_BIT = 1 << 15;
   hc->op_regs->usb_command = hc->op_regs->usb_command | USBCMD_ASYNCH_SCHEDULE_ENABLE_BIT;
-  wait_for_condition(hc->op_regs->usb_status & USBSTS_ASYNCH_SCHEDULE_STATUS_BIT, 2){
+  wait_for_condition(hc->op_regs->usb_status & USBSTS_ASYNCH_SCHEDULE_STATUS_BIT, 2) {
     klog_error("failed to enable asynchronous schedule");
   }
 }
@@ -306,10 +306,10 @@ int ehci_bulk_transfer_no_data(EHCI_Controller *hc, USB_Mass_Storage_Device *msd
   ehci_disable_asynch_schedule(hc);
   ehci_initalize_qh(out_qh, out_data_physical, msd->device_number, msd->out_endpoint, USB_Speed_HIGH, msd->out_endpoint_max_packet_size);
   ehci_enable_asynch_schedule(hc);
-  wait_for_condition(ehci_check_qh_status(out_qh), 125){}
+  wait_for_condition(ehci_check_qh_status(out_qh), 125) {}
   ehci_disable_asynch_schedule(hc);
   int status = ehci_check_qh_status(out_qh);
-  if(status == 0) {
+  if (status == 0) {
     klog_error("bulk out transaction error");
     klog_debug("queue_head:");
     kdebug_log_qtd_token(out_qh->qtd_token);
@@ -320,10 +320,10 @@ int ehci_bulk_transfer_no_data(EHCI_Controller *hc, USB_Mass_Storage_Device *msd
   ehci_disable_asynch_schedule(hc);
   ehci_initalize_qh(in_qh, in_status_physical, msd->device_number, msd->in_endpoint, USB_Speed_HIGH, msd->in_endpoint_max_packet_size);
   ehci_enable_asynch_schedule(hc);
-  wait_for_condition(ehci_check_qh_status(in_qh), 125){}
+  wait_for_condition(ehci_check_qh_status(in_qh), 125) {}
   status = ehci_check_qh_status(in_qh);
   ehci_disable_asynch_schedule(hc);
-  if(status == 0) {
+  if (status == 0) {
     klog_error("bulk in transaction timed out without completing");
     klog_debug("queue_head:");
     kdebug_log_qtd_token(in_qh->qtd_token);
@@ -343,11 +343,11 @@ int ehci_bulk_transfer_no_data(EHCI_Controller *hc, USB_Mass_Storage_Device *msd
     klog_error("usb bulk transaction reports failure");
     return 0;
   } else {
-    if(csw.signature != USB_CSW_SIGNATURE) {
+    if (csw.signature != USB_CSW_SIGNATURE) {
       klog_error("malformed command status wrapper signature!");
       return 0;
     }
-    if(csw.tag != cbw->tag){
+    if (csw.tag != cbw->tag){
       klog_error("command wrapper tag mistmatch!");
       return 0;
     }
@@ -380,11 +380,11 @@ Error_Code ehci_read_to_physical_address(EHCI_Controller *hc, USB_Mass_Storage_D
 
   SCSI_Read_Command read_command = {
     .cbw.signature = USB_CBW_SIGNATURE,
-    .cbw.tag = 0x28,
+    .cbw.tag = 0x28, //READ10
     .cbw.transfer_length = msd->logical_block_size*block_count, 
     .cbw.direction = 1, 
     .cbw.length = 10,
-    .operation_code = 0x28,
+    .operation_code = 0x28, //READ10
     .logical_block_address_3 = start_block >> 24,
     .logical_block_address_2 = start_block >> 16,
     .logical_block_address_1 = start_block >> 8,
@@ -393,7 +393,7 @@ Error_Code ehci_read_to_physical_address(EHCI_Controller *hc, USB_Mass_Storage_D
     .transfer_length_0 = block_count >> 0,
   };
 
-  if (ehci_bulk_transfer_with_data(hc, msd, &read_command.cbw, 31, (void *)out_data, msd->logical_block_size * block_count) == 0) {
+  if (ehci_bulk_transfer_with_data(hc, msd, &read_command.cbw, sizeof(SCSI_Read_Command), (void *)out_data, msd->logical_block_size * block_count) == 0) {
     uint32_t logical_block_address = read_command.logical_block_address_0;
     logical_block_address |= read_command.logical_block_address_1 << 8;
     logical_block_address |= read_command.logical_block_address_2 << 16;

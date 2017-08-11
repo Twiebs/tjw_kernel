@@ -1,7 +1,4 @@
 
-void shell_command_register(Command_Line_Shell *shell, const char *name, uint64_t parameter_count, Shell_Command_Procedure procedure) {
-
-}
 
 void shell_add_input_character(Command_Line_Shell *shell, const char c) {
   if (c < ' ' || c > '~') return;
@@ -20,11 +17,53 @@ void shell_remove_last_input_character(Command_Line_Shell *shell) {
   }
 }
 
+void shell_clear_input_buffer(Command_Line_Shell *shell) {
+  shell->requires_redraw = true;
+  memory_set(shell->input_buffer, 0x00, shell->input_buffer_count);
+  shell->input_buffer_count = 0;
+}
+
+
 void shell_execute_command(Command_Line_Shell *shell) {
   if (shell->input_buffer_count > 0) {
-    shell->requires_redraw = true;
-    size_t length = shell->input_buffer_count;
-    shell->input_buffer_count = 0;
+    Shell_Command_Parameter_Info parameter_info = {};
+    size_t current_index = 0;
+    size_t command_string_length = cstring_substring_to_next_whitespace(shell->input_buffer);
+    current_index = command_string_length;
+
+    while (current_index < shell->input_buffer_count) {
+      current_index = string_seek_past_whitespaces(shell->input_buffer, current_index, shell->input_buffer_count);
+      if (current_index != shell->input_buffer_count) {
+        if (parameter_info.parameter_count >= ARRAY_COUNT(parameter_info.parameters)) break;
+        Shell_Command_Parameter *param = &parameter_info.parameters[parameter_info.parameter_count++];
+        param->text = &shell->input_buffer[current_index];
+        param->length = string_substring_to_next_whitespace(shell->input_buffer, current_index, shell->input_buffer_count);
+        current_index += param->length;
+      }
+    }
+
+    if (command_string_length == 0) {
+      klog_error("command cannot start with whitespace");
+    } else {
+      for (size_t i = 0; i < shell->command_count; i++) {
+        Shell_Command *command = &shell->commands[i];
+        if (string_equals_string(shell->input_buffer, command_string_length, command->name, command->name_count)) {
+          if (command->parameter_count != parameter_info.parameter_count) {
+            klog_error("invalid command parameter count for command %.*s", command->name_count, command->name);
+            shell_clear_input_buffer(shell);
+            return;
+          } else { 
+            command->procedure(&parameter_info);
+            shell_clear_input_buffer(shell);
+            return;
+          }
+        }
+      }
+
+      klog_error("cannot find command %.*s", (int)command_string_length, shell->input_buffer);
+    }
+
+    shell_clear_input_buffer(shell);
   }
 }
 
@@ -106,13 +145,33 @@ void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log) {
 }
 
 void shell_update(Command_Line_Shell *shell) {
+  keyboard_state_update(&globals.keyboard);
   shell_process_keyboard_input(shell, &globals.keyboard);
   keyboard_state_reset(&globals.keyboard);
   shell_draw_if_required(shell, &globals.log);
 }
 
+
+void shell_command_register(Command_Line_Shell *shell, const char *name, uint64_t parameter_count, Shell_Command_Procedure procedure) {
+  if (shell->command_count >= ARRAY_COUNT(shell->commands)) return;
+  size_t name_length = cstring_length(name);
+  if (name_length > 128) { //TODO shell name length
+    klog_error("cannot register command %s. Its too big", name);
+    return;
+  }
+
+  Shell_Command *command = &shell->commands[shell->command_count++];
+  memory_copy(command->name, name, name_length);
+  command->name_count = name_length;
+  command->procedure = procedure;
+  command->parameter_count = parameter_count;
+}
+
 void shell_initialize(Command_Line_Shell *shell) {
+  shell->current_directory[0] = '/';
+  shell->current_directory_count = 1;
   shell_command_register(shell, "help", 0, shell_command_help);
   shell_command_register(shell, "ls", 0, shell_command_ls);
   shell_command_register(shell, "cd", 1, shell_command_cd);
+  shell_command_register(shell, "cat", 1, shell_command_cat);
 }

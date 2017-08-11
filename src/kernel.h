@@ -93,6 +93,7 @@ kernel_reboot() {
 typedef struct {
   uintptr_t kernel_stack_top;
   Task_State_Segment tss;
+  uint8_t *temporary_memory;
 } CPU_Info;
 
 typedef struct {

@@ -28,8 +28,11 @@ typedef struct {
   uint64_t command_count;
   Shell_Command_Parameter_Info parameter_info;
   bool requires_redraw;
+  char current_directory[1024];
+  size_t current_directory_count;
 } Command_Line_Shell;
 
+void shell_initialize(Command_Line_Shell *shell);
 void shell_update(Command_Line_Shell *shell);
 void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log);
 void shell_process_keyboard_input(Command_Line_Shell *shell, Keyboard_State *keyboard);
