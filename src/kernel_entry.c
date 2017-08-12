@@ -371,8 +371,6 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
     //And initalizes the iopapic and lapic
     sys->lapic_virtual_address = memory_map_physical_mmio(sys->lapic_physical_address, 1);
     sys->ioapic_virtual_address = memory_map_physical_mmio(sys->ioapic_physical_address, 1);
-    klog_debug("lapic_virtual_address: 0x%X", sys->lapic_virtual_address);
-    klog_debug("ioapic_virtual_address: 0x%X", sys->ioapic_virtual_address);
     
     static const uint64_t LAPIC_SIVR_REGISTER = 0xF0;
     static const uint32_t LAPIC_SIVR_ENABLE = 1 << 8;
@@ -385,8 +383,6 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
     uint32_t lapic_version_register = lapic_read_register(sys->lapic_virtual_address, LAPIC_VERSION_REGISTER);
     uint32_t lapic_version = lapic_version_register & 0xFF;
     uint32_t lapic_max_lvt_entries = (lapic_version_register >> 16) & 0xFF;
-    klog_debug("lapic_version: %u", lapic_version);
-    klog_debug("lapic_max_lvt_entries: %u", lapic_max_lvt_entries);
 
     static const uint32_t LAPIC_TIMER_IRQ_NUMBER_REGISTER = 0x320;
     static const uint32_t LAPIC_TIMER_INITAL_COUNT_REGISTER = 0x380;
@@ -400,7 +396,7 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
     static const uint32_t LAPIC_TIMER_DIVIDE_16 = 0b11;
     static const uint32_t LAPIC_TIMER_PERODIC_MODE = 0x20000; 
 
-    klog_debug("initalzing lapic timer");
+    klog_info("initalzing lapic timer");
 
     { //NOTE(Torin) Configure the PIT Timer 
       static const uint8_t PIT_CHANNEL0_DATA_PORT = 0x40;
@@ -445,7 +441,7 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
       return;
     }
 
-    klog_debug("ticks_per_millisecond: %u", ticks_per_millisecond);
+    //klog_debug("ticks_per_millisecond: %u", ticks_per_millisecond);
     //NOTE(Torin 2016-10-15) Disable PIT timer interrupt for PIC
     write_port_uint8(PIC1_DATA_PORT, 0b11111111); 
 

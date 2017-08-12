@@ -40,7 +40,7 @@ void shell_command_cat(Shell_Command_Parameter_Info *parameter_info) {
   Shell_Command_Parameter *path_param = &parameter_info->parameters[0];
   const char *path = path_param->text;
   size_t path_length = path_param->length;
-  uint8_t buffer[4096];
+  uint8_t *temporary_buffer = cpu_get_temporary_memory();
   if (path_param->text[0] != '/') {
 
   }
@@ -54,10 +54,10 @@ void shell_command_cat(Shell_Command_Parameter_Info *parameter_info) {
   //TODO(Torin: 2017-08-06) Really need temporary memory!
   //TODO(Torin: 2017-08-06) Switch to virtual memory file reads!
   size_t file_size = min(handle.file_size, 4096);
-  if (vfs_node_read_file(&handle, 0, handle.file_size, buffer)) {
+  if (vfs_node_read_file(&handle, 0, handle.file_size, temporary_buffer)) {
     klog_error("cat: failed file read");
     return;
   }
   
-  klog_debug("%s", buffer);
+  klog_debug("%s", temporary_buffer);
 }

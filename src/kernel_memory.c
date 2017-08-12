@@ -214,7 +214,7 @@ void memory_manager_initialize() {
   kassert((offset_into_range % 4096) == 0);
   memory->next_free_physical_page_index_in_current_range = offset_into_range / 4096;
   memory->current_usable_range = range;
-  klog_debug("[Memory] Kernel Memory Manager initalized");
+  klog_info("[Memory] Kernel Memory Manager initalized");
 }
 
 uintptr_t memory_map_physical_mmio(uintptr_t physical_address, uint64_t page_count) {
@@ -235,35 +235,3 @@ uintptr_t memory_map_physical_mmio(uintptr_t physical_address, uint64_t page_cou
   memory->current_kernel_persistent_virtual_memory_address += page_count * 4096;
   return result;
 }
-
-
-#if 0
-
-//TODO(Torin 2016-10-20) This is an astonishingly terrible idea!  It *total wont* come back to bite us in the ass later.
-//GET RID OF THIS AND MAKE A PROPER TEMPORARY PAGE ALLOCATION MECHANISIM!
-void kmem_map_physical_to_virtual_unaccounted(Kernel_Memory_State *memstate, uintptr_t physical_address, uintptr_t virtual_address, uint64_t flags){
-  kassert((virtual_address & 0x1FFFFF) == 0);
-  kassert((physical_address & 0x1FFFFF) == 0);
-  if(kmem_usable_range_contains(memstate, physical_address, 0x200000)){
-    klog_error("[KMEM] Attempted to map physical address contained within the usable range");
-    return;
-  }
-
-  uintptr_t p4_index = (virtual_address >> 39) & 0x1FF;
-  uintptr_t p3_index = (virtual_address >> 30) & 0x1FF;
-  uintptr_t p2_index = (virtual_address >> 21) & 0x1FF;
-  Page_Table *p4_table = (Page_Table *)&g_p4_table;
-  Page_Table *p3_table = (Page_Table *)(p4_table->entries[p4_index] & ~0xFFF); 
-  Page_Table *p2_table = (Page_Table *)(p3_table->entries[p3_index] & ~0xFFF);
-  g_p2_table.entries[p2_index] = physical_address | PAGE_PRESENT_BIT | PAGE_HUGE_BIT | PAGE_WRITEABLE_BIT | flags;
-}
-
-uintptr_t kmem_map_unaligned_physical_to_aligned_virtual_unaccounted(Kernel_Memory_State *memstate, uintptr_t requested_physical_address, uintptr_t virtual_address, uint64_t flags){
-  uint64_t physical_address_to_map = requested_physical_address;
-	uint64_t displacement_from_page_boundray = requested_physical_address & 0x1FFFFF;
-  physical_address_to_map -= displacement_from_page_boundray;
-  kmem_map_physical_to_virtual_unaccounted(memstate, physical_address_to_map, virtual_address, flags);
-  return displacement_from_page_boundray;
-}
-
-#endif

@@ -416,8 +416,6 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device) {
   uint8_t *temporary_buffer = cpu_get_temporary_memory();
   uintptr_t temporary_buffer_physical_address = memory_get_physical_address((uintptr_t)temporary_buffer);
   USB_Device_Descriptor *device_descriptor = (USB_Device_Descriptor *)temporary_buffer;
-  klog_debug("tempoooo 0x%X", temporary_buffer);
-  klog_debug("temppppp 0x%X", temporary_buffer_physical_address);
   if (ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_DEVICE, 0, 0, 64, (void*)temporary_buffer_physical_address) == 0){
     klog_error("failed to get device descriptor");
     return 0;
@@ -581,7 +579,6 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device) {
   }
 
   SCSI_Inquiry_Data *inquiry_data = (SCSI_Inquiry_Data *)read_buffer;
-  klog_debug("version: %u", (uint32_t)inquiry_data->version);
 
   SCSI_Test_Unit_Ready_Command test_unit_ready_command = {
     .cbw.signature = USB_CBW_SIGNATURE,
@@ -629,7 +626,8 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device) {
     storage_device_initialize(storage_device);
   }
   
-  klog_info("[USB] initalized usb device");
+  klog_info("[USB] Initialized USB device %X:%X %s %s", device->vendor_id, device->product_id,
+    device->vendor_string, device->product_string);
   return 1;
 }
 
@@ -789,7 +787,6 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
     hc->op_regs->config_flag = 1; //NOTE(Torin) Route all ports to the EHCI controler(Rather than compainion controllers)
     hc->op_regs->usb_command = USBCMD_INTERRUPT_THRESHOLD_CONTROL_8 | USBCMD_ASYNCH_SCHEDULE_ENABLE | USBCMD_RUN_STOP; 
     wait_for_condition((hc->op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED) == 0, 2) { return 0; }
-    klog_debug("ehci controller was started");
   }
 
   //NOTE(Torin) Must wait 100ms for port power to stabalize
@@ -832,9 +829,9 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
 
           bool is_port_enabled = ehci_reset_port(port_reg); 
           if(is_port_enabled == false){
-            klog_debug("Port %lu failed to enable", port_index);
+            klog_error("Port %lu failed to enable", port_index);
           } else {
-            klog_debug("Port %lu enabled sucuessfuly", port_index);
+            //klog_debug("Port %lu enabled sucuessfuly", port_index);
             //TODO(Torin 2016-10-15) Put this inside of the EHCI controler struct!
             USB_Device *device = &globals.usb_devices[globals.usb_device_count];
             globals.usb_device_count++;
