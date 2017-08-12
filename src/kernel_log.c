@@ -9,7 +9,7 @@ void klog_disable_category(Circular_Log *log, Log_Category category) {
 
 Log_Entry *klog_get_next_entry(Circular_Log *log) {
   asm volatile("cli");
-  spinlock_aquire(&log->spinlock);
+  spinlock_acquire(&log->spinlock);
   size_t entry_index = log->entries_back % CIRCULAR_LOG_ENTRY_COUNT; 
   if (log->entries_back - log->entries_front > CIRCULAR_LOG_ENTRY_COUNT) {
     log->entries_front += 1;
@@ -35,7 +35,7 @@ void klog_write_fmt(Circular_Log *log, Log_Category category, Log_Level level, c
   va_end(args);
 
   asm volatile("cli");
-  spinlock_aquire(&log->spinlock);
+  spinlock_acquire(&log->spinlock);
   write_serial(entry->message, entry->length);
   write_serial("\n", 1);
   spinlock_release(&log->spinlock);

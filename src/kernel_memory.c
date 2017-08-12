@@ -8,205 +8,236 @@ extern Page_Table g_p4_table;
 extern Page_Table g_p3_table;
 extern Page_Table g_p2_table;
 
-
-//TODO(Torin) Make this a global function pointer
-//And create SSE and AVX variants
 static inline void kmem_clear_page(void *page) {
   memory_set(page, 0x00, 4096);
 }
 
-static inline void kmem_set_page_state(Kernel_Memory_State *state, uint64_t index, bool used){
-  uint64_t bitmap_index = index / 64; 
-  uint64_t bit_index = index % 64;
-  state->page_usage_bitmap[bitmap_index] |= used << bit_index;
+Page_Table *memory_get_page_table_address(Page_Table *table, uint64_t index) {
+  uintptr_t next_table_address = ((uintptr_t)table << 9) | (index << 12);
+  Page_Table *result = (Page_Table *)next_table_address;
+  return result;
 }
 
-static inline void kmem_add_usable_range(uintptr_t address, uint64_t size, Kernel_Memory_State *mem){
-  if(mem->usable_range_count + 1 > ARRAY_COUNT(mem->usable_range)){
-    uintptr_t range_end = address + size;
-    klog_warning("maximum memory range entries was execeded.  Memory_Range 0x%X - 0x%X is unusable", address, range_end);
-    return;
-  }
 
-  mem->usable_range[mem->usable_range_count].address = address;
-  mem->usable_range[mem->usable_range_count].size = size;
-  mem->usable_range_count++;
-  mem->total_usable_memory += size;
+uintptr_t memory_get_physical_address(uintptr_t virtual_address) {
+  uintptr_t p4_index = memory_p4_index_of_virtual_address(virtual_address);
+  uintptr_t p3_index = memory_p3_index_of_virtual_address(virtual_address);
+  uintptr_t p2_index = memory_p2_index_of_virtual_address(virtual_address);
+  uintptr_t p1_index = memory_p1_index_of_virtual_address(virtual_address);
+  Page_Table *p4_table = (Page_Table *)0xFFFFFFFFFFFFF000;
+  Page_Table *p3_table = memory_get_page_table_address(p4_table, p4_index);
+  Page_Table *p2_table = memory_get_page_table_address(p3_table, p3_index);
+  Page_Table *p1_table = memory_get_page_table_address(p2_table, p2_index);
+  uintptr_t physical_address = p1_table->entries[p1_index] & ~0xFFF;
+  physical_address += virtual_address & 0xFFF;
+  return physical_address;
 }
 
-static inline bool kmem_usble_range_contains(Kernel_Memory_State *memstate, uintptr_t address, size_t size){
-  uintptr_t target_end = address + size;
-  for(size_t i = 0; i < memstate->usable_range_count; i++){
-    Memory_Range *range = &memstate->usable_range[i];
-    uintptr_t range_end = range->address + range->size;
-    if((address >= range->address) && (target_end <= range_end)) return true;
-  }
-  return false;
+
+uintptr_t memory_p4_index_of_virtual_address(uintptr_t virtual_address) {
+  uintptr_t p4_index = (virtual_address >> 39) & 0x1FF;
+  return p4_index;
 }
 
-bool kmem_allocate_physical_pages(Kernel_Memory_State *memstate, uint64_t page_count, uintptr_t *out) {
-  uint64_t current_page_count = 0;
-  for(size_t value_index = 0; value_index < memstate->page_usage_bitmap_size / 8; value_index++){
-    if(memstate->page_usage_bitmap[value_index] == 0xFFFFFFFFFFFFFFFF) continue;
-    for(size_t bit_index = 0; bit_index < 64; bit_index++){
-      if((memstate->page_usage_bitmap[value_index] & (1 << bit_index)) == 0) {
-        memstate->page_usage_bitmap[value_index] |= (1 << bit_index);
-        out[current_page_count] = memstate->kernel_memory_start_virtual_address + (((value_index * 64) + bit_index) * 4096);
-        current_page_count++;
-        if(current_page_count >= page_count) return true;
-      }
-    }
-  }
-
-  //NOTE(Torin 2016-10-20) We failed to allocated enough physical pages
-  //We re-iterrate and unmark the pages we just flaged as used and defer to 
-  //disk swaping mechanisim inorder to meet the memory requirements
-  klog_error("OUT OF MEMORY");
-  for(size_t i = 0; i < current_page_count; i++){
-    uint64_t page_index = (*out - memstate->kernel_memory_start_virtual_address) / 4096;
-    uint64_t value_index = page_index / 64;
-    uint64_t bit_index = page_index % 64; 
-    memstate->page_usage_bitmap[value_index] &= (~(1 << bit_index));
-  }
-
-  //TODO(Torin 2016-10-20) Recover from running out of physical frames
-  kernel_panic();
-  return false;
+uintptr_t memory_p3_index_of_virtual_address(uintptr_t virtual_address) {
+  uintptr_t p3_index = (virtual_address >> 30) & 0x1FF;
+  return p3_index;
 }
 
-uintptr_t kmem_allocate_persistant_kernel_memory(Kernel_Memory_State *memstate, uint64_t page_count){
-  kassert(page_count < 512); //TODO(Torin 2016-10-20) This is garbage how should this be handled!
-  //Mabye the procedure to obtain physical pages should only search a single page?
-  //Or just define that the maximum number of pages that can be searched is 512?
-  //Or another value that works well with SIMD optimization?
-  uintptr_t physical_page_addressess[512] = {};
-  kmem_allocate_physical_pages(memstate, page_count , physical_page_addressess);
-  if((memstate->kernel_memory_used_page_count % 512 + page_count) > 512){
-    //TODO(Torin 2016-10-20) We need to allocate another Page_Table so we can map another 2MB
-    klog_error("reached unimplemented feature");
-    kernel_panic();
-  }
-
-  uint64_t p2_table_offset = memstate->kernel_memory_start_virtual_address / 0x200000;
-  uint64_t p2_table_index = (memstate->kernel_memory_used_page_count / 512) + p2_table_offset;
-  uint64_t p1_table_index = memstate->kernel_memory_used_page_count % 512;
-  Page_Table *pt = (Page_Table *)((uintptr_t)g_p2_table.entries[p2_table_index] & ~0xFFF);
-  for(size_t page_index = 0; page_index < page_count; page_index++){
-    pt->entries[p1_table_index + page_index] = physical_page_addressess[page_index] | PAGE_PRESENT_BIT | PAGE_WRITEABLE_BIT;
-  }
-
-  uintptr_t virtual_address = memstate->kernel_memory_start_virtual_address + (memstate->kernel_memory_used_page_count*4096);
-  memstate->kernel_memory_used_page_count += page_count;
-  klog_debug("[KMEM] Allocated %lu pages of persistant memory mapped to 0x%X", page_count, virtual_address);
-  return virtual_address;
+uintptr_t memory_p2_index_of_virtual_address(uintptr_t virtual_address) {
+  uintptr_t p2_index = (virtual_address >> 21) & 0x1FF;
+  return p2_index;
 }
 
-uintptr_t kmem_push_temporary_kernel_memory(uintptr_t physical_address){
-  Kernel_Memory_State *memstate = &globals.memory_state;
-  uint64_t p2_table_offset = memstate->kernel_memory_start_virtual_address / 0x200000;
-  uint64_t p2_table_index = (memstate->kernel_memory_used_page_count / 512) + p2_table_offset;
-  uint64_t p1_table_index = memstate->kernel_memory_used_page_count % 512;
-  if (p1_table_index + 1 > 512) {
-    klog_debug("must allocated adittional pages");
-    kernel_panic();
-  }
-
-  Page_Table *pt = (Page_Table *)((uintptr_t)g_p2_table.entries[p2_table_index] & ~0xFFF);
-  pt->entries[p1_table_index] = physical_address | PAGE_PRESENT_BIT | PAGE_WRITEABLE_BIT;
-  uintptr_t virtual_address = memstate->kernel_memory_start_virtual_address + (memstate->kernel_memory_used_page_count*4096); 
-  memstate->kernel_memory_used_page_count += 1;
-  return virtual_address;
+uintptr_t memory_p1_index_of_virtual_address(uintptr_t virtual_address) {
+  uintptr_t p1_index = (virtual_address >> 12) & 0x1FF;
+  return p1_index;
 }
 
-void kmem_pop_temporary_kernel_memory(){
-  Kernel_Memory_State *memstate = &globals.memory_state;
-  memstate->kernel_memory_used_page_count--;
-}
-
-static inline void kmem_flush_tlb() {
+void memory_tlb_flush() {
   asm volatile(".intel_syntax noprefix");
   asm volatile("mov rax, cr3");
   asm volatile("mov cr3, rax");
   asm volatile(".att_syntax prefix");
 }
 
-void kmem_initalize_memory_state(Kernel_Memory_State *memstate) {
+
+Page_Table *memory_get_or_create_page_table(Page_Table *table, uint64_t index) {
+  if ((table->entries[index] & PAGE_PRESENT_BIT) == 0) {
+    uintptr_t physical_page = memory_physical_4KB_page_acquire();
+    table->entries[index] = physical_page;
+    table->entries[index] |= PAGE_PRESENT_BIT;
+    table->entries[index] |= PAGE_WRITEABLE_BIT;
+  }
+
+  uintptr_t next_table_address = ((uintptr_t)table << 9) | (index << 12);
+  Page_Table *result = (Page_Table *)next_table_address;
+  return result;
+}
+
+bool memory_usable_range_find_containing_physical_address(uintptr_t physical_address, uint64_t *range_index) {
+  Kernel_Memory_State *memory = &globals.memory_state;
+  for (size_t i = 0; i < memory->usable_range_count; i++) {
+    Memory_Range *range = &memory->usable_ranges[i];
+    if ((physical_address >= range->physical_address) && (physical_address <= range->physical_address + range->size_in_bytes)) {
+      if (range_index != NULL) *range_index = i;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool memory_usable_range_contains(uintptr_t address, size_t size) {
+  Kernel_Memory_State *memory = &globals.memory_state;
+  uintptr_t target_end = address + size;
+  for (size_t i = 0; i < memory->usable_range_count; i++) {
+    Memory_Range *range = &memory->usable_ranges[i];
+    uintptr_t range_end = range->physical_address + range->size_in_bytes;
+    if ((address >= range->physical_address) && (target_end <= range_end)) return true;
+  }
+  return false;
+}
+
+void memory_usable_range_add(uintptr_t address, uint64_t size) {
+  Kernel_Memory_State *memory = &globals.memory_state;
+  if (memory->usable_range_count + 1 > ARRAY_COUNT(memory->usable_ranges)) {
+    uintptr_t range_end = address + size;
+    klog_warning("maximum memory range entries was execeded.  Memory_Range 0x%X - 0x%X is unusable", address, range_end);
+    return;
+  }
+
+  memory->usable_ranges[memory->usable_range_count].physical_address = address;
+  memory->usable_ranges[memory->usable_range_count].size_in_bytes = size;
+  memory->usable_ranges[memory->usable_range_count].physical_4KB_page_count = size / 4096;
+  memory->usable_range_count++;
+  memory->total_usable_memory += size;
+}
+
+//NOTE(Torin 2017-08-11) Used to safely allocate a single 4KB physical page
+//without any consideration for multipule physical page address consistancy
+uintptr_t memory_physical_4KB_page_acquire() {
+  Kernel_Memory_State *memory = &globals.memory_state;
+  spinlock_acquire(&memory->physical_page_allocator_lock);
+  kassert(memory->current_usable_range != NULL);
+  //NOTE(Torin 2017-08-11) If there are no more free pages in current_usable_range
+  //we seek through the usable_range array and find the next range.  If the
+  //system is out of ranges there is no more physical memory to allocate.
+  if (memory->next_free_physical_page_index_in_current_range + 1 > 
+      memory->current_usable_range->physical_4KB_page_count) {
+    size_t usable_range_index = memory->current_usable_range_index + 1;
+    Memory_Range *next_usable_range = memory->current_usable_range;
+    //NOTE(Torin 2017-08-11) This is wrriten strangely so non-usuable ranges can be added.
+    while (usable_range_index < memory->usable_range_count) {
+      Memory_Range *range = &memory->usable_ranges[usable_range_index];
+      next_usable_range = range;
+      memory->current_usable_range_index = usable_range_index;
+      memory->next_free_physical_page_index_in_current_range = 0;
+      break;
+    }
+
+    if (next_usable_range == memory->current_usable_range) {
+      spinlock_release(&memory->physical_page_allocator_lock);
+      klog_error("OUT OF MEMORY");
+      kernel_panic();
+    }
+  }
+
+  uintptr_t result = memory->current_usable_range->physical_address + 
+    (memory->next_free_physical_page_index_in_current_range * 4096);
+  memory->next_free_physical_page_index_in_current_range += 1;
+  spinlock_release(&memory->physical_page_allocator_lock);
+  klog_debug("[Memory] Allocated physical page: 0x%X", result);
+  return result;
+}
+
+void memory_physical_4KB_page_release(uintptr_t physical_page) {
+
+}
+
+void memory_map_physical_to_virtual(uintptr_t physical_page, uintptr_t virtual_address) {
+  uint64_t p4_index = memory_p4_index_of_virtual_address(virtual_address);
+  uint64_t p3_index = memory_p3_index_of_virtual_address(virtual_address);
+  uint64_t p2_index = memory_p2_index_of_virtual_address(virtual_address);
+  uint64_t p1_index = memory_p1_index_of_virtual_address(virtual_address);
+  Page_Table *p4_table = (Page_Table *)0xFFFFFFFFFFFFF000;
+  Page_Table *p3_table = memory_get_or_create_page_table(p4_table, p4_index);
+  Page_Table *p2_table = memory_get_or_create_page_table(p3_table, p3_index);
+  Page_Table *p1_table = memory_get_or_create_page_table(p2_table, p2_index);
+  if (p1_table->entries[p1_index] & PAGE_PRESENT_BIT) {
+    klog_error("cannot map physical_page: 0x%X to virtual_address: 0x%X", physical_page, virtual_address);
+    kernel_panic();
+    return;
+  }
+
+  p1_table->entries[p1_index] = physical_page;
+  p1_table->entries[p1_index] |= PAGE_PRESENT_BIT;
+  p1_table->entries[p1_index] |= PAGE_WRITEABLE_BIT;
+  klog_debug("[Memory] Mapped physical page: 0x%X to virtual address: 0x%X", physical_page, virtual_address);
+}
+
+uint8_t *memory_allocate_persistent_virtual_pages(uint64_t page_count) {
+  Kernel_Memory_State *memory = &globals.memory_state;
+  uint8_t *result = (uint8_t *)memory->current_kernel_persistent_virtual_memory_address;
+  for (size_t i = 0; i < page_count; i++) {
+    uintptr_t physical_page = memory_physical_4KB_page_acquire();
+    memory_map_physical_to_virtual(physical_page, memory->current_kernel_persistent_virtual_memory_address + (i * 4096));
+  }
+
+  memory->current_kernel_persistent_virtual_memory_address += page_count * 4096;
+  return result;
+}
+
+
+void memory_manager_initialize() {
+  Kernel_Memory_State *memory = &globals.memory_state;
+  kassert(memory->usable_range_count > 0);
+  //NOTE(Torin 2017-08-11) Make sure usable range is sorted.
+
+  //NOTE(Torin 2017-08-11) Mark recursive map present
+  g_p4_table.entries[511] |= PAGE_PRESENT_BIT | PAGE_WRITEABLE_BIT;
+
   extern uint32_t _KERNEL_END;
   globals.system_info.kernel_end = 0x100000 + _KERNEL_END;
-  uintptr_t memory_begin = (globals.system_info.kernel_end + 0x200000) & ~0x1FFFFF;
-  memstate->allocator_start = memory_begin; 
-  //NOTE(Torin) The kernel is currently identity mapped!
-  memstate->kernel_memory_start_virtual_address = memstate->allocator_start;
-  //NOTE(Torin) This is our simple hacky way of memory managment until
-  //I come up with somthing better.
-  //Get Page aligned memory size
-  uint64_t aligned_memory_size = (memstate->total_usable_memory + 0xFFF) & ~0xFFF;
-  uint64_t mappable_page_count = aligned_memory_size / 0x1000;
-  memstate->page_usage_bitmap_size = ((mappable_page_count + 0x3F) & ~0x3F) / 0x40;
-  memstate->page_usage_bitmap_page_count = ((mappable_page_count + 0x7FFF) & ~0x7FFF) / 0x8000;
-  //NOTE(Torin) For now the kernel begins setting up the memory managment
-  //data structures at a 2MB aligned address after the end of the kernel
-  //These structures are currently identity mapped which will probably be 
-  //problematic in the future
-  g_p2_table.entries[1] = (uintptr_t)memstate->allocator_start | PAGE_PRESENT_BIT | PAGE_WRITEABLE_BIT | PAGE_HUGE_BIT;
-  kmem_flush_tlb();
-  Page_Table *pt = (Page_Table *)memstate->allocator_start;
-  pt->entries[0] = (uintptr_t)pt | PAGE_PRESENT_BIT | PAGE_WRITEABLE_BIT;
-  memstate->page_usage_bitmap = (uint64_t *)(memstate->allocator_start + 4096);
-  for(size_t i = 0; i < memstate->page_usage_bitmap_page_count; i++)
-    kmem_clear_page((void *)((uintptr_t)memstate->page_usage_bitmap + (i * 4096)));
-  for(size_t i = 0; i < memstate->page_usage_bitmap_page_count; i++)
-    pt->entries[i+1] = ((uintptr_t)memstate->page_usage_bitmap + (i * 4096)) | PAGE_PRESENT_BIT | PAGE_WRITEABLE_BIT;
-  kmem_set_page_state(memstate, 0, 1);
-  for(size_t i = 0; i < memstate->page_usage_bitmap_page_count; i++) 
-    kmem_set_page_state(memstate, i+1, 1);
-  g_p2_table.entries[1] = (uintptr_t)pt | PAGE_PRESENT_BIT | PAGE_WRITEABLE_BIT; 
-  memstate->kernel_memory_used_page_count = memstate->page_usage_bitmap_page_count + 1;
-  memstate->kernel_memory_allocated_page_table_count = 1;
-  kmem_flush_tlb();
+  globals.system_info.kernel_end = memory_align(globals.system_info.kernel_end, 0x200000);
+
+  uint64_t memory_range_index = 0;
+  if (memory_usable_range_find_containing_physical_address(globals.system_info.kernel_end, &memory_range_index) == false) {
+    klog_error("WTF MEMORY RANGES DONT CONTAIN KERNEL END?");
+    return;
+  }
+
+  memory->current_kernel_persistent_virtual_memory_address = globals.system_info.kernel_end;
+
+  Memory_Range *range = &memory->usable_ranges[memory_range_index];
+  uint64_t offset_into_range = globals.system_info.kernel_end - range->physical_address;
+  memory->current_usable_range_index = memory_range_index;
+  kassert((offset_into_range % 4096) == 0);
+  memory->next_free_physical_page_index_in_current_range = offset_into_range / 4096;
+  memory->current_usable_range = range;
   klog_debug("[Memory] Kernel Memory Manager initalized");
 }
 
-uintptr_t kmem_map_physical_mmio(Kernel_Memory_State *memstate, uintptr_t physical_address, uint64_t page_count){
-  kassert(page_count <= 512);
+uintptr_t memory_map_physical_mmio(uintptr_t physical_address, uint64_t page_count) {
+  Kernel_Memory_State *memory = &globals.memory_state;
   kassert((physical_address & 0xFFF) == 0);
-  if((memstate->kernel_memory_used_page_count + page_count) / 512 > memstate->kernel_memory_allocated_page_table_count){
-    //TODO(Torin 2016-10-20) Allocate a new page table to continue allocating kernel virtual memory addresses
-    //NOTE(Torin 2016-10-20) UNIMPLEMENTED FEATURE WILL CURRENTLY BREAK TASKING SYSTEM WHICH EXPECTS EXECUTABLES AT 0x400000
-    kassert(false);
-    kernel_panic();
-  }
 
-  if(kmem_usable_range_contains(memstate, physical_address, page_count*4096)){
+  //TODO(Torin 2017-08-11) This does 
+  if (memory_usable_range_contains(physical_address, page_count*4096)) {
     klog_error("cannot map physical address for MMIO because it is contained within the usable range of memory");
     kernel_panic();
   }
 
-  Page_Table *pt = (Page_Table *)memstate->kernel_memory_start_virtual_address; 
-  for(size_t i = 0; i < page_count; i++){
-    pt->entries[memstate->kernel_memory_used_page_count + i] = (physical_address + (4096*i)) | PAGE_PRESENT_BIT | PAGE_WRITEABLE_BIT;
+  uintptr_t result = memory->current_kernel_persistent_virtual_memory_address;
+  for (size_t i = 0; i < page_count; i++) {
+    memory_map_physical_to_virtual(physical_address + (i*4096), result + (i*4096));
   }
 
-  uintptr_t mapped_virtual_address = memstate->kernel_memory_start_virtual_address;
-  mapped_virtual_address += (memstate->kernel_memory_used_page_count * 4096);
-  memstate->kernel_memory_used_page_count += page_count;
-  klog_debug("[KMEM] Mapped Physical: 0x%X to Virtual: 0x%X", physical_address, mapped_virtual_address);
-  return mapped_virtual_address;
+  memory->current_kernel_persistent_virtual_memory_address += page_count * 4096;
+  return result;
 }
 
-uintptr_t kmem_get_physical_address(uintptr_t virtual_address){
-  uintptr_t p4_index = (virtual_address >> 39) & 0x1FF;
-  uintptr_t p3_index = (virtual_address >> 30) & 0x1FF;
-  uintptr_t p2_index = (virtual_address >> 21) & 0x1FF;
-  uintptr_t p1_index = (virtual_address >> 12) & 0x1FF;
-  Page_Table *p4_table = (Page_Table *)&g_p4_table; //TODO(T) XXX FIXME BAD
-  Page_Table *p3_table = (Page_Table *)(p4_table->entries[p4_index] & ~0xFFF);
-  Page_Table *p2_table = (Page_Table *)(p3_table->entries[p3_index] & ~0xFFF);
-  Page_Table *p1_table = (Page_Table *)(p2_table->entries[p2_index] & ~0xFFF);
-  uintptr_t physical_address = p1_table->entries[p1_index] & ~0xFFF;
-  physical_address += virtual_address & 0xFFF;
-  return physical_address;
-}
+
+#if 0
 
 //TODO(Torin 2016-10-20) This is an astonishingly terrible idea!  It *total wont* come back to bite us in the ass later.
 //GET RID OF THIS AND MAKE A PROPER TEMPORARY PAGE ALLOCATION MECHANISIM!
@@ -234,3 +265,5 @@ uintptr_t kmem_map_unaligned_physical_to_aligned_virtual_unaccounted(Kernel_Memo
   kmem_map_physical_to_virtual_unaccounted(memstate, physical_address_to_map, virtual_address, flags);
   return displacement_from_page_boundray;
 }
+
+#endif

@@ -413,15 +413,22 @@ Error_Code ehci_read_to_physical_address(EHCI_Controller *hc, USB_Mass_Storage_D
 
 
 int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device) {
-  USB_Device_Descriptor device_descriptor = {};
-  if (ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_DEVICE, 0, 0, 64, &device_descriptor) == 0){
+  uint8_t *temporary_buffer = cpu_get_temporary_memory();
+  uintptr_t temporary_buffer_physical_address = memory_get_physical_address((uintptr_t)temporary_buffer);
+  USB_Device_Descriptor *device_descriptor = (USB_Device_Descriptor *)temporary_buffer;
+  klog_debug("tempoooo 0x%X", temporary_buffer);
+  klog_debug("temppppp 0x%X", temporary_buffer_physical_address);
+  if (ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_DEVICE, 0, 0, 64, (void*)temporary_buffer_physical_address) == 0){
     klog_error("failed to get device descriptor");
     return 0;
   }
   
-  device->vendor_id = device_descriptor.vendor_id;
-  device->product_id = device_descriptor.product_id;
-  device->device_class = device_descriptor.device_class;
+  device->vendor_id = device_descriptor->vendor_id;
+  device->product_id = device_descriptor->product_id;
+  device->device_class = device_descriptor->device_class;
+  uint32_t vendor_string = device_descriptor->vendor_string;
+  uint32_t product_string = device_descriptor->product_string;
+  uint32_t config_count = device_descriptor->config_count;
 
   { //Get Vendor and product strings
     uint8_t string_descriptor_buffer[256] = {};
@@ -447,13 +454,13 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device) {
       return 0;
     }
 
-    ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_STRING, device_descriptor.vendor_string, USB_LANGID_ENGLISH_USA, 64, string_descriptor_buffer);
+    ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_STRING, vendor_string, USB_LANGID_ENGLISH_USA, 64, string_descriptor_buffer);
     if(string_descriptor->length > 0){
       utf16_to_ascii(device->vendor_string, string_descriptor->string, string_descriptor->length - 2);
       device->vendor_string_length = (string_descriptor->length - 2) / 2;
     }
         
-    ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_STRING, device_descriptor.product_string, USB_LANGID_ENGLISH_USA, 64, string_descriptor_buffer);
+    ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_STRING, product_string, USB_LANGID_ENGLISH_USA, 64, string_descriptor_buffer);
     if(string_descriptor->length > 0){
       utf16_to_ascii(device->product_string, string_descriptor->string, string_descriptor->length - 2);
       device->product_string_length = (string_descriptor->length - 2) / 2;
@@ -464,7 +471,7 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device) {
 
   uint8_t configuration_value = 0;
   uint8_t configuration_buffer[256] = {};
-  for(size_t config_index = 0; config_index < device_descriptor.config_count; config_index++){
+  for(size_t config_index = 0; config_index < config_count; config_index++){
     USB_Configuration_Descriptor *config = (USB_Configuration_Descriptor *)configuration_buffer;
     ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_CONFIG, config_index, 0,  64, configuration_buffer);
     //TODO(Torin) Have an entire page mapped for this buffer
@@ -664,18 +671,18 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
 
   uintptr_t physical_page_to_map = ehci_physical_address;
   size_t physical_page_offset = 0;
-  if(physical_page_to_map & 0xFFF){
+  if (physical_page_to_map & 0xFFF) {
     physical_page_to_map &= ~0xFFFLL; 
     physical_page_offset = ehci_physical_address - physical_page_to_map;
   }
 
-  uintptr_t ehci_registers_virtual_address = kmem_map_physical_mmio(&globals.memory_state, physical_page_to_map, 1);
-  EHCI_Controller *hc = (EHCI_Controller *)kmem_allocate_persistant_kernel_memory(&globals.memory_state, 2);
+  uintptr_t ehci_registers_virtual_address = memory_map_physical_mmio(physical_page_to_map, 1);
+  EHCI_Controller *hc = (EHCI_Controller *)memory_allocate_persistent_virtual_pages(2);
   hc->cap_regs = (EHCI_Capability_Registers *)(ehci_registers_virtual_address + physical_page_offset);
   hc->op_regs = (EHCI_Operational_Registers *)(ehci_registers_virtual_address + physical_page_offset + hc->cap_regs->capability_length);
   hc->pci_device = *pci_device;
-  hc->first_page_physical_address = kmem_get_physical_address((uintptr_t)hc + 0);
-  hc->second_page_physical_address = kmem_get_physical_address((uintptr_t)hc + 4096); 
+  hc->first_page_physical_address = memory_get_physical_address((uintptr_t)hc + 0);
+  hc->second_page_physical_address = memory_get_physical_address((uintptr_t)hc + 4096); 
   //TODO(Torin 2016-10-22) Store the EHCI Controller pointer somewhere
   //Upfront because it will leek here if host control initalization
   //fails for any reason.  I say don't even bother having a mechanisim

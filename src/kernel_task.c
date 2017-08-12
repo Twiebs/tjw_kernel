@@ -107,14 +107,15 @@ uint64_t ktask_create_process(Executable_Load_Info *load_info, Task_Info *task_i
 
   process->program_start_virtual_address = load_info->entry_address;
 
-  uintptr_t process_page_table_physical = 0;
-  kmem_allocate_physical_pages(&globals.memory_state, 1, &process_page_table_physical);
+#if 0
+  uintptr_t process_page_table_physical = memory_physical_4KB_page_acquire();
   Page_Table *pt = (Page_Table *)kmem_push_temporary_kernel_memory(process_page_table_physical);
   pt->entries[2] = load_info->code_location | PAGE_PRESENT_BIT | PAGE_USER_ACCESS_BIT; 
   kmem_pop_temporary_kernel_memory();
 
   process->p2_table_physical = process_page_table_physical;
   process->is_valid = true;
+#endif
   return result_pid;
 }
 
@@ -161,7 +162,7 @@ uint64_t ktask_create_thread(uint64_t pid, uintptr_t rip, Task_Info *task_info){
 //to end up calling it in the future
 void ktask_context_switch(uint64_t thread_id, Task_Info *task_info){
   extern void asm_enter_usermode(uintptr_t rip, uintptr_t rsp);
-  uint32_t cpu_id = get_cpu_id();
+  uint32_t cpu_id = cpu_get_id();
   Thread_Context *ctx = &task_info->threads[thread_id];
   //TODO(Torin 2016-09-01) This should be the point of no return and interrupts should be
   //stoped here so that there is no shannaigans before we enter usermode propper

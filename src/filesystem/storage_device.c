@@ -47,8 +47,8 @@ Error_Code storage_device_read(Storage_Device *storage_device, uint64_t block_nu
       uint64_t blocks_per_page = 4096 / storage_device->block_size;
       uint64_t pages_to_read = block_count / blocks_per_page;
       uint64_t remainder_blocks_to_read = block_count % blocks_per_page;
-      uint8_t *temporary_memory = cpu_get_temporary_page();
-      uintptr_t physical_address = kmem_get_physical_address((uintptr_t)temporary_memory);
+      uint8_t *temporary_memory = cpu_get_temporary_memory();
+      uintptr_t physical_address = memory_get_physical_address((uintptr_t)temporary_memory);
       uint64_t current_block_number = block_number;
       uint8_t *write_ptr = buffer;
 

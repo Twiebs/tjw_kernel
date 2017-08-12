@@ -94,7 +94,6 @@ void tss_ldr(const uint16_t selector_index) {
   //TODO(Torin: 2016-08-24) AMD64 system manual has the task_register with the above structure
   //It appears that is incorrect and its just a flat selector_index.  Make sure this is the case!
   uint16_t value = selector_index | 0b00; //This is probably what was ment?
-  klog_debug("task_register selector_index: 0x%X", (uint32_t)value);
   //asm volatile ("ltr %0" : : "a"(task_register.packed));
   asm volatile ("ltr %0" : : "a"(value));
   asm volatile("sti");

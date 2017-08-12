@@ -55,31 +55,14 @@ Storage_Device *create_storage_device() {
 #include "kernel_apic.c"
 
 
-uint32_t get_cpu_id(){
-  System_Info *system = &globals.system_info;
-  uint32_t lapic_id = lapic_get_id(globals.system_info.lapic_virtual_address);
-  for (size_t i = 0; i < system->total_cpu_count; i++) {
-    if (system->cpu_lapic_ids[i] == lapic_id) { return i; }
-  }
-
-  klog_error("UNREGISTER LAPIC ID WAS USED TO GFT CPU ID");
-  kernel_panic();
-  return 0;
-}
 
 #include "kernel_acpi.c"
 #include "descriptor_tables.c"
 #include "kernel_exceptions.c"
-#include "kernel_task.c"
 #include "kernel_pci.c"
-#include "kernel_memory.c"
 #include "kernel_debug.c"
 #include "hardware_keyboard.c"
 
-
-
-#include "usb/usb_protocol.c"
-#include "usb/ehci.c"
 
 static IDT_Entry _idt[256];
 static uintptr_t _interrupt_handlers[256];
@@ -218,6 +201,7 @@ void initalize_cpu_info_and_start_secondary_cpus(System_Info *system) {
   extern uintptr_t stack_top; //This is the temp stack created in asm
   CPU_Info *cpu_info = &system->cpu_infos[0];
   cpu_info->kernel_stack_top = stack_top;
+  cpu_info->temporary_memory = memory_allocate_persistent_virtual_pages(2);
   initalize_task_state_segment(cpu_info);
 
 
@@ -334,13 +318,13 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
     while((uintptr_t)mmap_entry < (uintptr_t)mmap_tag + mmap_tag->size){
       static const uint8_t MEMORY_AVAILABLE = 1;
       if(mmap_entry->type == MEMORY_AVAILABLE && mmap_entry->addr >= 0x100000){
-        kmem_add_usable_range(mmap_entry->addr, mmap_entry->len, &globals.memory_state);
+        memory_usable_range_add(mmap_entry->addr, mmap_entry->len);
       }
        mmap_entry = (multiboot_memory_map_t *)((uintptr_t)mmap_entry + mmap_tag->entry_size);
     }
   }
 
-  kmem_initalize_memory_state(&globals.memory_state);
+  memory_manager_initialize();
 
   //NOTE(Torin) Initalize the framebuffer
   if(fb_mbtag == 0) {
@@ -385,8 +369,8 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
   { //NOTE(Torin) Initalize the lapic and configure the lapic timer
     //NOTE(Torin) Arbitrarly maps the lapic and ioapic into the kernels virtual addresss space
     //And initalizes the iopapic and lapic
-    sys->lapic_virtual_address = kmem_map_physical_mmio(&globals.memory_state, sys->lapic_physical_address, 1);
-    sys->ioapic_virtual_address = kmem_map_physical_mmio(&globals.memory_state, sys->ioapic_physical_address, 1);
+    sys->lapic_virtual_address = memory_map_physical_mmio(sys->lapic_physical_address, 1);
+    sys->ioapic_virtual_address = memory_map_physical_mmio(sys->ioapic_physical_address, 1);
     klog_debug("lapic_virtual_address: 0x%X", sys->lapic_virtual_address);
     klog_debug("ioapic_virtual_address: 0x%X", sys->ioapic_virtual_address);
     

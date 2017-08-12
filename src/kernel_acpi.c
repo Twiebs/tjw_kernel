@@ -93,8 +93,10 @@ int parse_root_system_descriptor(const RSDP_Descriptor_1 *rsdp, System_Info *sys
   }
 
   //TODO(Torin) This should be a temporary page!
-  uintptr_t mapped_virtual_address = 0xC600000;
-  uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_unaccounted(&globals.memory_state, rsdp->rsdt_address, mapped_virtual_address, 0);
+  uintptr_t physical_address = rsdp->rsdt_address & ~0xFFF;
+  uintptr_t page_offset = rsdp->rsdt_address - physical_address;
+  //TODO(Torin) Need to figure out how big this should be!
+  uintptr_t mapped_virtual_address = memory_map_physical_mmio(physical_address, 4);
   ACPI_SDT_Header *rsdt = (ACPI_SDT_Header *)(mapped_virtual_address + page_offset);
 
   uint32_t entry_count = (rsdt->length - sizeof(ACPI_SDT_Header)) / 4;

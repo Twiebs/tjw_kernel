@@ -104,6 +104,7 @@ enable_paging:
 	%define EFER_MSR (0xC0000080)
 
 	mov eax, g_p4_table
+  mov [g_p4_table + 511 * 8], eax
 	mov cr3, eax
 
 	mov eax, cr4                 

@@ -1,0 +1,1 @@
+void memory_debug_log_virtual_address_info_4KB(const uintptr_t virtual_address);
