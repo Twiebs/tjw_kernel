@@ -8,14 +8,16 @@ exit
 #define FORCE_REDRAW_ON_LOG_ENTRY 1
 
 #pragma GCC diagnostic error "-Wimplicit-function-declaration"
-
+#pragma GCC diagnostic error "-Wshadow"
 #pragma GCC diagnostic warning "-Wall"
 #pragma GCC diagnostic warning "-Wextra"
+
 #pragma GCC diagnostic ignored "-Wunused-variable"
 #pragma GCC diagnostic ignored "-Wunused-function"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wunused-local-typedefs"
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#pragma GCC diagnostic ignored "-Wunused-but-set-parameter"
 
 #ifdef BUILD_DEBUG 
 #define COMPILER_FLAGS -g -O0 

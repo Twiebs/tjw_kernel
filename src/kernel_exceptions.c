@@ -110,7 +110,7 @@ isr_handler_page_fault(Interrupt_Stack_Frame stack_frame) {
   klog_error("%s", is_reserved_bit_overwritten ? "a reserved bit was overrwriten" : "reserved bits are fine"),
   kdebug_log_interrupt_stack_frame(&stack_frame);
 
-  memory_debug_log_virtual_address_info_4KB(faulting_address);
+  //memory_debug_log_virtual_address_info_4KB(faulting_address);
 
 	if(is_usermode_else_kernel == false){
 		//This is a serious bug there should never be a page-fault in the kernel

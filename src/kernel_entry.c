@@ -38,8 +38,9 @@ static Kernel_Globals globals;
 
 void kernel_panic() {
   shell_draw_if_required(&globals.shell, &globals.log);
-  asm volatile ("cli");
-  asm volatile ("hlt");
+  while (1) { shell_update(&globals.shell); }
+  //asm volatile ("cli");
+  //asm volatile ("hlt");
 }
 
 //TODO(Torin: 2017-07-28) This is temporary
@@ -227,6 +228,10 @@ void initalize_cpu_info_and_start_secondary_cpus(System_Info *system) {
   #endif
 }
 
+void handle_multiboot2_information(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
+
+}
+
 
 extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
 	serial_debug_init();
@@ -259,7 +264,7 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
     //NOTE(Torin) Currently set to 80x86
     write_port_uint8(PIC1_DATA_PORT, ICW4_8068);
     write_port_uint8(PIC2_DATA_PORT, ICW4_8068);
-    write_port_uint8(PIC1_DATA_PORT, 0b11111111);
+    write_port_uint8(PIC1_DATA_PORT, 0b11111101);
     write_port_uint8(PIC2_DATA_PORT, 0b11111111);
   }
 
@@ -281,12 +286,14 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
 		kernel_panic();
 	}
 
-	if (multiboot2_address & 7) {
+	if (multiboot2_address & 0x7) {
 		klog_error("unaligned multiboot_info!");
 		kernel_panic();
 	}
 
+  
   uintptr_t rsdp_physical_address = 0;
+  int rsdp_version = 0;
   struct multiboot_tag_framebuffer *fb_mbtag = 0; 
   struct multiboot_tag_mmap *mmap_tag = 0;
 
@@ -294,13 +301,16 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
   	struct multiboot_tag *tag = (struct multiboot_tag *)(multiboot2_address + 8);
   	while (tag->type != MULTIBOOT_TAG_TYPE_END) {
   		switch (tag->type) {
+
   			case MULTIBOOT_TAG_TYPE_ACPI_OLD: {
   		    struct multiboot_tag_old_acpi *acpi_info = (struct multiboot_tag_old_acpi *)(tag);
           rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
+          rsdp_version = 1;
   			} break;
   			case MULTIBOOT_TAG_TYPE_ACPI_NEW: {
   				struct multiboot_tag_new_acpi *acpi_info = (struct multiboot_tag_new_acpi *)(tag);
           rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
+          rsdp_version = 2;
   			} break;
 
         case MULTIBOOT_TAG_TYPE_FRAMEBUFFER: fb_mbtag = (struct multiboot_tag_framebuffer *)(tag); break;
@@ -313,7 +323,7 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
 
   
 
-  if(mmap_tag != 0){
+  if (mmap_tag != 0) {
     multiboot_memory_map_t *mmap_entry = (multiboot_memory_map_t *)(mmap_tag->entries);
     while((uintptr_t)mmap_entry < (uintptr_t)mmap_tag + mmap_tag->size){
       static const uint8_t MEMORY_AVAILABLE = 1;
@@ -324,14 +334,17 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
     }
   }
 
+
   memory_manager_initialize();
+  shell_initialize(&globals.shell);
 
   //NOTE(Torin) Initalize the framebuffer
   if(fb_mbtag == 0) {
     kassert(0 && "MULTIBOOT FAILED TO PROVIDE FRAMEBUFFER TAG");
+    kernel_panic();
   }
 
-  if(fb_mbtag->common.framebuffer_type != MULTIBOOT_FRAMEBUFFER_TYPE_RGB){
+  if (fb_mbtag->common.framebuffer_type != MULTIBOOT_FRAMEBUFFER_TYPE_RGB) {
     //NOTE(Torin) Text buffer
   } else {
 
@@ -354,21 +367,29 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
   }
 
 
-  if(rsdp_physical_address == 0){
+  if (rsdp_physical_address == 0) {
     klog_error("MULTIBOOT FAILED TO PROVIDE LOCATION OF RSDP");
-    return;
+    kernel_panic();
   }
 
   System_Info *sys = &globals.system_info;
-  if (parse_root_system_descriptor((RSDP_Descriptor_1*)rsdp_physical_address, sys) == 0) {
-    klog_error("unabled to parse root system descriptor");
-    return; 
+  if (rsdp_version == 1) {
+    acpi_parse_root_system_descriptor_version1((RSDP_Descriptor_1*)rsdp_physical_address);
+  } else if (rsdp_version == 2) {
+    acpi_parse_root_system_descriptor_version2((RSDP_Descriptor_2*)rsdp_physical_address);
+  } else {
+    klog_error("IMPOSIBLE: rsdp_version WAS NOT SET");
+    kernel_panic();
   }
+
+  //TODO(Torin 2017-08-13) Make sure all RSDT data is valid before use
 
 
   { //NOTE(Torin) Initalize the lapic and configure the lapic timer
     //NOTE(Torin) Arbitrarly maps the lapic and ioapic into the kernels virtual addresss space
     //And initalizes the iopapic and lapic
+    kassert(sys->lapic_physical_address != 0);
+    kassert(sys->ioapic_physical_address != 0);
     sys->lapic_virtual_address = memory_map_physical_mmio(sys->lapic_physical_address, 1);
     sys->ioapic_virtual_address = memory_map_physical_mmio(sys->ioapic_physical_address, 1);
     
@@ -425,18 +446,18 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
 
     static const uint8_t PIC1_DATA_PORT = 0x21; 
     //NOTE(Torin) Unmask the PIT timer interrupt
-    write_port_uint8(PIC1_DATA_PORT, 0b11111110); 
+    write_port_uint8(PIC1_DATA_PORT, 0b11111110);
     //NOTE(Torin) Start the LAPIC Timer
     lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_DIVIDE_CONFIG_REGISTER, LAPIC_TIMER_DIVIDE_2);
     lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, 0xFFFFFFFF);
     lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_IRQ_MASKED);
     //NOTE(Torin) Count how many ticks the LAPIC decrements in 32 milliseconds
     globals.pit_timer_ticks = 0;
-    while(globals.pit_timer_ticks <= 32){ asm volatile("nop"); }
+    while (globals.pit_timer_ticks <= 32) { asm volatile("nop"); }
     uint32_t ticks_remaining = lapic_read_register(sys->lapic_virtual_address, LAPIC_TIMER_CURRENT_COUNT_REGISTER);  
     uint32_t ticks_in_32_ms = 0xFFFFFFFF - ticks_remaining;
     uint32_t ticks_per_millisecond = ticks_in_32_ms / 32;
-    if(ticks_per_millisecond == 0){
+    if (ticks_per_millisecond == 0) {
       klog_error("error initializing lapic timer");
       return;
     }
@@ -454,7 +475,7 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
 
 
   initalize_cpu_info_and_start_secondary_cpus(sys);
-  shell_initialize(&globals.shell);
+
 
   pci_scan_devices();
 

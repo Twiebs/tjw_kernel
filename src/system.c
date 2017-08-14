@@ -23,3 +23,16 @@ uint8_t *cpu_get_temporary_memory() {
   CPU_Info *info = cpu_get_info();
   return info->temporary_memory;
 }
+
+void silly_breakpoint() {
+  klog_debug("[Debug] Breakpoint hit (Press F1 to continue)");
+  shell_draw_if_required(&globals.shell, &globals.log);
+  bool paused = true;
+  while (paused) {   
+    keyboard_state_update(&globals.keyboard);
+    if (globals.keyboard.is_key_pressed[Keyboard_Keycode_F1]) paused = false;
+    shell_process_keyboard_input(&globals.shell, &globals.keyboard);
+    shell_draw_if_required(&globals.shell, &globals.log);
+    keyboard_state_reset(&globals.keyboard);
+  }
+}

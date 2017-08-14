@@ -75,9 +75,12 @@ extern void irq_common_handler(Interrupt_Stack_Frame_No_Error stack) {
 		proc();
   }
   lapic_write_register(globals.system_info.lapic_virtual_address, 0xB0, 0x00);
+  static const uint8_t PIC1_COMMAND_PORT = 0x20;
+  write_port_uint8(0x20, 0x20);
 }
 
-void irq_handler_keyboard(void) {
+
+void irq_handler_keyboard() {
   keyboard_state_add_scancodes_from_ps2_device(&globals.keyboard);
 }
 

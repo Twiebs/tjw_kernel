@@ -95,7 +95,10 @@ void memory_physical_4KB_page_release(uintptr_t physical_page);
 //NOTE(Torin 2017-08-11) Uses recursive mapping to get a virtual address
 //for the page table entry at the provided index.
 Page_Table *memory_get_or_create_page_table(Page_Table *table, uint64_t index);
+
 void memory_map_physical_to_virtual(uintptr_t physical_page, uintptr_t virtual_address);
+void memory_unmap_virtual_address(uintptr_t virtual_address);
+
 uint8_t *memory_allocate_persistent_virtual_pages(uint64_t page_count);
 
 uintptr_t memory_map_physical_mmio(uintptr_t physical_address, uint64_t page_count);

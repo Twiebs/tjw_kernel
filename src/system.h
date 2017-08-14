@@ -27,3 +27,5 @@ uint32_t cpu_get_id();
 CPU_Info *cpu_get_info();
 uint8_t *cpu_get_temporary_memory();
 
+void silly_breakpoint();
+

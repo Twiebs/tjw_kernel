@@ -85,7 +85,6 @@ static inline void pci_scan_devices() {
       if(header_type & HEADER_TYPE_MULTIPLE_FUNCTIONS_BIT) function_limit = 8; 
 
       for (function_number = 0; function_number < function_limit; function_number++) {
-        uint16_t vendor, device;
         pci_set_config_address(bus_number, device_number, function_number, 0x00);
         pci_read_2x16(&vendor, &device);
         if(vendor == 0xFFFF) continue;

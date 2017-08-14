@@ -8,6 +8,7 @@ extern Page_Table g_p4_table;
 extern Page_Table g_p3_table;
 extern Page_Table g_p2_table;
 
+
 static inline void kmem_clear_page(void *page) {
   memory_set(page, 0x00, 4096);
 }
@@ -32,7 +33,6 @@ uintptr_t memory_get_physical_address(uintptr_t virtual_address) {
   physical_address += virtual_address & 0xFFF;
   return physical_address;
 }
-
 
 uintptr_t memory_p4_index_of_virtual_address(uintptr_t virtual_address) {
   uintptr_t p4_index = (virtual_address >> 39) & 0x1FF;
@@ -68,6 +68,8 @@ Page_Table *memory_get_or_create_page_table(Page_Table *table, uint64_t index) {
     table->entries[index] = physical_page;
     table->entries[index] |= PAGE_PRESENT_BIT;
     table->entries[index] |= PAGE_WRITEABLE_BIT;
+    uintptr_t page_address = ((uintptr_t)table << 9) | (index << 12);
+    memory_set((void *)page_address, 0x00, 4096);
   }
 
   uintptr_t next_table_address = ((uintptr_t)table << 9) | (index << 12);
@@ -155,6 +157,12 @@ void memory_physical_4KB_page_release(uintptr_t physical_page) {
 }
 
 void memory_map_physical_to_virtual(uintptr_t physical_page, uintptr_t virtual_address) {
+  if (physical_page & 0xFFF) {
+    klog_error("cannot map physical_page: 0x%X to virtual_address: 0x%X physical_page is unaligned", physical_page, virtual_address);
+    kassert(false);
+    return;
+  }
+
   uint64_t p4_index = memory_p4_index_of_virtual_address(virtual_address);
   uint64_t p3_index = memory_p3_index_of_virtual_address(virtual_address);
   uint64_t p2_index = memory_p2_index_of_virtual_address(virtual_address);
@@ -172,7 +180,30 @@ void memory_map_physical_to_virtual(uintptr_t physical_page, uintptr_t virtual_a
   p1_table->entries[p1_index] = physical_page;
   p1_table->entries[p1_index] |= PAGE_PRESENT_BIT;
   p1_table->entries[p1_index] |= PAGE_WRITEABLE_BIT;
+  memory_tlb_flush();
   klog_debug("[Memory] Mapped physical page: 0x%X to virtual address: 0x%X", physical_page, virtual_address);
+}
+
+void memory_unmap_virtual_address(uintptr_t virtual_address) {
+  uint64_t p4_index = memory_p4_index_of_virtual_address(virtual_address);
+  uint64_t p3_index = memory_p3_index_of_virtual_address(virtual_address);
+  uint64_t p2_index = memory_p2_index_of_virtual_address(virtual_address);
+  uint64_t p1_index = memory_p1_index_of_virtual_address(virtual_address);
+  Page_Table *p4_table = (Page_Table *)0xFFFFFFFFFFFFF000;
+  Page_Table *p3_table = memory_get_or_create_page_table(p4_table, p4_index);
+  Page_Table *p2_table = memory_get_or_create_page_table(p3_table, p3_index);
+  Page_Table *p1_table = memory_get_or_create_page_table(p2_table, p2_index);
+  if ((p1_table->entries[p1_index] & PAGE_PRESENT_BIT) == 0) {
+    klog_error("[Memory] Can not unmap virtual_address: 0x%X The address is not mapped", virtual_address);
+    kassert(false);
+    return;
+    
+  }
+
+  uintptr_t physical_page = p1_table->entries[p1_index] & ~0xFFF;
+  p1_table->entries[p1_index] = 0;
+  memory_tlb_flush();
+  klog_debug("[Memory] Unmapped physical page: 0x%X from virtual address: 0x%X", physical_page, virtual_address);
 }
 
 uint8_t *memory_allocate_persistent_virtual_pages(uint64_t page_count) {
@@ -186,7 +217,6 @@ uint8_t *memory_allocate_persistent_virtual_pages(uint64_t page_count) {
   memory->current_kernel_persistent_virtual_memory_address += page_count * 4096;
   return result;
 }
-
 
 void memory_manager_initialize() {
   Kernel_Memory_State *memory = &globals.memory_state;

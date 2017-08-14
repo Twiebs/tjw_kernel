@@ -41,6 +41,13 @@ void kdebug_log_page_table_entry_info(const uintptr_t entry) {
   klog_debug("  huge page: %s", is_huge_page ? "true" : "false"); 
 }
 
+
+uint8_t *memory_debug_allocate_persistent_virtual_pages(uint64_t page_count, const char *file, int line) {
+  uint8_t *result = memory_allocate_persistent_virtual_pages(page_count);
+  klog_debug("Allocated %lu virtual pages at %s:%d", page_count, file, line);
+  return result;
+}
+
 #if 0
 void kdebug_log_virtual_address_info_2MB(const uintptr_t virtual_address) {
   uint64_t p4_index = (virtual_address >> 39) & 0x1FF;

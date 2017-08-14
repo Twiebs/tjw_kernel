@@ -15,29 +15,29 @@ bool keyboard_event_queue_try_pop(Keyboard_Event_Queue *event_queue, Keyboard_Ev
   return true;
 }
 
-//TODO(Torin) This will not handle modifiers correctly
-//if the modifier key is pressed after the original key
-//was already down it will still register that the key was
-//pressed with the modifier.  Does this event matter?  Would this be better?
-//Should store keycode + extra btye saying (isdown, shiftdown?, ctrldow?, altdown?)
-#if 0
-void keyboard_state_update_from_ps2_device(Keyboard_State *keyboard_state) {
-  static const uint16_t KEYBOARD_DATA_PORT   = 0x0060;
-  static const uint16_t KEYBOARD_KEY_PENDING_PORT = 0x0064;
-  uint8_t is_key_pending = read_port_uint8(KEYBOARD_KEY_PENDING_PORT);
-  if (is_key_pending & 0x01) { //Keyboard has data ready
-    uint8_t scancode = read_port_uint8(KEYBOARD_DATA_PORT);
-    if (scancode > 0x80) {  //NOTE(Torin)key release event 
-      uint8_t base_scancode = scancode - 0x80;
-      keyboard_state->is_key_released[base_scancode] = 1;
-      keyboard_state->is_key_down[base_scancode] = 0;
-    } else {
-      keyboard_state->is_key_pressed[scancode] = 1;
-      keyboard_state->is_key_down[scancode] = 1;
+//TODO(Torin 2017-08-13) This procedure is very slow and hacky
+//because im too lazy to make it constant time
+Keyboard_Keycode keyboard_scancode_to_keycode(int scancode, bool *is_key_released) {
+  static const Keyboard_Scancode_Info KEYBOARD_SCANCODE1_INFO_ARRAY[] = {
+    { false, 0x3B, Keyboard_Keycode_F1, },
+    { false, 0x02, Keyboard_Keycode_1, },
+
+  };
+
+  
+  size_t count = ARRAY_COUNT(KEYBOARD_SCANCODE1_INFO_ARRAY);
+  for (size_t i = 0; i < count; i++) {
+    const Keyboard_Scancode_Info *info = &KEYBOARD_SCANCODE1_INFO_ARRAY[i];
+    if (info->scancode == scancode) {
+      *is_key_released = info->released;
+      return info->keycode;
     }
+
   }
+
+  *is_key_released = scancode > 0x80;
+  return scancode;
 }
-#endif
 
 void keyboard_state_add_scancodes_from_ps2_device(Keyboard_State *keyboard_state) {
   static const uint16_t KEYBOARD_DATA_PORT   = 0x0060;
@@ -53,13 +53,14 @@ void keyboard_state_add_scancodes_from_ps2_device(Keyboard_State *keyboard_state
 void keyboard_state_update(Keyboard_State *keyboard_state) {
   Keyboard_Event event;
   while (keyboard_event_queue_try_pop(&keyboard_state->event_queue, &event)) {
-    if (event.scancode > 0x80) {  //NOTE(Torin)key release event 
-      uint8_t base_scancode = event.scancode - 0x80;
-      keyboard_state->is_key_released[base_scancode] = true;
-      keyboard_state->is_key_down[base_scancode] = false;
+    bool is_key_released = false;
+    Keyboard_Keycode keycode = keyboard_scancode_to_keycode(event.scancode, &is_key_released);
+    if (is_key_released) {  //NOTE(Torin)key release event 
+      keyboard_state->is_key_released[keycode] = true;
+      keyboard_state->is_key_down[keycode] = false;
     } else {
-      keyboard_state->is_key_pressed[event.scancode] = true;
-      keyboard_state->is_key_down[event.scancode] = true;
+      keyboard_state->is_key_pressed[keycode] = true;
+      keyboard_state->is_key_down[keycode] = true;
     }
   }
 }

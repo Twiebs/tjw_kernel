@@ -22,9 +22,18 @@ static const char SCANCODE_TO_UPERCASE_ACII[] = {
   'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?',  0, 0, 0, ' ',  
 };
 
+
 typedef enum {
   Keyboard_Keycode_INVALID,
+  Keyboard_Keycode_F1 = 0x3B, //HACK
+  Keyboard_Keycode_1 = 0x02, //HACK
 } Keyboard_Keycode;
+
+typedef struct {
+  bool released;
+  int scancode;
+  Keyboard_Keycode keycode;
+} Keyboard_Scancode_Info;
 
 typedef enum {
   Keyboard_Key_State_PRESSED,
@@ -48,9 +57,11 @@ typedef struct {
   Keyboard_Event_Queue event_queue;
 } Keyboard_State;
 
+
 bool keyboard_event_queue_try_push(Keyboard_Event_Queue *event_queue, Keyboard_Event *event);
 bool keyboard_event_queue_try_pop(Keyboard_Event_Queue *event_queue, Keyboard_Event *event);
 void keyboard_state_add_scancodes_from_ps2_device(Keyboard_State *keyboard_state);
+Keyboard_Keycode keyboard_scancode_to_keycode(int scancode, bool *is_key_released);
 
 void keyboard_state_update(Keyboard_State *keyboard_state);
 void keyboard_state_reset(Keyboard_State *keyboard_state);
