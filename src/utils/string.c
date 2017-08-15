@@ -8,6 +8,7 @@ void utf16_to_ascii(uint8_t *ascii, uint16_t *utf16, size_t utf16_length) {
 }
 
 size_t cstring_length(const char *cstring) {
+  if (cstring == 0) return 0;
   size_t result = 0;
   while (cstring[result] != 0)
     result ++;

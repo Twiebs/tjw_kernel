@@ -18,4 +18,5 @@ typedef enum {
 } VGA_Color;
 
 void vga_set_char(char c, VGA_Color color, int x, int y);
+void vga_write_string(const char *string, size_t length, VGA_Color color, int xoffset, int line);
 void vga_clear_screen();

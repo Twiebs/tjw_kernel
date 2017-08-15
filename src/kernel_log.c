@@ -1,12 +1,4 @@
 
-void klog_enable_category(Circular_Log *log, Log_Category category) {
-  log->category_states[category] = Log_Category_State_ENABLED;
-}
-
-void klog_disable_category(Circular_Log *log, Log_Category category) {
-  log->category_states[category] = Log_Category_State_DISABLED;
-}
-
 Log_Entry *klog_get_next_entry(Circular_Log *log) {
   asm volatile("cli");
   spinlock_acquire(&log->spinlock);
@@ -24,10 +16,10 @@ Log_Entry *klog_get_next_entry(Circular_Log *log) {
 
 void klog_write_fmt(Circular_Log *log, Log_Category category, Log_Level level, const char *fmt, ...) {
   if(globals.is_logging_disabled) return;
-  if(log->category_states[category] == Log_Category_State_DISABLED) return;
 
   Log_Entry *entry = klog_get_next_entry(log);
   entry->level = level;
+  entry->category = category;
   
   va_list args;
   va_start(args, fmt);

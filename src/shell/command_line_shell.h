@@ -19,18 +19,29 @@ typedef struct {
 } Shell_Command;
 
 typedef struct {
-  uint64_t max_lines_on_screen;
+  bool     requires_redraw;
   uint64_t line_offset;
   uint64_t character_number;
-  char input_buffer[256];
+  uint64_t characters_per_line;
+  uint64_t lines_per_screen;
+
+  char     input_buffer[256];
   uint64_t input_buffer_count;
+  char     current_directory[1024];
+  size_t   current_directory_count;
+
   Shell_Command commands[64];
   uint64_t command_count;
   Shell_Command_Parameter_Info parameter_info;
-  bool requires_redraw;
-  char current_directory[1024];
-  size_t current_directory_count;
+  
 } Command_Line_Shell;
+
+static const char * LOG_CATEGORY_TAGS[] = {
+  "[Default] ",
+  "[Debug0] ",
+  "[Memory] ",
+  "[VFS] ",
+};
 
 void shell_initialize(Command_Line_Shell *shell);
 void shell_update(Command_Line_Shell *shell);

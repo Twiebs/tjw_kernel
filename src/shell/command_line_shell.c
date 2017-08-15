@@ -1,5 +1,6 @@
 
 
+
 void shell_add_input_character(Command_Line_Shell *shell, const char c) {
   if (c < ' ' || c > '~') return;
   if (shell->input_buffer_count > sizeof(shell->input_buffer)) {
@@ -120,22 +121,36 @@ void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log) {
     size_t entry_index = ((log->entries_back - shell->line_offset) - (entries_to_draw - i)) % CONSOLE_ENTRY_COUNT;
     Log_Entry *entry = &log->entries[entry_index];
 
-    int chars_to_write = entry->length;
-    chars_to_write -= shell->character_number;
-    chars_to_write = max(0, chars_to_write);
-    chars_to_write = min(chars_to_write, 80);
 
     VGA_Color color = VGA_Color_LIGHT_GRAY;
     if (entry->level == Log_Level_ERROR)   { color = VGA_Color_RED;    }
     if (entry->level == Log_Level_WARNING) { color = VGA_Color_YELLOW; }
     if (entry->level == Log_Level_INFO)    { color = VGA_Color_CYAN;   }
-    
-    for (int j = 0; j < chars_to_write; j++) {
-      vga_set_char(entry->message[j + shell->character_number], color, j, i);
+
+    const char *entry_tag_name = LOG_CATEGORY_TAGS[entry->category];
+    if (entry->category == Log_Category_DEFAULT) entry_tag_name = 0;
+    size_t entry_tag_name_length = cstring_length(entry_tag_name);
+
+
+    size_t length_of_tag_to_write = 0;
+    if (shell->character_number < entry_tag_name_length) {
+      length_of_tag_to_write = entry_tag_name_length - shell->character_number;
+      vga_write_string(entry_tag_name + shell->character_number, length_of_tag_to_write, color, 0, i);
     }
+
+    size_t message_offset = 0;
+    if (shell->character_number > entry_tag_name_length) {
+      message_offset = shell->character_number - entry_tag_name_length;
+    }
+
+    int message_chars_to_write = entry->length;
+    message_chars_to_write -= message_offset;
+    message_chars_to_write = max(0, message_chars_to_write);
+    message_chars_to_write = min((uint64_t)message_chars_to_write, shell->characters_per_line);
+    vga_write_string(entry->message + message_offset, message_chars_to_write, color, length_of_tag_to_write, i);
   }
 
-  size_t input_buffer_to_write = min(80, shell->input_buffer_count);
+  size_t input_buffer_to_write = min(shell->characters_per_line, shell->input_buffer_count);
   for (size_t i = 0; i < input_buffer_to_write; i++) {
     vga_set_char(shell->input_buffer[i], VGA_Color_RED, i, 25 - 1); 
   }
@@ -169,6 +184,7 @@ void shell_command_register(Command_Line_Shell *shell, const char *name, uint64_
 void shell_initialize(Command_Line_Shell *shell) {
   shell->current_directory[0] = '/';
   shell->current_directory_count = 1;
+  shell->characters_per_line= 80;
   shell_command_register(shell, "help", 0, shell_command_help);
   shell_command_register(shell, "ls", 0, shell_command_ls);
   shell_command_register(shell, "cd", 1, shell_command_cd);

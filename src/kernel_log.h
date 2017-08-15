@@ -19,11 +19,6 @@ typedef enum {
   Log_Category_COUNT
 } Log_Category;
 
-typedef enum {
-  Log_Category_State_ENABLED,
-  Log_Category_State_DISABLED,
-} Log_Category_State;
-
 static const char * LOG_CATEGORY_NAMES[] = {
   "Default",
   "Debug0",
@@ -34,18 +29,16 @@ static const char * LOG_CATEGORY_NAMES[] = {
 
 typedef struct {
   Log_Level level;
+  Log_Category category;
   uint64_t length;
   char message[CIRCULAR_LOG_MESSAGE_SIZE];
 } Log_Entry;
 
 //TODO(Torin) Change is_dirty to last_event_timestamp
 typedef struct {
-  uint8_t category_states[Log_Category_COUNT];
-
   Log_Entry entries[CIRCULAR_LOG_ENTRY_COUNT];
   uint64_t entries_front;
   uint64_t entries_back;
-
   Spin_Lock spinlock;
 } Circular_Log;
 
