@@ -27,8 +27,10 @@
 
 #define log_enable(group) klog_enable_category(&globals.log, Log_Category_##group)
 #define log_disable(group) klog_disable_category(&globals.log, Log_Category_##group)
-#define log_error(group, ...) klog_write_fmt(&globals.log, Log_Category_##group, __VA_ARGS__)
-#define log_debug(group, ...) klog_write_fmt(&globals.log, Log_Category_##group, __VA_ARGS__)
+
+
+#define log_error(group, ...) klog_write_fmt(&globals.log, Log_Category_##group, Log_Level_ERROR, __VA_ARGS__)
+#define log_debug(group, ...) klog_write_fmt(&globals.log, Log_Category_##group, Log_Level_DEBUG, __VA_ARGS__)
 
 
 #define wait_for_condition(x, timeout) { \

@@ -21,7 +21,8 @@ Keyboard_Keycode keyboard_scancode_to_keycode(int scancode, bool *is_key_release
   static const Keyboard_Scancode_Info KEYBOARD_SCANCODE1_INFO_ARRAY[] = {
     { false, 0x3B, Keyboard_Keycode_F1, },
     { false, 0x02, Keyboard_Keycode_1, },
-
+    { false, 0x2A, Keyboard_Keycode_LEFT_SHIFT, },
+    { true, 0xAA, Keyboard_Keycode_LEFT_SHIFT, },
   };
 
   
@@ -64,6 +65,11 @@ void keyboard_state_update(Keyboard_State *keyboard_state) {
     }
   }
 }
+
+
+
+
+
 
 void keyboard_state_reset(Keyboard_State *keyboard_state) {
   memory_set(keyboard_state->is_key_pressed, 0x00, sizeof(keyboard_state->is_key_pressed));

@@ -4,9 +4,11 @@
 Error_Code ext2_block_read(Ext2_Filesystem *ext2fs, uint32_t block_number, uint8_t *buffer) {
   uint32_t physical_storage_sector = (ext2fs->sectors_per_block * block_number) + ext2fs->partition_first_sector;
   if (storage_device_read(ext2fs->storage_device, physical_storage_sector, ext2fs->sectors_per_block, buffer)) {
-    klog_error("failed to read from storage device");
+    klog_error("Failed to read EXT2 block %u to address: 0x%X", block_number, buffer);
     return Error_Code_FAILED_READ; 
   }
+
+  log_debug(VFS, "Read EXT2 block %u to address: 0x%X", block_number, buffer);
   return Error_Code_NONE;
 }
 
@@ -53,10 +55,12 @@ Error_Code ext2_inode_get_data_block_number(Ext2_Filesystem *ext2fs, Ext2_Inode 
   uint32_t max_indirect2_block_number = EXT2_INODE_DIRECT_BLOCK_COUNT + (block_numbers_per_block * block_numbers_per_block);
 
   if (block_index < EXT2_INODE_DIRECT_BLOCK_COUNT) {
-    return block_index;
+    *result = inode->direct_block_pointers[block_index];
+    return Error_Code_NONE;
   } else if (block_index < max_indirect2_block_number) {
     uint8_t buffer[4096];
     if (ext2_block_read(ext2fs, inode->singly_indirect_block_pointer, buffer)) {
+      log_error(VFS, "Failed to get singly_indirect_block_pointer block");
       return Error_Code_FAILED_READ;
     }
     uint32_t index = block_index - EXT2_INODE_DIRECT_BLOCK_COUNT;
@@ -75,7 +79,7 @@ Error_Code ext2_inode_read_data(Ext2_Filesystem *ext2fs, Ext2_Inode *inode, uint
   uint32_t start_block_number = offset / ext2fs->block_size;
   uint32_t blocks_to_read_count = size / ext2fs->block_size;
   if (size % ext2fs->block_size) blocks_to_read_count++;
-  if (blocks_to_read_count == 0) return Error_Code_NONE;
+  if (blocks_to_read_count == 0) { return Error_Code_NONE; }
 
   uint8_t temp_buffer[4096];//TODO(Torin: 2017-08-10) Were copying from a temp buffer to avoid
   //handling case when offset > 0 && size < ext2fs->block_size.  it needs to be corner cased necause
@@ -83,10 +87,15 @@ Error_Code ext2_inode_read_data(Ext2_Filesystem *ext2fs, Ext2_Inode *inode, uint
   uint32_t block_number_to_read = 0;
   uint32_t offset_into_start_block = offset % ext2fs->block_size;
   uint32_t start_block_data_size = ext2fs->block_size - offset_into_start_block;
-  if (ext2_inode_get_data_block_number(ext2fs, inode, start_block_number, &block_number_to_read)) 
+  if (ext2_inode_get_data_block_number(ext2fs, inode, start_block_number, &block_number_to_read)) {
+    log_error(VFS, "Failed to get data block number at index %u", start_block_number);
     return Error_Code_FAILED_READ;
-  if (ext2_block_read(ext2fs, block_number_to_read, temp_buffer)) 
+  }
+
+  if (ext2_block_read(ext2fs, block_number_to_read, temp_buffer)) {
+    log_error(VFS, "Failed to read block %u", block_number_to_read);
     return Error_Code_FAILED_READ;
+  }
 
   memory_copy(buffer, temp_buffer + offset_into_start_block, start_block_data_size);
   uint8_t *write_ptr = buffer + start_block_data_size;
@@ -130,7 +139,7 @@ const char *name, size_t name_length, uint8_t *scratch_memory, uint32_t *result_
   while (((uintptr_t)directory_entry - (uintptr_t)scratch_memory) < 4096) {
     if (directory_entry->entry_size == 0) break;
     if (string_equals_string(directory_entry->name, directory_entry->name_length, name, name_length)) {
-      ext2_debug_log_directory_entry(ext2fs, directory_entry);
+      //ext2_debug_log_directory_entry(ext2fs, directory_entry);
       //TODO(Torin) Do consitancy checks to ensure that this is a valid inode
       *result_inode_number = directory_entry->inode;
       return Error_Code_NONE;

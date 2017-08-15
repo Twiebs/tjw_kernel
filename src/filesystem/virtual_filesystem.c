@@ -1,5 +1,6 @@
 
 Error_Code vfs_node_read_file(VFS_Node_Handle *handle, uint64_t offset, uint64_t size, uint8_t *virtual_address) {
+  klog_debug("[VFS] Reading file: %u at offset: %lu, size: %lu, to address 0x%X", handle->fs_reference, offset, size, virtual_address);
   if ((offset + size) > handle->file_size) return Error_Code_INVALID_DATA;
   if (virtual_address == 0) return Error_Code_INVALID_DATA;
 
@@ -10,14 +11,18 @@ Error_Code vfs_node_read_file(VFS_Node_Handle *handle, uint64_t offset, uint64_t
     return Error_Code_FAILED_READ;
   }
 
+
+
   if (inode.type != EXT2_INODE_TYPE_REGULAR_FILE) {
     klog_error("[VFS] Inode %u is not a file", handle->fs_reference);
     ext2_debug_log_inode(&inode);
     return Error_Code_INVALID_DATA;
   }
 
-  if (ext2_inode_read_data(ext2fs, &inode, offset, size, virtual_address))
+  if (ext2_inode_read_data(ext2fs, &inode, offset, size, virtual_address)) {
+    log_error(VFS, "Failed to read INODE DATA");
     return Error_Code_FAILED_READ;
+  }
 
   return Error_Code_NONE;
 }
@@ -44,7 +49,7 @@ Error_Code vfs_aquire_node_handle(const char *path, size_t path_length, VFS_Node
     }
 
     out_handle->fs_reference = current_inode_number;
-    out_handle->file_size = (uint64_t)current_inode.size_low | ((uint64_t)current_inode.size_high << 32LL);
+    out_handle->file_size = (uint64_t)current_inode.size_low | ((uint64_t)current_inode.size_high << 32UL);
     out_handle->creation_time = current_inode.creation_time;
     out_handle->accessed_time = current_inode.last_access_time;
     out_handle->modified_time = current_inode.last_modification_time;
@@ -87,6 +92,7 @@ Error_Code vfs_aquire_node_handle(const char *path, size_t path_length, VFS_Node
   out_handle->creation_time = current_inode.creation_time;
   out_handle->accessed_time = current_inode.last_access_time;
   out_handle->modified_time = current_inode.last_modification_time;
+  klog_debug("[VFS] acquired node: %u, size: %lu", out_handle->fs_reference, out_handle->file_size);
   return Error_Code_NONE;
 }
 

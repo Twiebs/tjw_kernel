@@ -100,8 +100,7 @@ void shell_process_keyboard_input(Command_Line_Shell *shell, Keyboard_State *key
 
       if (scancode < (int)sizeof(SCANCODE_TO_LOWERCASE_ACII)) {
         char ascii_character = 0;
-        if(keyboard->is_key_down[KEYBOARD_SCANCODE1_LSHIFT] ||
-          keyboard->is_key_down[KEYBOARD_SCANCODE1_RSHIFT]){
+        if (keyboard->is_key_down[Keyboard_Keycode_LEFT_SHIFT]) {
           ascii_character = SCANCODE_TO_UPERCASE_ACII[scancode];
         } else { ascii_character = SCANCODE_TO_LOWERCASE_ACII[scancode]; }
         if(ascii_character == 0) return;

@@ -14,6 +14,8 @@ typedef enum {
 typedef enum {
   Log_Category_DEFAULT,
   Log_Category_DEBUG0,
+  Log_Category_MEMORY,
+  Log_Category_VFS,
   Log_Category_COUNT
 } Log_Category;
 
@@ -25,6 +27,8 @@ typedef enum {
 static const char * LOG_CATEGORY_NAMES[] = {
   "Default",
   "Debug0",
+  "Memory",
+  "VFS",
   "__COUNT__"
 };
 

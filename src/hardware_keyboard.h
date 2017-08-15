@@ -22,11 +22,11 @@ static const char SCANCODE_TO_UPERCASE_ACII[] = {
   'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?',  0, 0, 0, ' ',  
 };
 
-
 typedef enum {
   Keyboard_Keycode_INVALID,
-  Keyboard_Keycode_F1 = 0x3B, //HACK
-  Keyboard_Keycode_1 = 0x02, //HACK
+  Keyboard_Keycode_1 = 253,
+  Keyboard_Keycode_F1 = 254,
+  Keyboard_Keycode_LEFT_SHIFT = 255,
 } Keyboard_Keycode;
 
 typedef struct {
