@@ -1,4 +1,7 @@
 
+//NOTE(Torin 2017-08-27) This procedure is called during pci_device initalization
+//by the pci_device_driver information. The physical address parameters are obtained
+//from the pci_device BAR registers.
 Error_Code intel_graphics_device_initalize(uintptr_t base_physical_address) {
   static const uintptr_t GMBUS_AND_IO_CONTROLL_OFFSET = 0x5000;
   static const uintptr_t DISPLAY_PIPELINE_REGISTERS_OFFSET = 0x6000;
@@ -27,25 +30,32 @@ Error_Code intel_graphics_device_initalize(uintptr_t base_physical_address) {
   graphics_device.gmbus4 = (Intel_GMBUS4 *)(gmbus_and_io_control_registers_virtual_address + GMBUS4_OFFSET);
   graphics_device.gmbus5 = (Intel_GMBUS5 *)(gmbus_and_io_control_registers_virtual_address + GMBUS5_OFFSET);
 
-  
-
   //Read EDID and get mode info
+  //TODO(Torin 2017-08-27) Once more graphics drivers are wrriten determine if this
+  //type of operation can be abstracted out for reuse by all drivers that obtian
+  //display information from connected monitors/display devices
   static const uint8_t EDID_ADDRESS = 0x50;
   graphics_device.gmbus0->pair_pin_select = INTEL_GMBUS0_PIN_PAIR_SELECT_DDC;
   graphics_device.gmbus0->rate_select = INTEL_GMBUS0_RATE_SELECT_100KHZ;
-  size_t offset = 0;
+  uint8_t offset = 0;
+  //Display_Mode mode = {};
   Extended_Display_Identification edid = {};
   intel_graphics_device_i2c_write(&graphics_device, EDID_ADDRESS, 1, &offset);
   intel_graphics_device_i2c_read(&graphics_device, EDID_ADDRESS, 128, &edid);
-  if (edid.signature != EDID_SIGNATURE) {
-    klog_error("EDID signature is invalid!");
-    return Error_Code_INVALID_DATA;
-  }
+
+  //Error_Code error = extract_display_mode_information(&edid, &mode);
+  //if (error) return error;
+
+  //NOTE(Torin 2017-08-27) Going to set the display mode.  Mabye change this to its
+  //own procedure to handle resolutions switches later?
+  //debug_log_display_mode(&mode);
+
 
   return Error_Code_NONE;
 }
 
 Error_Code intel_graphics_device_gmbus_wait_hardware_ready(Intel_Graphics_Device *graphics_device) {
+  klog_debug("intel wait hardware ready");
   while (true) {
     if (graphics_device->gmbus2->nak_inticator) {
       klog_error("intel gmbus NAK");
@@ -60,6 +70,7 @@ Error_Code intel_graphics_device_gmbus_wait_hardware_ready(Intel_Graphics_Device
 }
 
 Error_Code intel_graphics_device_gmbus_wait_hardware_complete(Intel_Graphics_Device *graphics_device) {
+  klog_debug("intel wait hardware complete");
   while (true) {
     if (graphics_device->gmbus2->nak_inticator) {
       klog_error("intel gmbus NAK");
@@ -155,4 +166,5 @@ Error_Code intel_graphics_device_i2c_read(Intel_Graphics_Device *graphics_device
 void intel_graphics_device_dac_enable(Intel_Graphics_Device *graphics_device) {
   static const uint32_t DAC_ENABLED_BIT = 1 << 31;
 }
+
 void intel_graphics_device_dac_disable(Intel_Graphics_Device *graphics_device);

@@ -90,7 +90,7 @@ exit
 //Debug Procedures
 #include "src/kernel_debug.h"
 #include "src/memory_debug.h"
-
+#include "src/graphics/display_debug.h"
 
 //  Source Files
 //===========================
@@ -121,6 +121,7 @@ exit
 #include "src/graphics/vga_mode_3.c"
 #include "src/graphics/vesa_framebuffer.c"
 #include "src/graphics/intel.c"
+#include "src/graphics/display.c"
 
 //USB
 #include "src/usb/usb_protocol.c"
@@ -128,3 +129,4 @@ exit
 
 //Debug
 #include "src/kernel_memory_debug.c"
+#include "src/graphics/display_debug.c"

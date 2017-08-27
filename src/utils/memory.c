@@ -34,3 +34,12 @@ void unpack_32_4x8(uint32_t value, uint8_t *a, uint8_t *b, uint8_t *c, uint8_t *
   *c = (value >>  8) & 0xFF;
   *d = (value >>  0) & 0xFF;
 }
+
+uint64_t memory_sum(void *data, size_t size) {
+  uint64_t result = 0;
+  uint8_t *bytes = (uint8_t *)data;
+  for (size_t i = 0; i < size; i++) {
+    result += bytes[i];
+  }
+  return result;
+}

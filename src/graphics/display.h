@@ -24,13 +24,36 @@ typedef struct {
 } __attribute((packed)) Display_Type;
 
 typedef struct {
-  uint8_t horizontal_frequency; //kHz
-  uint8_t vertical_frequency;   //kHz
-  uint8_t horizontal_active_time;
-  uint8_t horizontal_blanking_time;  
-  uint8_t vertical_active_time;
-  uint8_t vertical_blanking_time;
-  uint8_t torin_is_lazy[12];
+  uint16_t pixel_clock; //10kHz * pixel_clock
+
+  uint8_t horizontal_active_pixels_lsb;
+  uint8_t horizontal_blanking_pixels_lsb;
+  uint8_t horizontal_blanking_pixels_msb : 4;
+  uint8_t horizontal_active_pixels_msb : 4;
+
+  uint8_t vertical_active_lines_lsb;
+  uint8_t vertical_blanking_lines_lsb;
+  uint8_t vertical_blanking_lines_msb : 4;
+  uint8_t vertical_active_lines_msb : 4;
+
+  uint8_t horizontal_sync_offset_pixels_lsb;
+  uint8_t horizontal_sync_pulse_width_pixels_lsb;
+  uint8_t vertical_sync_pulse_width_lines_lsb : 4;
+  uint8_t vertical_sync_offset_lines_lsb : 4;
+  uint8_t vertical_sync_pulse_width_lines_msb : 2;
+  uint8_t vertical_sync_offset_lines_msb : 2;
+  uint8_t horizontal_sync_pulse_width_pixels_msb : 2;
+  uint8_t horizontal_sync_offset_pixels_msb : 2;
+
+  uint8_t horizontal_display_size_mm_lsb;
+  uint8_t vertical_display_size_mm_lsb;
+  uint8_t horizontal_display_size_mm_msb : 4;
+  uint8_t vertical_display_size_mm_msb : 4;
+
+  uint8_t horizontal_border_pixels; //each side; total is twice this
+  uint8_t vertical_border_lines; //each side; total is twice this
+
+  uint8_t features_bitmap;
 } __attribute((packed)) Detailed_Timing_Description;
 
 typedef struct {
@@ -66,3 +89,13 @@ typedef struct {
 static_assert(sizeof(Chroma_Information) == 10);
 static_assert(sizeof(Detailed_Timing_Description) == 18);
 static_assert(sizeof(Extended_Display_Identification) == 128);
+
+typedef struct {
+  uint32_t pixel_clock; //kHz
+  uint32_t horizontal_resolution;
+  uint32_t vertical_resolution;
+} Display_Mode;
+
+
+Error_Code extract_display_mode_information(Extended_Display_Identification *edid, Display_Mode *mode);
+void convert_detailed_timing_descriptor_to_display_mode(Detailed_Timing_Description *dtd, Display_Mode *mode);

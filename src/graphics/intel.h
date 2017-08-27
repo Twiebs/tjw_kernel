@@ -1,3 +1,7 @@
+//DPLL: digital phase-locked loop
+//DAC: digital-to-analog converter, i.e. CRTs via the usual VGA plug
+//SDVO: serial digital video out connectors
+//LVDS: low-voltage differential signaling
 
 #include <stdint.h>
 
@@ -77,7 +81,16 @@ static_assert(sizeof(Intel_GMBUS3) == 4);
 static_assert(sizeof(Intel_GMBUS4) == 4);
 static_assert(sizeof(Intel_GMBUS5) == 4);
 
+//TODO(Torin 2017-08-27) Mabye we should consider making this structure
+//contain the data of the 'base' 'graphice_device' struct.  And use it like
+//an abstract interface.
 typedef struct {
+  //TODO(Torin 2017-08-27) There is starting to be a lot of memory
+  //wastage with storing the registers in this way.  It's probably
+  //a better idea to just store the virtual address of each of the
+  //memory regions in the regitster address space of the graphics
+  //device and calculating the actual 32bit registers using an offset
+  //rather than storing there address inside this structure!
   volatile Intel_GMBUS0 *gmbus0;
   volatile Intel_GMBUS1 *gmbus1;
   volatile Intel_GMBUS2 *gmbus2;
