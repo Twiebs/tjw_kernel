@@ -33,6 +33,7 @@
 #define log_debug(group, ...) klog_write_fmt(&globals.log, Log_Category_##group, Log_Level_DEBUG, __VA_ARGS__)
 
 
+
 #define wait_for_condition(x, timeout) { \
   globals.lapic_timer_ticks = 0; \
   while((!(x)) && (globals.lapic_timer_ticks < timeout)) { asm volatile("nop"); } \

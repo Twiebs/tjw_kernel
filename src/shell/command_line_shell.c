@@ -27,6 +27,8 @@ void shell_clear_input_buffer(Command_Line_Shell *shell) {
 
 void shell_execute_command(Command_Line_Shell *shell) {
   if (shell->input_buffer_count > 0) {
+    klog_info("> %s", shell->input_buffer);
+
     Shell_Command_Parameter_Info parameter_info = {};
     size_t current_index = 0;
     size_t command_string_length = cstring_substring_to_next_whitespace(shell->input_buffer);
@@ -63,6 +65,7 @@ void shell_execute_command(Command_Line_Shell *shell) {
 
       klog_error("cannot find command %.*s", (int)command_string_length, shell->input_buffer);
     }
+
 
     shell_clear_input_buffer(shell);
   }
@@ -150,6 +153,8 @@ void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log) {
     vga_write_string(entry->message + message_offset, message_chars_to_write, color, length_of_tag_to_write, i);
   }
 
+
+
   size_t input_buffer_to_write = min(shell->characters_per_line, shell->input_buffer_count);
   for (size_t i = 0; i < input_buffer_to_write; i++) {
     vga_set_char(shell->input_buffer[i], VGA_Color_RED, i, 25 - 1); 
@@ -189,4 +194,5 @@ void shell_initialize(Command_Line_Shell *shell) {
   shell_command_register(shell, "ls", 0, shell_command_ls);
   shell_command_register(shell, "cd", 1, shell_command_cd);
   shell_command_register(shell, "cat", 1, shell_command_cat);
+  shell_command_register(shell, "lspci", 0, shell_command_lspci);
 }

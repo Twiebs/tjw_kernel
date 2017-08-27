@@ -473,14 +473,15 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
     ioapic_initalize(sys->ioapic_virtual_address);
   }
 
+  _interrupt_handlers[2] = (uintptr_t)lapic_timer_interrupt; 
+  //lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x22, 1);
 
   initalize_cpu_info_and_start_secondary_cpus(sys);
 
+  pci_initialize_default_device_drivers();
+  pci_enumerate_and_create_devices();
+  pci_initialize_valid_devices();
 
-  pci_scan_devices();
-
-  _interrupt_handlers[2] = (uintptr_t)lapic_timer_interrupt; 
-  //lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x22, 1);
 
 	while(1) { 
     shell_update(&globals.shell);

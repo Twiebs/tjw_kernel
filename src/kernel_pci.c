@@ -3,23 +3,7 @@
 //and check bios for the access mechanism.  This just assumes that someone
 //is not running on hardware from 1992 (this is a reasonable assumption for now)
 
-#define PCI_CLASS_SERIAL_BUS_CONTROLLER 0x0C
-#define PCI_SUBCLASS_USB_CONTROLLER 0x03
-
-
-static inline void unpack_32_2x16(uint32_t value, uint16_t *a, uint16_t *b){
-  *a = (value >> 16) & 0xFFFF;
-  *b = (value & 0xFFFF);
-}
-
-static inline void unpack_32_4x8(uint32_t value, uint8_t *a, uint8_t *b, uint8_t *c, uint8_t *d){
-  *a = (value >> 24) & 0xFF;
-  *b = (value >> 16) & 0xFF;
-  *c = (value >>  8) & 0xFF;
-  *d = (value >>  0) & 0xFF;
-}
-
-static inline void pci_set_config_address(uint8_t bus_number, uint8_t device_number, uint8_t function_number, uint8_t register_number){
+static inline void pci_set_config_address(uint8_t bus_number, uint8_t device_number, uint8_t function_number, uint8_t register_number) {
   struct PCI_Config_Adress {
     union {
       struct {
@@ -39,13 +23,10 @@ static inline void pci_set_config_address(uint8_t bus_number, uint8_t device_num
   config_address.device_number = device_number;
   config_address.bus_number = bus_number;
   config_address.enable = 1;
-
-  static const uint16_t PCI_CONFIG_ADDRESS_PORT = 0x0CF8;  
   write_port_uint32(PCI_CONFIG_ADDRESS_PORT, config_address.packed);
 }
 
 static inline uint32_t pci_read_uint32(){
-  const uint16_t PCI_CONFIG_DATA_PORT = 0x0CFC;
   uint32_t result = read_port_uint32(PCI_CONFIG_DATA_PORT);
   return result;
 }
@@ -61,95 +42,196 @@ static inline void pci_read_4x8(uint8_t *a, uint8_t *b, uint8_t *c, uint8_t *d){
 }
 
 static inline void pci_write_uint32(volatile uint32_t value){
-  const uint16_t PCI_CONFIG_DATA_PORT = 0x0CFC;
   write_port_uint32(PCI_CONFIG_DATA_PORT, value);
 }
 
-static inline void pci_scan_devices() {
-  PCI_Info pci_info = {};
+void pci_device_config_address_set(PCI_Device *pci_device, uint8_t register_number) {
+  pci_set_config_address(pci_device->bus_number, pci_device->device_number, pci_device->function_number, register_number);
+}
 
-  for(size_t bus_number = 0; bus_number < 256; bus_number++){
-    for(size_t device_number = 0; device_number < 32; device_number++){
+Error_Code pci_ehci_initialize(PCI_Device *pci_device) {
+  pci_device_config_address_set(pci_device, 0x10);
+  uint32_t ehci_registers_address = pci_read_uint32();
+  ehci_registers_address &= 0xFFFFFFF0;
+  //TODO(Torin 2017-08-21) Proper error handling
+  ehci_initalize_host_controller(ehci_registers_address, pci_device);
+  return Error_Code_NONE;
+}
+
+Error_Code pci_intel_graphics_initialize(PCI_Device *pci_device) {
+  if (pci_device->vendor_id != 0x8086) return Error_Code_UNSUPORTED_FEATURE;
+  klog_debug("Initializing Intel Graphics Device");
+  pci_device_config_address_set(pci_device, 0x10);
+  uint32_t graphics_device_registers_physical = pci_read_uint32();
+  graphics_device_registers_physical &= 0xFFFFFFF0;
+  return intel_graphics_device_initalize(graphics_device_registers_physical);
+}
+
+PCI_Device *pci_device_create(uint8_t bus_number, uint8_t device_number, uint8_t function_number) {
+  System_Info *system = &globals.system_info;
+  PCI_Device *pci_device = NULL;
+  if (system->pci_device_count >= ARRAY_COUNT(system->pci_devices)) {
+    log_error(SYSTEM, "Failed to create pci device: Not enough storage in debug static array");
+    return pci_device;
+  }
+
+  pci_device = &system->pci_devices[system->pci_device_count++];
+  pci_device->bus_number = bus_number;
+  pci_device->device_number = device_number;
+  pci_device->function_number = function_number;
+  return pci_device;
+}
+
+void pci_device_driver_create(uint8_t class_code, uint8_t subclass, uint8_t programming_interface, 
+const char *type_description, PCI_Device_Initialization_Procedure initialization_procedure) 
+{
+  System_Info *system = &globals.system_info;
+  if (system->pci_device_driver_count >= ARRAY_COUNT(system->pci_device_drivers)) {
+    log_error(SYSTEM, "Failed to create pci device driver: Not enough storage in debug static array");
+    return;
+  }
+
+  PCI_Device_Driver *pci_device_driver = &system->pci_device_drivers[system->pci_device_driver_count++];
+  pci_device_driver->class_code = class_code;
+  pci_device_driver->subclass = subclass;
+  pci_device_driver->programming_interface = programming_interface;
+  pci_device_driver->initialization_procedure = initialization_procedure;
+  //TODO(Torin 2017-08-20) This is problably a bad idea to use static
+  //strings since we might want to be able to  rehotload device
+  //drivers in the event of a system update without requiring 
+  //a full reboot of the os.
+  pci_device_driver->type_description = type_description;
+}
+
+void pci_initialize_default_device_drivers() {
+  //USB Host Controller Drivers
+  pci_device_driver_create(PCI_Device_Class_SERIAL_BUS_CONTROLLER, PCI_SUBCLASS_USB_CONTROLLER,
+    PCI_PROGRAMMING_INTERFACE_XHCI_CONTROLLER, "USB XHCI Host Controller", 0);
+  pci_device_driver_create(PCI_Device_Class_SERIAL_BUS_CONTROLLER, PCI_SUBCLASS_USB_CONTROLLER,
+    PCI_PROGRAMMING_INTERFACE_EHCI_CONTROLLER, "USB EHCI Host Controller", pci_ehci_initialize);
+  pci_device_driver_create(PCI_Device_Class_SERIAL_BUS_CONTROLLER, PCI_SUBCLASS_USB_CONTROLLER,
+    PCI_PROGRAMMING_INTERFACE_UHCI_CONTROLLER, "USB UHCI Host Controller", 0);
+  pci_device_driver_create(PCI_Device_Class_SERIAL_BUS_CONTROLLER, PCI_SUBCLASS_USB_CONTROLLER,
+    PCI_PROGRAMMING_INTERFACE_OHCI_CONTROLLER, "USB OHCI Host Controller", 0);
+
+  //Graphics Device Drivers
+  pci_device_driver_create(PCI_Device_Class_DISPLAY_CONTROLLER, 0x00, 0x00,
+    "VGA Compatible Graphics Device", pci_intel_graphics_initialize);
+}
+
+void pci_device_set_type_description(PCI_Device *pci_device) {
+  System_Info *system = &globals.system_info;
+  for (size_t i = 0; i < system->pci_device_driver_count; i++) {
+    PCI_Device_Driver *pci_device_driver = &system->pci_device_drivers[i];
+    if (pci_device_driver->class_code == pci_device->class_code &&
+        pci_device_driver->subclass == pci_device->subclass     &&
+        pci_device_driver->programming_interface == pci_device->programming_interface) {
+      pci_device->type_description = pci_device_driver->type_description;
+      return;
+    }
+  }
+
+
+  //NOTE(Torin 2017-08-20) The registered pci device drivers did not
+  //contain a match for the pci_devices class, subclass, and programing interface
+  //we now default to chosing a description string based on the class of the pci_device
+  switch (pci_device->class_code) {
+    case PCI_Device_Class_BEFORE_CLASS_CODE: pci_device->type_description = "Device created before class codes"; break;
+    case PCI_Device_Class_MASS_STORAGE_CONTROLLER: pci_device->type_description = "Mass storage Controller"; break;
+    case PCI_Device_Class_NETWORK_CONTROLLER: pci_device->type_description = "Network Controller"; break;
+    case PCI_Device_Class_DISPLAY_CONTROLLER: pci_device->type_description = "Display Controller"; break;
+    case PCI_Device_Class_MULTIMEDIA_CONTROLLER: pci_device->type_description = "Multimedia Controller"; break;
+    case PCI_Device_Class_MEMORY_CONTROLLER: pci_device->type_description = "Memory Controller"; break;
+    case PCI_Device_Class_BRIDGE_DEVICE: pci_device->type_description = "Bridge Device"; break;
+    case PCI_Device_Class_SIMPLE_COMMUNICATION_CONTROLLER: pci_device->type_description = "Simple Communication Controller"; break;
+    case PCI_Device_Class_BASE_SYSTEM_PERIPHERAL: pci_device->type_description = "Base System Peripheral"; break;
+    case PCI_Device_Class_INPUT_DEVICE: pci_device->type_description = "Input Device"; break;
+    case PCI_Device_Class_DOCKING_STATION: pci_device->type_description = "Docking Station"; break;
+    case PCI_Device_Class_PROCESSOR: pci_device->type_description = "Processor"; break;
+    case PCI_Device_Class_SERIAL_BUS_CONTROLLER: pci_device->type_description = "Serial Bus Controller"; break;
+    case PCI_Device_Class_WIRELESS_CONTROLLER: pci_device->type_description = "Wireless Controller"; break;
+    case PCI_Device_Class_INTELLIGENT_IO_CONTROLLER: pci_device->type_description = "Intelligent I/O Controller"; break;
+    case PCI_Device_Class_SATELLITE_COMMUNICATION_CONTROLLER: pci_device->type_description = "Satellite Communication Controller"; break;
+    case PCI_Device_Class_ENCRYPTION_CONTROLLER: pci_device->type_description = "Encryption Controller"; break;
+    case PCI_Device_Class_DATA_ACQUISITION_AND_SIGNAL_PROCESSING_CONTROLLER: pci_device->type_description = "Data Acquisition ans Signal Processing Controller"; break;
+    case PCI_Device_Class_UNDEFINED: pci_device->type_description = "Undefined"; break;
+    default:
+      if (pci_device->class_code >= 0x12 && pci_device->class_code <= 0xFE) {
+        pci_device->type_description = "Reserved";
+      } else {
+        pci_device->type_description = "INVALID PCI DEVICE CLASS";
+      }
+  };
+}
+
+//NOTE(Torin 2017) When this procedure is called the pci_device
+//already has its vendor_id and device_id information 
+void pci_device_get_info(PCI_Device *pci_device) {
+  pci_device_config_address_set(pci_device, 0x08);
+  pci_read_4x8(&pci_device->class_code, &pci_device->subclass, 
+    &pci_device->programming_interface, &pci_device->revision_id);
+
+  uint16_t status, command;
+  pci_device_config_address_set(pci_device, 0x04);
+  pci_read_2x16(&status, &command);
+  if (status & PCI_STATUS_CAPABILITIES_BIT) {
+    pci_device->has_extended_capibilities = true;
+  }
+
+  uint8_t max_latency, min_grant, interrupt_pin, interrupt_line;
+  pci_read_4x8(&max_latency, &min_grant, &interrupt_pin, &interrupt_line);
+  pci_device_set_type_description(pci_device);
+}
+
+void pci_enumerate_and_create_devices() {
+  for (size_t bus_number = 0; bus_number < 256; bus_number++) {
+    for (size_t device_number = 0; device_number < 32; device_number++) {
       size_t function_number = 0;
       size_t function_limit = 1;
-      
-      uint16_t vendor, device;
-      pci_set_config_address(bus_number, device_number, function_number, 0x00);
-      pci_read_2x16(&vendor, &device);
-      if(vendor == 0xFFFF) continue;
-
-      uint8_t bist, header_type, latency_timer, cache_line_size;
-      pci_set_config_address(bus_number, device_number, function_number, 0x0C);
-      pci_read_4x8(&bist, &header_type, &latency_timer, &cache_line_size);
-      static const uint8_t HEADER_TYPE_MULTIPLE_FUNCTIONS_BIT = 1 << 7;
-      if(header_type & HEADER_TYPE_MULTIPLE_FUNCTIONS_BIT) function_limit = 8; 
-
       for (function_number = 0; function_number < function_limit; function_number++) {
+        //First need to check if the device is valid by comparing the vendor ID to 0xFFFF
+        uint16_t device = 0xFFFF, vendor = 0xFFFF;
         pci_set_config_address(bus_number, device_number, function_number, 0x00);
-        pci_read_2x16(&vendor, &device);
-        if(vendor == 0xFFFF) continue;
+        pci_read_2x16(&device, &vendor);
+        if (vendor == 0xFFFF) continue;
+        PCI_Device *pci_device = pci_device_create(bus_number, device_number, function_number);
+        pci_device->vendor_id = vendor;
+        pci_device->device_id = device;
+        pci_device_get_info(pci_device);
 
-        uint8_t class_code, subclass, prog_if, revision_id;
-        pci_set_config_address(bus_number, device_number, function_number, 0x08);
-        pci_read_4x8(&class_code, &subclass, &prog_if, &revision_id);
-
-        uint16_t status, command;
-        pci_set_config_address(bus_number, device_number, function_number, 0x04);
-        pci_read_2x16(&status, &command);
-        static const uint16_t STATUS_CAPABILITIES_BIT = 1 << 4;
-        if (status & STATUS_CAPABILITIES_BIT) {
-          klog_debug("pci has extended capabilities");
+        uint8_t bist, header_type, latency_timer, cache_line_size;
+        pci_set_config_address(bus_number, device_number, function_number, 0x0C);
+        pci_read_4x8(&bist, &header_type, &latency_timer, &cache_line_size);
+        static const uint8_t PCI_HEADER_TYPE_MULTIPLE_FUNCTIONS_BIT = 1 << 7;
+        if (function_number == 0) {
+          if (header_type & PCI_HEADER_TYPE_MULTIPLE_FUNCTIONS_BIT) function_limit = 8; 
         }
-
-        uint8_t max_latency, min_grant, interrupt_pin, interrupt_line;
-        pci_read_4x8(&max_latency, &min_grant, &interrupt_pin, &interrupt_line);
-
-        //NOTE(Torin 2016-09-13) Get the base addressess of the USB Host Controllers 
-        if (class_code == PCI_CLASS_SERIAL_BUS_CONTROLLER && subclass == PCI_SUBCLASS_USB_CONTROLLER) {
-          static const uint8_t UHCI_CONTROLLER = 0x00;
-          static const uint8_t OHCI_CONTROLLER = 0x10;
-          static const uint8_t EHCI_CONTROLLER = 0x20;
-          static const uint8_t XHCI_CONTROLLER = 0x30;
-          if (prog_if == UHCI_CONTROLLER) {
-            klog_debug("[pci] Found UHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
-            pci_set_config_address(bus_number, device_number, function_number, 0x20);
-            uint32_t uhci_registers_address = pci_read_uint32(); 
-            pci_info.uhci_physical_address = uhci_registers_address;
-          } else if (prog_if == OHCI_CONTROLLER) {
-            klog_debug("[pci] Found OHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
-            pci_set_config_address(bus_number, device_number, function_number, 0x10);
-            uint32_t ohci_bar_register = pci_read_uint32();
-            uint32_t ohci_register_address = ohci_bar_register & ~0xFFF;
-            pci_info.ohci_physical_address = ohci_register_address;
-          } else if (prog_if == EHCI_CONTROLLER) { 
-            pci_set_config_address(bus_number, device_number, function_number, 0x10);
-            uint32_t ehci_registers_address = pci_read_uint32(); 
-            pci_info.ehci_physical_address = ehci_registers_address;
-            pci_info.ehci_pci_device.bus_number = bus_number;
-            pci_info.ehci_pci_device.device_number = device_number;
-            pci_info.ehci_pci_device.function_number = function_number;
-            pci_info.ehci_pci_device.interrupt_pin = interrupt_pin;
-            pci_info.ehci_pci_device.interrupt_line = interrupt_line;
-            //TODO(Torin 2016-10-04) Initalizing the EHCI controller should be defered until
-            //after PCI bus enumeration has completed.
-            ehci_initalize_host_controller(pci_info.ehci_physical_address, &pci_info.ehci_pci_device);
-          } else if (prog_if == XHCI_CONTROLLER) {
-            klog_debug("[pci] Found XHCI Controller[%X:%X:%X]", bus_number, device_number, function_number);
-            pci_set_config_address(bus_number, device_number, function_number, 0x10);
-            uint32_t xhci_address_high = pci_read_uint32();
-            pci_set_config_address(bus_number, device_number, function_number, 0x14);
-            uint32_t xhci_address_low = pci_read_uint32();
-            pci_info.xhci_physical_address = ((uintptr_t)xhci_address_high << 32);
-            pci_info.xhci_physical_address |= xhci_address_low;
-          }
-        }
-
-        //TODO(Torin 2016-09-16 Additional PCI device processing)
-        if(0)
-        {
-        }
-
-      } 
+      }
     }
+  }
+}
+
+
+
+void pci_initialize_device(PCI_Device *pci_device) {
+  System_Info *system = &globals.system_info;
+  for (size_t i = 0; i < system->pci_device_driver_count; i++) {
+    PCI_Device_Driver *pci_device_driver = &system->pci_device_drivers[i];
+    if (pci_device_driver->class_code == pci_device->class_code &&
+        pci_device_driver->subclass == pci_device->subclass     &&
+        pci_device_driver->programming_interface == pci_device->programming_interface) {
+      if (pci_device_driver->initialization_procedure != NULL) {
+        pci_device_driver->initialization_procedure(pci_device);
+      }
+      return;
+    }
+  }
+}
+
+void pci_initialize_valid_devices() {
+  System_Info *system = &globals.system_info;
+  for (size_t i = 0; i < system->pci_device_count; i++) {
+    PCI_Device *pci_device = &system->pci_devices[i];
+    pci_initialize_device(pci_device);
   }
 }

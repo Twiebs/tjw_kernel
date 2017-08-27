@@ -61,3 +61,13 @@ void shell_command_cat(Shell_Command_Parameter_Info *parameter_info) {
   
   klog_debug("%s", temporary_buffer);
 }
+
+void shell_command_lspci(Shell_Command_Parameter_Info *parameter_info) {
+  System_Info *system = &globals.system_info;
+  for (size_t i = 0; i < system->pci_device_count; i++) {
+    PCI_Device *pci_device = &system->pci_devices[i];
+    klog_info("%u:%u:%u %s subclass: 0x%X, progif: 0x%X, vendor: 0x%X, device: 0x%X", pci_device->bus_number, 
+      pci_device->device_number, pci_device->function_number, pci_device->type_description,
+      pci_device->subclass, pci_device->programming_interface, pci_device->vendor_id, pci_device->device_id);
+  }
+}

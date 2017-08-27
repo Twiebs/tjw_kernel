@@ -55,13 +55,14 @@ exit
 //Main System
 #include "src/descriptor_tables.h"
 #include "src/kernel_synch.h"
+#include "src/kernel_pci.h"
 #include "src/system.h"
 #include "src/kernel.h"
 #include "src/hardware_keyboard.h"
 #include "src/kernel_log.h"
 #include "src/kernel_memory.h"
 #include "src/interrupt_handler.h"
-#include "src/kernel_pci.h"
+
 
 #include "src/kernel_task.h"
 
@@ -78,6 +79,8 @@ exit
 //Graphics
 #include "src/graphics/vga_mode_3.h"
 #include "src/graphics/vesa_framebuffer.h"
+#include "src/graphics/display.h"
+#include "src/graphics/intel.h"
 
 //USB devices and drivers
 #include "src/usb/usb.h"
@@ -117,6 +120,7 @@ exit
 //Graphics Source files
 #include "src/graphics/vga_mode_3.c"
 #include "src/graphics/vesa_framebuffer.c"
+#include "src/graphics/intel.c"
 
 //USB
 #include "src/usb/usb_protocol.c"
