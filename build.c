@@ -82,6 +82,7 @@ exit
 #include "src/graphics/display.h"
 #include "src/graphics/intel.h"
 
+
 //USB devices and drivers
 #include "src/usb/usb.h"
 #include "src/usb/ehci.h"
@@ -128,5 +129,5 @@ exit
 #include "src/usb/ehci.c"
 
 //Debug
-#include "src/kernel_memory_debug.c"
 #include "src/graphics/display_debug.c"
+#include "src/kernel_memory_debug.c"

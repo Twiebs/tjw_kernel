@@ -35,11 +35,26 @@ void unpack_32_4x8(uint32_t value, uint8_t *a, uint8_t *b, uint8_t *c, uint8_t *
   *d = (value >>  0) & 0xFF;
 }
 
-uint64_t memory_sum(void *data, size_t size) {
-  uint64_t result = 0;
+void log_bytes(void *data, size_t size) {
   uint8_t *bytes = (uint8_t *)data;
-  for (size_t i = 0; i < size; i++) {
-    result += bytes[i];
+  size_t row_count = size / 8;
+  for (size_t i = 0; i < row_count; i++) {
+    klog_debug("  0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X",
+      bytes[i*8 + 0], bytes[i*8 + 1], bytes[i*8 + 2], bytes[i*8 + 3], 
+      bytes[i*8 + 4], bytes[i*8 + 5], bytes[i*8 + 6], bytes[i*8 + 7]);
   }
+
+  size_t remainder = size - (row_count * 8);
+
+}
+
+uint32_t mmio_register_read32(uint64_t base, uint64_t offset) {
+  volatile uint32_t *address = (volatile uint32_t *)(base + offset);
+  uint32_t result = *address;
   return result;
+}
+
+void mmio_register_write32(uint64_t base, uint64_t offset, uint32_t value) {
+  volatile uint32_t *address = (volatile uint32_t *)(base + offset);
+  *address = value;
 }

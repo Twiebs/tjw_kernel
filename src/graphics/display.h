@@ -96,6 +96,5 @@ typedef struct {
   uint32_t vertical_resolution;
 } Display_Mode;
 
-
 Error_Code extract_display_mode_information(Extended_Display_Identification *edid, Display_Mode *mode);
 void convert_detailed_timing_descriptor_to_display_mode(Detailed_Timing_Description *dtd, Display_Mode *mode);

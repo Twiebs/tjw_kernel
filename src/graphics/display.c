@@ -7,6 +7,7 @@ void convert_detailed_timing_descriptor_to_display_mode(Detailed_Timing_Descript
 }
 
 Error_Code extract_display_mode_information(Extended_Display_Identification *edid, Display_Mode *mode) {
+#if 0
   uint64_t checksum = memory_sum(edid, 127);
   if ((checksum & 0xFF) != edid->checksum) {
     klog_error("EDID computed checksum is not valid!");
@@ -17,7 +18,8 @@ Error_Code extract_display_mode_information(Extended_Display_Identification *edi
     klog_error("EDID signature is invalid: 0x%X!", edid->signature);
     return Error_Code_INVALID_DATA;
   }
-
+#endif 
+  
   if (edid->version != 1 || edid->revision != 3) {
     klog_error("Invalid EDID version: %u.%u", (uint32_t)edid->version, (uint32_t)edid->revision);
     return Error_Code_INVALID_DATA;
