@@ -120,7 +120,7 @@ typedef struct {
 } Intel_Graphics_Device;
 
 
-Error_Code intel_graphics_device_initalize(uintptr_t base_physical_address);
+Error_Code intel_graphics_device_initialize(PCI_Device *pci_device);
 Error_Code intel_graphics_device_display_mode_set(Intel_Graphics_Device *graphics_device, Display_Mode *display_mode);
 //Procedures for writing/reading over the DDC protocol on the I2C bus
 //This is done via the Intel GMBUS registers

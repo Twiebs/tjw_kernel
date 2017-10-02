@@ -29,7 +29,7 @@ exit
   nasm -fbin src/secondary_cpu_init.asm -o trampoline.bin
   bin/bin_to_txt trampoline.bin src/trampoline.txt
 
-	gcc COMPILER_FLAGS -m64 -mno-red-zone -nostdlib -ffreestanding -I../tjw_kernel/src -c build.c -o build.c.o
+	gcc COMPILER_FLAGS -m64 -mno-red-zone -nostdlib -ffreestanding -fno-stack-protector -I ../tjw_kernel/src -c build.c -o build.c.o
 	nasm -felf64 src/primary_cpu_init.asm -isrc/ -o primary_cpu_init.asm.o
 	nasm -felf64 src/x86_64_entry.asm -isrc/ -o x86_64_entry.asm.o
   ld -melf_x86_64 -n -T kernel_link.ld -o bin/kernel build.c.o x86_64_entry.asm.o primary_cpu_init.asm.o

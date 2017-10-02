@@ -40,35 +40,20 @@ typedef enum {
   PCI_Device_Class_UNDEFINED                                          = 0xFF,
 } PCI_Device_Class;
 
-typedef enum {
-  PCI_Device_Type_INVALID,
-  PCI_Device_Type_UHCI,
-  PCI_Device_Type_OHCI,
-  PCI_Device_Type_EHCI,
-  PCI_Device_Type_XHCI,
-} PCI_Device_Type;
-
-
-
-
 typedef struct {
   uint8_t bus_number;
   uint8_t device_number;
   uint8_t function_number;
-  bool has_extended_capibilities;
-
-
   uint16_t vendor_id;
   uint16_t device_id;
-
   uint8_t class_code;
   uint8_t subclass;
   uint8_t programming_interface;
   uint8_t revision_id;  
-
   uint8_t interrupt_pin;
   uint8_t interrupt_line;
 
+  bool has_extended_capibilities;
   bool is_initalized;
   const char *type_description; //Staticly allocated string
 } PCI_Device;
@@ -79,13 +64,16 @@ typedef struct {
   uint8_t class_code;
   uint8_t subclass;
   uint8_t programming_interface;
+  uint16_t vendor_id;
+  uint16_t device_id;
   const char *type_description;
   PCI_Device_Initialization_Procedure initialization_procedure;
 } PCI_Device_Driver;
 
+uintptr_t pci_get_base_address_0(PCI_Device *pci_device);
 
 PCI_Device *pci_device_create(uint8_t bus_number, uint8_t device_number, uint8_t function_number);
-void pci_device_driver_create(uint8_t class_code, uint8_t subclass, uint8_t programming_interface, 
+void pci_device_driver_create(uint8_t class_code, uint8_t subclass, uint8_t programming_interface,  uint16_t vendor_id, uint16_t device_id,
   const char *type_description, PCI_Device_Initialization_Procedure initialization_procedure);
 
 void pci_device_set_type_description(PCI_Device *pci_device);

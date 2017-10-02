@@ -2,7 +2,9 @@
 //NOTE(Torin 2017-09-03)This procedure is called when the PCI graphics device is initialized.
 //The register_physical_address paramater is obtained from the PCI configuration
 //space BAR0 address. 
-Error_Code intel_graphics_device_initalize(uintptr_t base_physical_address) {
+Error_Code intel_graphics_device_initialize(PCI_Device *pci_device)  {
+
+  uintptr_t base_physical_address = pci_get_base_address_0(pci_device);
   static const uintptr_t GMBUS_AND_IO_CONTROLL_OFFSET = 0x5000;
   //static const uintptr_t DISPLAY_PIPELINE_REGISTERS_OFFSET = 0x6000;
   uintptr_t gmbus_and_io_control_registers_physical_address = base_physical_address + GMBUS_AND_IO_CONTROLL_OFFSET;
@@ -270,8 +272,8 @@ enableDac();
 Error_Code intel_graphics_device_display_mode_set(Intel_Graphics_Device *graphics_device, Display_Mode *display_mode) {
   intel_graphics_device_dac_disable(graphics_device);
   intel_graphics_device_pipe_disable(graphics_device);
-
   intel_graphics_device_dac_enable(graphics_device);
+  return Error_Code_NONE;
 }
 
 
@@ -279,7 +281,7 @@ void intel_graphics_device_pipe_disable(Intel_Graphics_Device *graphics_device) 
   uint32_t value = mmio_register_read32(graphics_device->mmio_registers_address, INTEL_MMIO_REGISTER_PIPE_A_CONFIG);
   value &= ~INTEL_PIPE_ENABLE;
   mmio_register_write32(graphics_device->mmio_registers_address, INTEL_MMIO_REGISTER_PIPE_A_CONFIG, value);
-  while (value & INTEL_PIPE_STATUS) {
+  while (value & INTEL_PIPE_STATE) {
     value = mmio_register_read32(graphics_device->mmio_registers_address, INTEL_MMIO_REGISTER_PIPE_A_CONFIG);
   }
 }

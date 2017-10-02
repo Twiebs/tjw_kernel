@@ -26,6 +26,8 @@ static inline void pci_set_config_address(uint8_t bus_number, uint8_t device_num
   write_port_uint32(PCI_CONFIG_ADDRESS_PORT, config_address.packed);
 }
 
+
+
 static inline uint32_t pci_read_uint32(){
   uint32_t result = read_port_uint32(PCI_CONFIG_DATA_PORT);
   return result;
@@ -49,6 +51,14 @@ void pci_device_config_address_set(PCI_Device *pci_device, uint8_t register_numb
   pci_set_config_address(pci_device->bus_number, pci_device->device_number, pci_device->function_number, register_number);
 }
 
+uintptr_t pci_get_base_address_0(PCI_Device *pci_device) {
+  pci_device_config_address_set(pci_device, 0x10);
+  uint32_t base_address = pci_read_uint32();
+  base_address &= 0xFFFFFFF0;
+  return base_address;
+}
+
+
 Error_Code pci_ehci_initialize(PCI_Device *pci_device) {
   pci_device_config_address_set(pci_device, 0x10);
   uint32_t ehci_registers_address = pci_read_uint32();
@@ -56,15 +66,6 @@ Error_Code pci_ehci_initialize(PCI_Device *pci_device) {
   //TODO(Torin 2017-08-21) Proper error handling
   ehci_initalize_host_controller(ehci_registers_address, pci_device);
   return Error_Code_NONE;
-}
-
-Error_Code pci_intel_graphics_initialize(PCI_Device *pci_device) {
-  if (pci_device->vendor_id != 0x8086) return Error_Code_UNSUPORTED_FEATURE;
-  klog_debug("Initializing Intel Graphics Device");
-  pci_device_config_address_set(pci_device, 0x10);
-  uint32_t graphics_device_registers_physical = pci_read_uint32();
-  graphics_device_registers_physical &= 0xFFFFFFF0;
-  return intel_graphics_device_initalize(graphics_device_registers_physical);
 }
 
 PCI_Device *pci_device_create(uint8_t bus_number, uint8_t device_number, uint8_t function_number) {
@@ -82,9 +83,8 @@ PCI_Device *pci_device_create(uint8_t bus_number, uint8_t device_number, uint8_t
   return pci_device;
 }
 
-void pci_device_driver_create(uint8_t class_code, uint8_t subclass, uint8_t programming_interface, 
-const char *type_description, PCI_Device_Initialization_Procedure initialization_procedure) 
-{
+void pci_device_driver_create(uint8_t class_code, uint8_t subclass, uint8_t programming_interface,  uint16_t vendor_id, uint16_t device_id,
+const char *type_description, PCI_Device_Initialization_Procedure initialization_procedure) {
   System_Info *system = &globals.system_info;
   if (system->pci_device_driver_count >= ARRAY_COUNT(system->pci_device_drivers)) {
     log_error(SYSTEM, "Failed to create pci device driver: Not enough storage in debug static array");
@@ -95,6 +95,8 @@ const char *type_description, PCI_Device_Initialization_Procedure initialization
   pci_device_driver->class_code = class_code;
   pci_device_driver->subclass = subclass;
   pci_device_driver->programming_interface = programming_interface;
+  pci_device_driver->vendor_id = vendor_id;
+  pci_device_driver->device_id = device_id;
   pci_device_driver->initialization_procedure = initialization_procedure;
   //TODO(Torin 2017-08-20) This is problably a bad idea to use static
   //strings since we might want to be able to  rehotload device
@@ -106,18 +108,19 @@ const char *type_description, PCI_Device_Initialization_Procedure initialization
 void pci_initialize_default_device_drivers() {
   //USB Host Controller Drivers
   pci_device_driver_create(PCI_Device_Class_SERIAL_BUS_CONTROLLER, PCI_SUBCLASS_USB_CONTROLLER,
-    PCI_PROGRAMMING_INTERFACE_XHCI_CONTROLLER, "USB XHCI Host Controller", 0);
+    PCI_PROGRAMMING_INTERFACE_XHCI_CONTROLLER, 0xFFFF, 0x0000, "USB XHCI Host Controller", 0);
   pci_device_driver_create(PCI_Device_Class_SERIAL_BUS_CONTROLLER, PCI_SUBCLASS_USB_CONTROLLER,
-    PCI_PROGRAMMING_INTERFACE_EHCI_CONTROLLER, "USB EHCI Host Controller", pci_ehci_initialize);
+    PCI_PROGRAMMING_INTERFACE_EHCI_CONTROLLER, 0xFFFF, 0x0000, "USB EHCI Host Controller", pci_ehci_initialize);
   pci_device_driver_create(PCI_Device_Class_SERIAL_BUS_CONTROLLER, PCI_SUBCLASS_USB_CONTROLLER,
-    PCI_PROGRAMMING_INTERFACE_UHCI_CONTROLLER, "USB UHCI Host Controller", 0);
+    PCI_PROGRAMMING_INTERFACE_UHCI_CONTROLLER, 0xFFFF, 0x0000, "USB UHCI Host Controller", 0);
   pci_device_driver_create(PCI_Device_Class_SERIAL_BUS_CONTROLLER, PCI_SUBCLASS_USB_CONTROLLER,
-    PCI_PROGRAMMING_INTERFACE_OHCI_CONTROLLER, "USB OHCI Host Controller", 0);
+    PCI_PROGRAMMING_INTERFACE_OHCI_CONTROLLER, 0xFFFF, 0x0000, "USB OHCI Host Controller", 0);
 
   //Graphics Device Drivers
   pci_device_driver_create(PCI_Device_Class_DISPLAY_CONTROLLER, 0x00, 0x00,
-    "VGA Compatible Graphics Device", pci_intel_graphics_initialize);
-}
+    0xFFFF, 0x0000, "VGA Compatible Graphics Device", 0);
+  pci_device_driver_create(PCI_Device_Class_DISPLAY_CONTROLLER, 0x00, 0x00,
+    0x8086, 0x0000, "Intel Graphics Device", intel_graphics_device_initialize);}
 
 void pci_device_set_type_description(PCI_Device *pci_device) {
   System_Info *system = &globals.system_info;
@@ -211,21 +214,40 @@ void pci_enumerate_and_create_devices() {
   }
 }
 
-
-
-void pci_initialize_device(PCI_Device *pci_device) {
+PCI_Device_Driver *pci_find_matching_device_driver(PCI_Device *pci_device) {
   System_Info *system = &globals.system_info;
+  PCI_Device_Driver *result = NULL;
   for (size_t i = 0; i < system->pci_device_driver_count; i++) {
     PCI_Device_Driver *pci_device_driver = &system->pci_device_drivers[i];
     if (pci_device_driver->class_code == pci_device->class_code &&
         pci_device_driver->subclass == pci_device->subclass     &&
         pci_device_driver->programming_interface == pci_device->programming_interface) {
-      if (pci_device_driver->initialization_procedure != NULL) {
-        pci_device_driver->initialization_procedure(pci_device);
+      if (pci_device_driver->vendor_id == 0xFFFF && result == NULL) {
+        result = pci_device_driver;
+      } else if (pci_device_driver->vendor_id == pci_device->vendor_id &&
+                 pci_device_driver->device_id == pci_device->device_id) {
+        result = pci_device_driver;
       }
-      return;
     }
   }
+
+  return result;
+}
+
+
+
+Error_Code pci_initialize_device(PCI_Device *pci_device) {
+  System_Info *system = &globals.system_info;
+  PCI_Device_Driver *pci_device_driver = pci_find_matching_device_driver(pci_device);
+  if (pci_device_driver == NULL) {
+    return Error_Code_UNSUPORTED_FEATURE;
+  }
+
+  if (pci_device_driver->initialization_procedure != NULL) {
+    pci_device_driver->initialization_procedure(pci_device);
+  }
+
+  return Error_Code_NONE;
 }
 
 void pci_initialize_valid_devices() {
