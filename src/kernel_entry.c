@@ -178,8 +178,6 @@ ap_entry_procedure(void){
   asm volatile("hlt");
 }
 
-
-
 void initalize_task_state_segment(CPU_Info *cpu_info) {
   //NOTE(Torin: 2017-07-26) Kernel stack must be initalized
   kassert(cpu_info->kernel_stack_top != 0);
@@ -228,100 +226,85 @@ void initalize_cpu_info_and_start_secondary_cpus(System_Info *system) {
   #endif
 }
 
-void handle_multiboot2_information(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
-
+//NOTE(Torin, 2017-10-01) This procedure is required to disable the legacy
+//PIC chip/emulation. The kernel uses both the LAPIC and IOAPIC instead.
+static inline void remap_and_disable_legacy_pic() {
+  //NOTE(Torin) Remap the legacy PIC8259 and mask out the interrupt vectors 
+  static const uint8_t PIC1_COMMAND_PORT = 0x20;
+  static const uint8_t PIC2_COMMAND_PORT = 0xA0;
+  static const uint8_t PIC1_DATA_PORT = 0x21;
+  static const uint8_t PIC2_DATA_PORT = 0xA1;
+  //Initalization Command Words (ICW)
+  static const uint8_t ICW1_INIT_CASCADED = 0x11;
+  static const uint8_t ICW2_PIC1_IRQ_NUMBER_BEGIN = 0x20;
+  static const uint8_t ICW2_PIC2_IRQ_NUMBER_BEGIN = 0x28;
+  static const uint8_t ICW3_PIC1_IRQ_LINE_2 = 0x4;
+  static const uint8_t ICW3_PIC2_IRQ_LINE_2 = 0x2;
+  static const uint8_t ICW4_8068 = 0x01;
+  //ICW1 Tells PIC to wait for 3 more words
+  write_port_uint8(PIC1_COMMAND_PORT, ICW1_INIT_CASCADED);
+  write_port_uint8(PIC2_COMMAND_PORT, ICW1_INIT_CASCADED);
+  //ICW2 Set PIC Offset Values
+  write_port_uint8(PIC1_DATA_PORT, ICW2_PIC1_IRQ_NUMBER_BEGIN);
+  write_port_uint8(PIC2_DATA_PORT, ICW2_PIC2_IRQ_NUMBER_BEGIN);
+  //ICW3 PIC Cascading Info
+  write_port_uint8(PIC1_DATA_PORT, ICW3_PIC1_IRQ_LINE_2);
+  write_port_uint8(PIC2_DATA_PORT, ICW3_PIC2_IRQ_LINE_2);
+  //ICW4 Additional Enviroment Info
+  //NOTE(Torin) Currently set to 80x86
+  write_port_uint8(PIC1_DATA_PORT, ICW4_8068);
+  write_port_uint8(PIC2_DATA_PORT, ICW4_8068);
+  //NOTE(Torin, 2017-10-01) At this time the interrupts handled by
+  //the pic are masked out; however, the timer interrupt is left active
+  //because it will be used later to calibrate the lapic. TODO This should
+  //probably be disabled here and then re-enabled when the lapic is calibrated.
+  write_port_uint8(PIC1_DATA_PORT, 0b11111101);
+  write_port_uint8(PIC2_DATA_PORT, 0b11111111);
 }
 
+//NOTE(Torin, 2017-10-01) The kernel currently relies on information provided by a 
+//multiboot2 compliant bootloaded(in this case GRUB is used). This is most likely
+//temporary and a custom bootloader will be written at a later time. To make that transiton
+//more seamless information about the system is abstracted out into a seprate mechanism and
+//kernel initialization uses that instead of relying on beening booted by a multiboot2 bootloader
 
-extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_address) {
-	serial_debug_init();
-  //NOTE(Torin 2016-09-02) At this point the kernel has been called into by our
-  //bootstrap assembly and interrupts are disabled.  A Longmode GDT has been loaded
-  //but the IDT still need to be configured
+typedef struct {
+  uintptr_t rsdp_physical_address;
+  int rsdp_version;
+} Primary_CPU_Initialization_Info;
 
-  { //NOTE(Torin) Remap the legacy PIC8259 and mask out the interrupt vectors 
-    static const uint8_t PIC1_COMMAND_PORT = 0x20;
-    static const uint8_t PIC2_COMMAND_PORT = 0xA0;
-    static const uint8_t PIC1_DATA_PORT = 0x21;
-    static const uint8_t PIC2_DATA_PORT = 0xA1;
-    //Initalization Command Words (ICW)
-    static const uint8_t ICW1_INIT_CASCADED = 0x11;
-    static const uint8_t ICW2_PIC1_IRQ_NUMBER_BEGIN = 0x20;
-    static const uint8_t ICW2_PIC2_IRQ_NUMBER_BEGIN = 0x28;
-    static const uint8_t ICW3_PIC1_IRQ_LINE_2 = 0x4;
-    static const uint8_t ICW3_PIC2_IRQ_LINE_2 = 0x2;
-    static const uint8_t ICW4_8068 = 0x01;
-    //ICW1 Tells PIC to wait for 3 more words
-    write_port_uint8(PIC1_COMMAND_PORT, ICW1_INIT_CASCADED);
-    write_port_uint8(PIC2_COMMAND_PORT, ICW1_INIT_CASCADED);
-    //ICW2 Set PIC Offset Values
-    write_port_uint8(PIC1_DATA_PORT, ICW2_PIC1_IRQ_NUMBER_BEGIN);
-    write_port_uint8(PIC2_DATA_PORT, ICW2_PIC2_IRQ_NUMBER_BEGIN);
-    //ICW3 PIC Cascading Info
-    write_port_uint8(PIC1_DATA_PORT, ICW3_PIC1_IRQ_LINE_2);
-    write_port_uint8(PIC2_DATA_PORT, ICW3_PIC2_IRQ_LINE_2);
-    //ICW4 Additional Enviroment Info
-    //NOTE(Torin) Currently set to 80x86
-    write_port_uint8(PIC1_DATA_PORT, ICW4_8068);
-    write_port_uint8(PIC2_DATA_PORT, ICW4_8068);
-    write_port_uint8(PIC1_DATA_PORT, 0b11111101);
-    write_port_uint8(PIC2_DATA_PORT, 0b11111111);
+static inline void extract_initialization_info_from_multiboot2_tags(uint64_t multiboot2_magic, uint64_t multiboot2_address, Primary_CPU_Initialization_Info *initialization_info) {
+  if (multiboot2_magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
+    klog_error("the kernel was not booted with a multiboot2 compliant bootloader!");
+    kernel_panic();
   }
 
-  {
-    idt_install_all_interrupts();
-    struct {
-      uint16_t limit;
-      uintptr_t address;
-    } __attribute__((packed)) idtr = { sizeof(_idt) - 1, (uintptr_t)_idt };
-    asm volatile ("lidt %0" : : "m"(idtr));
-    asm volatile ("sti");
+  if (multiboot2_address & 0x7) {
+    klog_error("unaligned multiboot_info!");
+    kernel_panic();
   }
 
-
-  //log_disable(DEBUG0);
-
-	if (multiboot2_magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
-		klog_error("the kernel was not booted with a multiboot2 compliant bootloader!");
-		kernel_panic();
-	}
-
-	if (multiboot2_address & 0x7) {
-		klog_error("unaligned multiboot_info!");
-		kernel_panic();
-	}
-
-  
-  uintptr_t rsdp_physical_address = 0;
-  int rsdp_version = 0;
-  struct multiboot_tag_framebuffer *fb_mbtag = 0; 
   struct multiboot_tag_mmap *mmap_tag = 0;
+  struct multiboot_tag *tag = (struct multiboot_tag *)(multiboot2_address + 8);
+  while (tag->type != MULTIBOOT_TAG_TYPE_END) {
+    switch (tag->type) {
 
-  { //NOTE(Torin) Extract relevant multiboot information
-  	struct multiboot_tag *tag = (struct multiboot_tag *)(multiboot2_address + 8);
-  	while (tag->type != MULTIBOOT_TAG_TYPE_END) {
-  		switch (tag->type) {
+      case MULTIBOOT_TAG_TYPE_ACPI_OLD: {
+        struct multiboot_tag_old_acpi *acpi_info = (struct multiboot_tag_old_acpi *)(tag);
+        initialization_info->rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
+        initialization_info->rsdp_version = 1;
+      } break;
+      case MULTIBOOT_TAG_TYPE_ACPI_NEW: {
+        struct multiboot_tag_new_acpi *acpi_info = (struct multiboot_tag_new_acpi *)(tag);
+        initialization_info->rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
+        initialization_info->rsdp_version = 2;
+      } break;
 
-  			case MULTIBOOT_TAG_TYPE_ACPI_OLD: {
-  		    struct multiboot_tag_old_acpi *acpi_info = (struct multiboot_tag_old_acpi *)(tag);
-          rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
-          rsdp_version = 1;
-  			} break;
-  			case MULTIBOOT_TAG_TYPE_ACPI_NEW: {
-  				struct multiboot_tag_new_acpi *acpi_info = (struct multiboot_tag_new_acpi *)(tag);
-          rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
-          rsdp_version = 2;
-  			} break;
+      case MULTIBOOT_TAG_TYPE_MMAP: mmap_tag = (struct multiboot_tag_mmap *)(tag); break;
 
-        case MULTIBOOT_TAG_TYPE_FRAMEBUFFER: fb_mbtag = (struct multiboot_tag_framebuffer *)(tag); break;
-        case MULTIBOOT_TAG_TYPE_MMAP: mmap_tag = (struct multiboot_tag_mmap *)(tag); break;
-
-  		}
-  		tag = (struct multiboot_tag *)(((uint8_t *)tag) + ((tag->size + 7) & ~7));
-  	}
-  } 
-
-  
+    }
+    tag = (struct multiboot_tag *)(((uint8_t *)tag) + ((tag->size + 7) & ~7));
+  }
 
   if (mmap_tag != 0) {
     multiboot_memory_map_t *mmap_entry = (multiboot_memory_map_t *)(mmap_tag->entries);
@@ -333,56 +316,64 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
        mmap_entry = (multiboot_memory_map_t *)((uintptr_t)mmap_entry + mmap_tag->entry_size);
     }
   }
+}
 
 
+extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_physical_address) {
+	serial_debug_init();
+  //NOTE(Torin 2016-09-02) At this point the kernel has been called into by our
+  //bootstrap assembly and interrupts are disabled.  A Longmode GDT has been loaded
+  //but the IDT still need to be configured
+
+  remap_and_disable_legacy_pic();
+
+
+  {
+    idt_install_all_interrupts();
+    struct {
+      uint16_t limit;
+      uintptr_t address;
+    } __attribute__((packed)) idtr = { sizeof(_idt) - 1, (uintptr_t)_idt };
+    asm volatile ("lidt %0" : : "m"(idtr));
+    asm volatile ("sti");
+  }
+
+  //NOTE(Torin, 2017-10-05) This is a wierd way to get info out of the multiboot bootloader. Not
+  //too thriled about how this works for now...
+  //This also currently has side-effects! It initializes memory ranges in the memory manager!
+  //This is too confusing @refactor
+  Primary_CPU_Initialization_Info initialization_info = {};
+  extract_initialization_info_from_multiboot2_tags(multiboot2_magic, 
+    multiboot2_physical_address, &initialization_info);
+
+  //NOTE(Torin, 2017-10-05) The multiboot info just provided us with memory ranges for
+  //the memory manager to use so we can now initialize it.
   memory_manager_initialize();
+
+
   shell_initialize(&globals.shell);
 
-  //NOTE(Torin) Initalize the framebuffer
-  if(fb_mbtag == 0) {
-    kassert(0 && "MULTIBOOT FAILED TO PROVIDE FRAMEBUFFER TAG");
+  //NOTE(Torin, 2017-10-05) The kernel is now going to get system information from
+  //the root system descriptor table.
+  //TODO(Torin 2017-08-13) Make sure all RSDT data is valid before use
+  if (initialization_info.rsdp_physical_address == 0) {
+    klog_error("Invalid Initialization_Info: RSDP phsyical address was not found");
     kernel_panic();
   }
 
-  if (fb_mbtag->common.framebuffer_type != MULTIBOOT_FRAMEBUFFER_TYPE_RGB) {
-    //NOTE(Torin) Text buffer
+  //TODO(Torin, 2017-10-05) It is very confusing to be casting a physical address to a pointer
+  //and relying on it being in the memory mapped section of ram. We need to check to see if it's
+  //mapped already and have the parse_rsdp procedure just take a integer physical_address
+  if (initialization_info.rsdp_version == 1) {
+    acpi_parse_root_system_descriptor_version1((RSDP_Descriptor_1*)initialization_info.rsdp_physical_address);
+  } else if (initialization_info.rsdp_version == 2) {
+    acpi_parse_root_system_descriptor_version2((RSDP_Descriptor_2*)initialization_info.rsdp_physical_address);
   } else {
-
-    return;
-    //TODO(TORIN 2016-10-20) Framebuffer currently broken
-
- #if 0 
-    uintptr_t framebuffer_virtual_address = 0x0A000000;
-    uintptr_t page_offset = kmem_map_unaligned_physical_to_aligned_virtual_2MB(fb_mbtag->common.framebuffer_addr, framebuffer_virtual_address, PAGE_USER_ACCESS_BIT);
-    kmem_map_physical_to_virtual_2MB_ext(fb_mbtag->common.framebuffer_addr - page_offset + 0x200000, framebuffer_virtual_address + 0x200000, PAGE_USER_ACCESS_BIT);
-
-    Framebuffer *fb = &globals.framebuffer;
-    fb->width = fb_mbtag->common.framebuffer_width; 
-    fb->height = fb_mbtag->common.framebuffer_height;
-    fb->buffer = (uint8_t *)framebuffer_virtual_address;
-    fb->depth = fb_mbtag->common.framebuffer_bpp / 8; 
-    fb->pitch = fb_mbtag->common.framebuffer_pitch; 
-    klog_debug("framebuffer: width: %u, height: %u, depth: %u", fb->width, fb->height, (uint32_t)fb->depth);
-  #endif
-  }
-
-
-  if (rsdp_physical_address == 0) {
-    klog_error("MULTIBOOT FAILED TO PROVIDE LOCATION OF RSDP");
+    klog_error("Invalid Initialization_Info: RSDP version is not supported!");
     kernel_panic();
   }
 
   System_Info *sys = &globals.system_info;
-  if (rsdp_version == 1) {
-    acpi_parse_root_system_descriptor_version1((RSDP_Descriptor_1*)rsdp_physical_address);
-  } else if (rsdp_version == 2) {
-    acpi_parse_root_system_descriptor_version2((RSDP_Descriptor_2*)rsdp_physical_address);
-  } else {
-    klog_error("IMPOSIBLE: rsdp_version WAS NOT SET");
-    kernel_panic();
-  }
-
-  //TODO(Torin 2017-08-13) Make sure all RSDT data is valid before use
 
 
   { //NOTE(Torin) Initalize the lapic and configure the lapic timer
