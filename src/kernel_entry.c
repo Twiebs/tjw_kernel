@@ -14,9 +14,11 @@ typedef struct {
   Keyboard_State keyboard;
   Kernel_Memory_State memory_state;
   System_Info system_info;
-  Framebuffer framebuffer;
   Task_Info task_info;
   Ext2_Filesystem ext2_filesystem;
+
+  Desktop_Enviroment desktop_enviroment;
+  Graphics_Device *graphics_device;
 
 
   //TODO(Torin 2016-10-24) Dynamic USB_Devices
@@ -318,6 +320,12 @@ static inline void extract_initialization_info_from_multiboot2_tags(uint64_t mul
   }
 }
 
+static inline void kernel_debug_shell_loop() {
+  while(1) { 
+    shell_update(&globals.shell);
+  };
+}
+
 
 extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_physical_address) {
 	serial_debug_init();
@@ -373,26 +381,26 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
     kernel_panic();
   }
 
-  System_Info *sys = &globals.system_info;
-
+  System_Info *system = &globals.system_info;
+  system->run_mode = System_Run_Mode_DEBUG_SHELL;
 
   { //NOTE(Torin) Initalize the lapic and configure the lapic timer
     //NOTE(Torin) Arbitrarly maps the lapic and ioapic into the kernels virtual addresss space
     //And initalizes the iopapic and lapic
-    kassert(sys->lapic_physical_address != 0);
-    kassert(sys->ioapic_physical_address != 0);
-    sys->lapic_virtual_address = memory_map_physical_mmio(sys->lapic_physical_address, 1);
-    sys->ioapic_virtual_address = memory_map_physical_mmio(sys->ioapic_physical_address, 1);
+    kassert(system->lapic_physical_address != 0);
+    kassert(system->ioapic_physical_address != 0);
+    system->lapic_virtual_address = memory_map_physical_mmio(system->lapic_physical_address, 1);
+    system->ioapic_virtual_address = memory_map_physical_mmio(system->ioapic_physical_address, 1);
     
     static const uint64_t LAPIC_SIVR_REGISTER = 0xF0;
     static const uint32_t LAPIC_SIVR_ENABLE = 1 << 8;
     static const uint32_t LAPIC_VERSION_REGISTER = 0x30;
 
     asm volatile("cli");
-    lapic_write_register(sys->lapic_virtual_address, LAPIC_SIVR_REGISTER, 0x31 | LAPIC_SIVR_ENABLE);
+    lapic_write_register(system->lapic_virtual_address, LAPIC_SIVR_REGISTER, 0x31 | LAPIC_SIVR_ENABLE);
     asm volatile("sti");
 
-    uint32_t lapic_version_register = lapic_read_register(sys->lapic_virtual_address, LAPIC_VERSION_REGISTER);
+    uint32_t lapic_version_register = lapic_read_register(system->lapic_virtual_address, LAPIC_VERSION_REGISTER);
     uint32_t lapic_version = lapic_version_register & 0xFF;
     uint32_t lapic_max_lvt_entries = (lapic_version_register >> 16) & 0xFF;
 
@@ -439,13 +447,13 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
     //NOTE(Torin) Unmask the PIT timer interrupt
     write_port_uint8(PIC1_DATA_PORT, 0b11111110);
     //NOTE(Torin) Start the LAPIC Timer
-    lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_DIVIDE_CONFIG_REGISTER, LAPIC_TIMER_DIVIDE_2);
-    lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, 0xFFFFFFFF);
-    lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_IRQ_MASKED);
+    lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_DIVIDE_CONFIG_REGISTER, LAPIC_TIMER_DIVIDE_2);
+    lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, 0xFFFFFFFF);
+    lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_IRQ_MASKED);
     //NOTE(Torin) Count how many ticks the LAPIC decrements in 32 milliseconds
     globals.pit_timer_ticks = 0;
     while (globals.pit_timer_ticks <= 32) { asm volatile("nop"); }
-    uint32_t ticks_remaining = lapic_read_register(sys->lapic_virtual_address, LAPIC_TIMER_CURRENT_COUNT_REGISTER);  
+    uint32_t ticks_remaining = lapic_read_register(system->lapic_virtual_address, LAPIC_TIMER_CURRENT_COUNT_REGISTER);  
     uint32_t ticks_in_32_ms = 0xFFFFFFFF - ticks_remaining;
     uint32_t ticks_per_millisecond = ticks_in_32_ms / 32;
     if (ticks_per_millisecond == 0) {
@@ -459,22 +467,27 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
 
     //NOTE(Torin) Install main lapic timer interrupt handler
     _interrupt_handlers[2] = (uintptr_t)lapic_periodic_timer_interrupt_handler;
-    lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, ticks_per_millisecond);
-    lapic_write_register(sys->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_PERODIC_MODE); 
-    ioapic_initalize(sys->ioapic_virtual_address);
+    lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, ticks_per_millisecond);
+    lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_PERODIC_MODE); 
+    ioapic_initalize(system->ioapic_virtual_address);
   }
 
   _interrupt_handlers[2] = (uintptr_t)lapic_timer_interrupt; 
   //lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x22, 1);
 
-  initalize_cpu_info_and_start_secondary_cpus(sys);
+  initalize_cpu_info_and_start_secondary_cpus(system);
 
   pci_initialize_default_device_drivers();
   pci_enumerate_and_create_devices();
   pci_initialize_valid_devices();
 
+  if (system->run_mode == System_Run_Mode_DESKTOP_ENVIROMENT) {
+    desktop_enviroment_initialize(&globals.desktop_enviroment, globals.graphics_device);
+  }
 
-	while(1) { 
-    shell_update(&globals.shell);
-  };
+  if (system->run_mode == System_Run_Mode_DEBUG_SHELL) {
+    kernel_debug_shell_loop();
+  } else if (system->run_mode == System_Run_Mode_DESKTOP_ENVIROMENT) {
+    while (1) { desktop_enviroment_update(&globals.desktop_enviroment); }
+  }
 }

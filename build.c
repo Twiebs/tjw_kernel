@@ -51,6 +51,7 @@ exit
 #include "src/utils/math.h"
 #include "src/utils/memory.h"
 #include "src/utils/string.h"
+#include "src/utils/persistent_block_allocator.h"
 
 //Main System
 #include "src/descriptor_tables.h"
@@ -78,10 +79,14 @@ exit
 
 //Graphics
 #include "src/graphics/vga_mode_3.h"
-#include "src/graphics/vesa_framebuffer.h"
 #include "src/graphics/display.h"
+#include "src/graphics/software_renderer.h"
+#include "src/graphics/graphics_device.h"
+#include "src/graphics/bochs_graphics_device.h"
 #include "src/graphics/intel.h"
 
+//Desktop
+#include "src/desktop_enviroment/desktop_enviroment.h"
 
 //USB devices and drivers
 #include "src/usb/usb.h"
@@ -108,6 +113,7 @@ exit
 #include "src/utils/math.c"
 #include "src/utils/memory.c"
 #include "src/utils/string.c"
+#include "src/utils/persistent_block_allocator.c"
 
 //Filesystem Source files
 #include "src/filesystem/virtual_filesystem.c"
@@ -120,9 +126,13 @@ exit
 
 //Graphics Source files
 #include "src/graphics/vga_mode_3.c"
-#include "src/graphics/vesa_framebuffer.c"
-#include "src/graphics/intel.c"
 #include "src/graphics/display.c"
+#include "src/graphics/software_renderer.c"
+#include "src/graphics/bochs_graphics_device.c"
+#include "src/graphics/intel.c"
+
+//Desktop
+#include "src/desktop_enviroment/desktop_enviroment.c"
 
 //USB
 #include "src/usb/usb_protocol.c"

@@ -119,7 +119,7 @@ void memory_usable_range_add(uintptr_t address, uint64_t size) {
 //without any consideration for multipule physical page address consistancy
 uintptr_t memory_physical_4KB_page_acquire() {
   Kernel_Memory_State *memory = &globals.memory_state;
-  spinlock_acquire(&memory->physical_page_allocator_lock);
+  spin_lock_acquire(&memory->physical_page_allocator_lock);
   kassert(memory->current_usable_range != NULL);
   //NOTE(Torin 2017-08-11) If there are no more free pages in current_usable_range
   //we seek through the usable_range array and find the next range.  If the
@@ -138,7 +138,7 @@ uintptr_t memory_physical_4KB_page_acquire() {
     }
 
     if (next_usable_range == memory->current_usable_range) {
-      spinlock_release(&memory->physical_page_allocator_lock);
+      spin_lock_release(&memory->physical_page_allocator_lock);
       klog_error("OUT OF MEMORY");
       kernel_panic();
     }
@@ -147,7 +147,7 @@ uintptr_t memory_physical_4KB_page_acquire() {
   uintptr_t result = memory->current_usable_range->physical_address + 
     (memory->next_free_physical_page_index_in_current_range * 4096);
   memory->next_free_physical_page_index_in_current_range += 1;
-  spinlock_release(&memory->physical_page_allocator_lock);
+  spin_lock_release(&memory->physical_page_allocator_lock);
   klog_debug("[Memory] Allocated physical page: 0x%X", result);
   return result;
 }

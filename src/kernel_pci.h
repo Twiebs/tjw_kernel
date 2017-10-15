@@ -70,7 +70,7 @@ typedef struct {
   PCI_Device_Initialization_Procedure initialization_procedure;
 } PCI_Device_Driver;
 
-uintptr_t pci_get_base_address_0(PCI_Device *pci_device);
+uintptr_t pci_device_get_base_address_0(PCI_Device *pci_device);
 
 PCI_Device *pci_device_create(uint8_t bus_number, uint8_t device_number, uint8_t function_number);
 void pci_device_driver_create(uint8_t class_code, uint8_t subclass, uint8_t programming_interface,  uint16_t vendor_id, uint16_t device_id,

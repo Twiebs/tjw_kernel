@@ -47,6 +47,10 @@ static inline void write_port_uint8(uint16_t port, uint8_t value) {
 	asm volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
 }
 
+static inline void write_port_uint16(uint16_t port, uint16_t value) {
+  asm volatile ("outw %0, %1" : : "a"(value), "Nd"(port));
+}
+
 static inline void write_port_uint32(volatile uint16_t port, volatile uint32_t value){
   asm volatile ("outl %0, %1" : : "a"(value), "Nd"(port));
 }

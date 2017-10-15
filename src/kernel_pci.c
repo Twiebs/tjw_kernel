@@ -51,7 +51,7 @@ void pci_device_config_address_set(PCI_Device *pci_device, uint8_t register_numb
   pci_set_config_address(pci_device->bus_number, pci_device->device_number, pci_device->function_number, register_number);
 }
 
-uintptr_t pci_get_base_address_0(PCI_Device *pci_device) {
+uintptr_t pci_device_get_base_address_0(PCI_Device *pci_device) {
   pci_device_config_address_set(pci_device, 0x10);
   uint32_t base_address = pci_read_uint32();
   base_address &= 0xFFFFFFF0;
@@ -120,7 +120,10 @@ void pci_initialize_default_device_drivers() {
   pci_device_driver_create(PCI_Device_Class_DISPLAY_CONTROLLER, 0x00, 0x00,
     0xFFFF, 0x0000, "VGA Compatible Graphics Device", 0);
   pci_device_driver_create(PCI_Device_Class_DISPLAY_CONTROLLER, 0x00, 0x00,
-    0x8086, 0x0000, "Intel Graphics Device", intel_graphics_device_initialize);}
+    0x8086, 0x0000, "Intel Graphics Device", intel_graphics_device_initialize);
+  pci_device_driver_create(PCI_Device_Class_DISPLAY_CONTROLLER, 0x00, 0x00,
+    0x1234, 0x1111, "Bochs Graphics Device", bochs_graphics_device_initialize);
+}
 
 void pci_device_set_type_description(PCI_Device *pci_device) {
   System_Info *system = &globals.system_info;
@@ -233,8 +236,6 @@ PCI_Device_Driver *pci_find_matching_device_driver(PCI_Device *pci_device) {
 
   return result;
 }
-
-
 
 Error_Code pci_initialize_device(PCI_Device *pci_device) {
   System_Info *system = &globals.system_info;

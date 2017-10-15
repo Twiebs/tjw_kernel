@@ -84,8 +84,7 @@ isr_handler_general_protection_fault(Interrupt_Stack_Frame stack_frame) {
   }
 }
 
-static void 
-isr_handler_page_fault(Interrupt_Stack_Frame stack_frame) {
+static void isr_handler_page_fault(Interrupt_Stack_Frame stack_frame) {
 	static const uint64_t CAUSE_PROTECTION_VIOLATION_OR_NOT_PRESENT = (1 << 0);
 	static const uint64_t CAUSE_WRITE_OR_READ = (1 << 1);
 	static const uint64_t CAUSE_USER_OR_KERNEL = (1 << 2);

@@ -47,14 +47,9 @@ uint64_t syscall_handler_exit_process(volatile Interrupt_Stack_Frame_Basic stack
   return 0;
 }
 
-static void syscall_handler_get_framebuffer(Framebuffer *fb){
-  *fb = globals.framebuffer;
-}
-
 const uintptr_t g_syscall_procedures[] = {
   (uintptr_t)syscall_handler_print_string,
   (uintptr_t)syscall_handler_exit_process,
-  (uintptr_t)syscall_handler_get_framebuffer,
 };
 
 extern void isr_common_handler(Interrupt_Stack_Frame stack) {

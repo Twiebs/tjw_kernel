@@ -3,8 +3,7 @@
 //The register_physical_address paramater is obtained from the PCI configuration
 //space BAR0 address. 
 Error_Code intel_graphics_device_initialize(PCI_Device *pci_device)  {
-
-  uintptr_t base_physical_address = pci_get_base_address_0(pci_device);
+  uintptr_t base_physical_address = pci_device_get_base_address_0(pci_device);
   static const uintptr_t GMBUS_AND_IO_CONTROLL_OFFSET = 0x5000;
   //static const uintptr_t DISPLAY_PIPELINE_REGISTERS_OFFSET = 0x6000;
   uintptr_t gmbus_and_io_control_registers_physical_address = base_physical_address + GMBUS_AND_IO_CONTROLL_OFFSET;

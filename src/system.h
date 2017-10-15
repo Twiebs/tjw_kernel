@@ -5,6 +5,12 @@ typedef struct {
   uint8_t *temporary_memory;
 } CPU_Info;
 
+typedef enum {
+  System_Run_Mode_INVALID,
+  System_Run_Mode_DEBUG_SHELL,
+  System_Run_Mode_DESKTOP_ENVIROMENT,
+} System_Run_Mode;
+
 //NOTE(Torin) Many of the arrays in this structure are staticly allocated
 //fixed sized, and persistant. This is for testing purposes and will not be
 //the final implementation.
@@ -21,6 +27,9 @@ typedef struct {
   CPU_Info cpu_infos[32];
   Spin_Lock cpu_info_lock;
 
+  Persistent_Block_Allocator miscellaneous_device_allocator;
+  Spin_Lock miscellaneous_device_allocator_lock;
+
   //PCI Device Managment
   PCI_Device pci_devices[32];
   uint64_t pci_device_count;
@@ -33,9 +42,12 @@ typedef struct {
   //Memory Information and managment
   uintptr_t kernel_end;
   uintptr_t memory_begin;
+
+  System_Run_Mode run_mode;
 } System_Info;
 
 
+uint8_t *system_allocate_persistent_miscellaneous_device(size_t size);
 
 
 uint32_t cpu_get_id();
