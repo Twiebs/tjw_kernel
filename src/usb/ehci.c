@@ -624,6 +624,8 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device) {
     storage_device->device_ptr = device;
     storage_device->block_size = msd->logical_block_size;
     storage_device_initialize(storage_device);
+  } else {
+    klog_error("failed to create storage device!");
   }
   
   klog_info("[USB] Initialized USB device %X:%X %s %s", device->vendor_id, device->product_id,

@@ -43,6 +43,7 @@ typedef struct {
   uintptr_t kernel_end;
   uintptr_t memory_begin;
 
+
   System_Run_Mode run_mode;
 } System_Info;
 

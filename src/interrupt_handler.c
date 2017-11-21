@@ -23,10 +23,10 @@ static ExceptionHandlerProc g_exception_handlers[] = {
 
 extern void kprocess_destroy(){
   uint32_t cpu_id = cpu_get_id();
-  Thread_Context *running_thread = globals.task_info.running_threads[cpu_id];
-  uint64_t pid = running_thread->pid;
-  ktask_destroy_process(pid, &globals.task_info); 
-  klog_debug("destroyed pid: %lu", pid);
+  //Thread_Context *running_thread = globals.task_info.running_threads[cpu_id];
+  //uint64_t pid = running_thread->pid;
+  //ktask_destroy_process(pid, &globals.task_info); 
+  //klog_debug("destroyed pid: %lu", pid);
   asm volatile("int $0x20");
   while(1) { asm volatile("hlt"); }
 }

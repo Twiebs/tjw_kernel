@@ -1,4 +1,17 @@
 
+int64_t string_buffer_128_append_cstring(String_Buffer_128 *string_buffer, const char *cstring) {
+  const char *current = cstring;
+  while (*current != 0) {
+    if (string_buffer->length >= 128) {
+      development_only_runtime_soft_error();
+      return current - cstring;
+    }
+
+    string_buffer->data[string_buffer->length++] = *current;
+    current++;
+  }
+  return current - cstring;
+}
 
 void utf16_to_ascii(uint8_t *ascii, uint16_t *utf16, size_t utf16_length) {
   size_t step_count = utf16_length / 2;

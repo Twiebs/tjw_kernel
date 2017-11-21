@@ -14,8 +14,8 @@ typedef struct {
   Keyboard_State keyboard;
   Kernel_Memory_State memory_state;
   System_Info system_info;
-  Task_Info task_info;
-  Ext2_Filesystem ext2_filesystem;
+
+  Virtual_File_System virtual_file_system;
 
   Desktop_Enviroment desktop_enviroment;
   Graphics_Device *graphics_device;
@@ -56,16 +56,13 @@ Storage_Device *create_storage_device() {
 }
 
 #include "kernel_apic.c"
-
-
-
 #include "kernel_acpi.c"
 #include "descriptor_tables.c"
 #include "kernel_exceptions.c"
 #include "kernel_pci.c"
 #include "kernel_debug.c"
 #include "hardware_keyboard.c"
-
+#include "development_diagnostics.h"
 
 static IDT_Entry _idt[256];
 static uintptr_t _interrupt_handlers[256];
@@ -175,8 +172,7 @@ static void idt_install_all_interrupts() {
 #include "multiboot2.h"
 #include "hardware_serial.c"
 
-extern void
-ap_entry_procedure(void){
+extern void ap_entry_procedure(void){
   asm volatile("hlt");
 }
 
@@ -201,7 +197,7 @@ void initalize_cpu_info_and_start_secondary_cpus(System_Info *system) {
   klog_info("initalizing cpu infos...");
   extern uintptr_t stack_top; //This is the temp stack created in asm
   CPU_Info *cpu_info = &system->cpu_infos[0];
-  cpu_info->kernel_stack_top = stack_top;
+  cpu_info->kernel_stack_top = (uint64_t)&stack_top;
   cpu_info->temporary_memory = memory_allocate_persistent_virtual_pages(2);
   initalize_task_state_segment(cpu_info);
 
@@ -275,6 +271,19 @@ typedef struct {
   int rsdp_version;
 } Primary_CPU_Initialization_Info;
 
+
+static inline void multiboot2_get_elf_section_info(struct multiboot_tag_elf_sections *elf_sections) {
+  development_only_runtime_assert(elf_sections != NULL);
+  development_only_runtime_assert(elf_sections->type == MULTIBOOT_TAG_TYPE_ELF_SECTIONS);
+  ELF_Section_Header *string_table_section = ((ELF_Section_Header *)elf_sections->sections) + elf_sections->shndx;
+  const char *string_table = (const char *)string_table_section->virtualAddress;
+  for (size_t i = 0; i < elf_sections->num; i++) {
+    ELF_Section_Header *section = (ELF_Section_Header *)(elf_sections->sections + (i * elf_sections->entsize));
+    const char *name = section->name_offset + string_table;
+    klog_debug("%s", name);
+  }
+}
+
 static inline void extract_initialization_info_from_multiboot2_tags(uint64_t multiboot2_magic, uint64_t multiboot2_address, Primary_CPU_Initialization_Info *initialization_info) {
   if (multiboot2_magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
     klog_error("the kernel was not booted with a multiboot2 compliant bootloader!");
@@ -296,11 +305,19 @@ static inline void extract_initialization_info_from_multiboot2_tags(uint64_t mul
         initialization_info->rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
         initialization_info->rsdp_version = 1;
       } break;
+
       case MULTIBOOT_TAG_TYPE_ACPI_NEW: {
         struct multiboot_tag_new_acpi *acpi_info = (struct multiboot_tag_new_acpi *)(tag);
         initialization_info->rsdp_physical_address = (uintptr_t)acpi_info->rsdp;
         initialization_info->rsdp_version = 2;
       } break;
+
+#if 0
+      case MULTIBOOT_TAG_TYPE_ELF_SECTIONS: {
+        struct multiboot_tag_elf_sections *elf_sections = (struct multiboot_tag_elf_sections *)(tag);
+        multiboot2_get_elf_section_info(elf_sections);
+      } break;
+#endif    
 
       case MULTIBOOT_TAG_TYPE_MMAP: mmap_tag = (struct multiboot_tag_mmap *)(tag); break;
 
@@ -485,6 +502,7 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
     desktop_enviroment_initialize(&globals.desktop_enviroment, globals.graphics_device);
   }
 
+  system->run_mode = System_Run_Mode_DEBUG_SHELL;
   if (system->run_mode == System_Run_Mode_DEBUG_SHELL) {
     kernel_debug_shell_loop();
   } else if (system->run_mode == System_Run_Mode_DESKTOP_ENVIROMENT) {

@@ -12,8 +12,9 @@ typedef enum {
 } VFS_Node_Type;
 
 typedef struct {
-  char name[256];
   VFS_Node_Type type;
+  char name[256];
+  size_t name_length;
   uint64_t inode;
 } VFS_Node_Info;
 
@@ -25,13 +26,17 @@ typedef struct {
   uint64_t modified_time; 
 } VFS_Node_Handle;
 
-typedef struct {
 
+struct Ext2_Filesystem;
+
+typedef struct {
+  //TOOD(Torin, 2017-10-23) obviously this must be abstracted!
+  void *root;
 } Virtual_File_System;
 
 typedef void(*VFS_Node_Info_Procedure)(VFS_Node_Info *, void *);
 
-Error_Code vfs_aquire_node_handle(const char *path, size_t path_length, VFS_Node_Handle *out_handle);
+Error_Code vfs_acquire_node_handle(const char *path, size_t path_length, VFS_Node_Handle *out_handle);
 Error_Code vfs_release_node_handle(VFS_Node_Handle *handle);
 Error_Code vfs_node_read_file(VFS_Node_Handle *handle, uint64_t offset, uint64_t size, uint8_t *virtual_address);
 Error_Code vfs_node_iterate_directory(VFS_Node_Handle *handle, VFS_Node_Info_Procedure procedure, void *userdata);

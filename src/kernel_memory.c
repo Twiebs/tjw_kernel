@@ -19,8 +19,7 @@ Page_Table *memory_get_page_table_address(Page_Table *table, uint64_t index) {
   return result;
 }
 
-
-uintptr_t memory_get_physical_address(uintptr_t virtual_address) {
+Physical_Address memory_get_physical_address(Virtual_Address virtual_address) {
   uintptr_t p4_index = memory_p4_index_of_virtual_address(virtual_address);
   uintptr_t p3_index = memory_p3_index_of_virtual_address(virtual_address);
   uintptr_t p2_index = memory_p2_index_of_virtual_address(virtual_address);
@@ -59,6 +58,11 @@ void memory_tlb_flush() {
   asm volatile("mov rax, cr3");
   asm volatile("mov cr3, rax");
   asm volatile(".att_syntax prefix");
+}
+
+static uint8_t temporary_block[4096];
+uint8_t *reserve_temporary_block() {
+  return temporary_block;
 }
 
 
@@ -148,7 +152,7 @@ uintptr_t memory_physical_4KB_page_acquire() {
     (memory->next_free_physical_page_index_in_current_range * 4096);
   memory->next_free_physical_page_index_in_current_range += 1;
   spin_lock_release(&memory->physical_page_allocator_lock);
-  klog_debug("[Memory] Allocated physical page: 0x%X", result);
+  //klog_debug("[Memory] Allocated physical page: 0x%X", result);
   return result;
 }
 
@@ -181,7 +185,7 @@ void memory_map_physical_to_virtual(uintptr_t physical_page, uintptr_t virtual_a
   p1_table->entries[p1_index] |= PAGE_PRESENT_BIT;
   p1_table->entries[p1_index] |= PAGE_WRITEABLE_BIT;
   memory_tlb_flush();
-  klog_debug("[Memory] Mapped physical page: 0x%X to virtual address: 0x%X", physical_page, virtual_address);
+  //klog_debug("[Memory] Mapped physical page: 0x%X to virtual address: 0x%X", physical_page, virtual_address);
 }
 
 void memory_unmap_virtual_address(uintptr_t virtual_address) {

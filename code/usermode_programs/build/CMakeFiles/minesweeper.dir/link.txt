@@ -1,0 +1,1 @@
+/usr/bin/cc -nostdlib  -rdynamic CMakeFiles/minesweeper.dir/minesweeper/minesweeper.o  -o minesweeper 

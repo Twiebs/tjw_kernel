@@ -1,11 +1,6 @@
 
-typedef struct {
-  uintptr_t value;
-} Physical_Address;
-
-typedef struct {
-  uintptr_t value;
-} Virtual_Address;
+typedef uint64_t Physical_Address;
+typedef uint64_t Virtual_Address;
 
 typedef struct {
   uintptr_t physical_address;

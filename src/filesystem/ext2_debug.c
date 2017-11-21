@@ -51,11 +51,11 @@ void ext2_debug_log_group_descriptor(Ext2_Block_Group_Descriptor *descriptor){
   klog_debug("directory_count: %u", (uint32_t)descriptor->directory_count); 
 }
 
-void ext2_debug_log_fs_info(Ext2_Filesystem *extfs){
+void ext2fs_debug_log_filesystem_info(Ext2_Filesystem *ext2fs){
   klog_debug("extfs_info:");
-  klog_debug(" inode_count_per_goup: %u", extfs->inode_count_per_group);
-  klog_debug(" inode_size: %u", extfs->inode_size);
-  klog_debug(" block_size: %u", extfs->block_size);
-  klog_debug(" sectors_per_block: %u", extfs->sectors_per_block);
+  klog_debug(" inode_count_per_goup: %u", ext2fs->inode_count_per_group);
+  klog_debug(" inode_size: %u", ext2fs->inode_size);
+  klog_debug(" block_size: %u", ext2fs->block_size);
+  klog_debug(" sectors_per_block: %u", ext2fs->sectors_per_block);
   //klog_debug(" buffer_physical_address: 0x%X", (uint64_t)extfs->buffer_physical_address);
 }

@@ -9,6 +9,7 @@ typedef enum {
   Error_Code_HARDWARE_TIMEOUT,
   Error_Code_HARDWARE_FEATURE_UNAVAILABLE,
   Error_Code_OUT_OF_MEMORY,
+  Error_Code_INVALID_PROCEDURE_PARAMETERS,
 } Error_Code;
 
 const char *Error_Name[] = {
@@ -17,8 +18,9 @@ const char *Error_Name[] = {
   "Invalid Data",
   "Unsupported Feature",
   "VFS_NODE_NOT_FOUND",
+  "Timeout",
   "Error_Code_HARDWARE_TIMEOUT",
   "Error_Code_HARDWARE_FEATURE_UNAVAILABLE",
   "Error_Code_OUT_OF_MEMORY",
-  "Timeout",
+  "Error_Code_INVALID_PROCEDURE_PARAMETERS",
 };

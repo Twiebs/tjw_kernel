@@ -16,8 +16,8 @@ Error_Code ext2_inode_read(Ext2_Filesystem *extfs, uint32_t inode_number, Ext2_I
   strict_assert(extfs->inode_count_per_group > 0);
   strict_assert(extfs->block_size > 0);
   strict_assert(extfs->inode_size > 0);
-
-  uint8_t buffer[4096] = {};
+  klog_debug("reading inode %u...", inode_number);
+  uint8_t *temp_buffer = reserve_temporary_block();
 
   uint32_t descriptors_per_block = extfs->block_size / sizeof(Ext2_Block_Group_Descriptor);
   uint32_t group_descriptor_index = (inode_number - 1) / extfs->inode_count_per_group;
@@ -26,23 +26,26 @@ Error_Code ext2_inode_read(Ext2_Filesystem *extfs, uint32_t inode_number, Ext2_I
   uint32_t group_block_index = group_descriptor_index % descriptors_per_block;
 
   //TODO(Torin: 2017-08-06) Change plus 1 to actual offset to block group descriptor table
-  if (ext2_block_read(extfs, group_block_number + 1, buffer)) {
+  if (ext2_block_read(extfs, group_block_number + 1, temp_buffer)) {
     klog_error("failed to read group descriptor table");
     return Error_Code_FAILED_READ;
   }
 
-  Ext2_Block_Group_Descriptor *group_descriptor = (Ext2_Block_Group_Descriptor *)&buffer[group_block_index*sizeof(Ext2_Block_Group_Descriptor)];
-  uint32_t inode_table_start_block = group_descriptor->inode_table_block_number;
+  Ext2_Block_Group_Descriptor *group_descriptor = (Ext2_Block_Group_Descriptor *)&temp_buffer[group_block_index*sizeof(Ext2_Block_Group_Descriptor)];
+  ext2_debug_log_group_descriptor(group_descriptor);
 
+  uint32_t inode_table_start_block = group_descriptor->inode_table_block_number;
   uint32_t inode_table_block_number = (inode_table_index * extfs->inode_size) / extfs->block_size;
   uint32_t inode_table_block_offset = (inode_table_index * extfs->inode_size) % extfs->block_size;
-  if (ext2_block_read(extfs, inode_table_start_block + inode_table_block_number, buffer)) {
+  if (ext2_block_read(extfs, inode_table_start_block + inode_table_block_number, temp_buffer)) {
     klog_error("failed to read inode table");
     return Error_Code_FAILED_READ;
   }
 
-  Ext2_Inode *inode = (Ext2_Inode *)(buffer + inode_table_block_offset);
+  Ext2_Inode *inode = (Ext2_Inode *)(temp_buffer + inode_table_block_offset);
   *out_inode = *inode;
+  klog_debug("Read Inode %u!", inode_number);
+  ext2_debug_log_inode(inode);
   return Error_Code_NONE;
 }
 
@@ -73,7 +76,6 @@ Error_Code ext2_inode_get_data_block_number(Ext2_Filesystem *ext2fs, Ext2_Inode 
   kassert(false);
   return Error_Code_NONE;
 }
-
 
 Error_Code ext2_inode_read_data(Ext2_Filesystem *ext2fs, Ext2_Inode *inode, uint64_t offset, uint64_t size, uint8_t *buffer) {
   uint32_t start_block_number = offset / ext2fs->block_size;
@@ -125,7 +127,7 @@ Error_Code ext2_inode_read_data(Ext2_Filesystem *ext2fs, Ext2_Inode *inode, uint
 Error_Code ext2_find_inode_in_directory_from_name_string(Ext2_Filesystem *ext2fs, Ext2_Inode *directory_inode, 
 const char *name, size_t name_length, uint8_t *scratch_memory, uint32_t *result_inode_number) {
   if (directory_inode->type != EXT2_INODE_TYPE_DIRECTORY) {
-    klog_error("inode is not a directory");
+    klog_error("input directory inode is not a directory when searching for %.*s", (int)name_length, name);
     return Error_Code_INVALID_DATA;
   }
 
@@ -222,5 +224,6 @@ Error_Code ext2_file_system_initalize(Ext2_Filesystem *extfs, Storage_Device *st
   }
 
   extfs->sectors_per_block = extfs->block_size / storage_device->block_size;
+  ext2fs_debug_log_filesystem_info(extfs);
   return Error_Code_NONE;
 }

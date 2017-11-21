@@ -1,0 +1,7 @@
+
+#define ALLAY_SYSTEM_CALL_BODY(SYSTEM_CALL_INDEX) asm volatile("mov $" #SYSTEM_CALL_INDEX ", %rax"); asm volatile("int $0x80")
+#define ALLAY_DEFINE_SYSTEM_CALL(SYSTEM_CALL_INDEX, SYSTEM_CALL_NAME, ...)
+
+static const uint64_t ALLAY_SYSTEM_CALL_INDEX_GET_FRAMEBUFFER_INFO = 3;
+static const uint64_t ALLAY_SYSTEM_CALL_INDEX_GET_WINDOW_INFO = 4;
+

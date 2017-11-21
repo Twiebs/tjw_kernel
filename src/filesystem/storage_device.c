@@ -7,6 +7,8 @@ Error_Code storage_device_initialize(Storage_Device *storage_device) {
     return Error_Code_FAILED_READ;
   }
 
+  
+
   MBR_Partition_Table *partition_table = (MBR_Partition_Table *)(temporary_buffer + 0x1BE);
   for (size_t partition_index = 0; partition_index < 4; partition_index++) {
     //NOTE(Torin) If a MBR partition is unused all fields will be zero.
@@ -25,8 +27,14 @@ Error_Code storage_device_initialize(Storage_Device *storage_device) {
     if (partition_table->system_id == MBR_Partition_Type_LINUX_FILESYSTEM) {
       //TODO(Torin: 2017-07-26) Where should this come from?
       partition->file_system_type = File_System_Type_EXT2;
-      Ext2_Filesystem *extfs = &globals.ext2_filesystem;
-      ext2_file_system_initalize(extfs, storage_device, current_partition_index);
+      Virtual_File_System *vfs = system_get_virtual_file_system();
+      if (vfs->root == NULL) {
+        Ext2_Filesystem *ext2fs = (Ext2_Filesystem *)system_allocate_persistent_miscellaneous_device(sizeof(Ext2_Filesystem));
+        vfs->root = (void *)ext2fs;
+        ext2_file_system_initalize(ext2fs, storage_device, current_partition_index);
+      } else {
+        klog_warning("Did not mount storage device: Root is already mounted");
+      }
     }
     partition_table++;
   }

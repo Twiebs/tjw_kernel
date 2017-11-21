@@ -57,6 +57,7 @@ void shell_execute_command(Command_Line_Shell *shell) {
             return;
           } else { 
             command->procedure(&parameter_info);
+            klog_debug("returned!");
             shell_clear_input_buffer(shell);
             return;
           }
@@ -153,8 +154,6 @@ void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log) {
     vga_write_string(entry->message + message_offset, message_chars_to_write, color, length_of_tag_to_write, i);
   }
 
-
-
   size_t input_buffer_to_write = min(shell->characters_per_line, shell->input_buffer_count);
   for (size_t i = 0; i < input_buffer_to_write; i++) {
     vga_set_char(shell->input_buffer[i], VGA_Color_RED, i, 25 - 1); 
@@ -195,4 +194,6 @@ void shell_initialize(Command_Line_Shell *shell) {
   shell_command_register(shell, "cd", 1, shell_command_cd);
   shell_command_register(shell, "cat", 1, shell_command_cat);
   shell_command_register(shell, "lspci", 0, shell_command_lspci);
+  shell_command_register(shell, "run", 1, shell_command_run);
+  shell_command_register(shell, "q", 0, shell_command_lazy);
 }

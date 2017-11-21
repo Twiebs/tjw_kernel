@@ -26,19 +26,18 @@ exit
 #endif//BUILD_DEBUG
 
 #if defined(BUILD_IS_RUNNING)
-  nasm -fbin src/secondary_cpu_init.asm -o trampoline.bin
+  nasm -fbin src/secondary_cpu_init.asm -o trampoline.bin 
   bin/bin_to_txt trampoline.bin src/trampoline.txt
-
-	gcc COMPILER_FLAGS -m64 -mno-red-zone -nostdlib -ffreestanding -fno-stack-protector -I ../tjw_kernel/src -c build.c -o build.c.o
-	nasm -felf64 src/primary_cpu_init.asm -isrc/ -o primary_cpu_init.asm.o
-	nasm -felf64 src/x86_64_entry.asm -isrc/ -o x86_64_entry.asm.o
+  gcc COMPILER_FLAGS -m64 -mno-red-zone -nostdlib -ffreestanding -fno-stack-protector -I ../tjw_kernel/src -c build.c -o build.c.o
+  nasm -felf64 src/primary_cpu_init.asm -isrc/ -o primary_cpu_init.asm.o
+  nasm -felf64 src/x86_64_entry.asm -isrc/ -o x86_64_entry.asm.o
   ld -melf_x86_64 -n -T kernel_link.ld -o bin/kernel build.c.o x86_64_entry.asm.o primary_cpu_init.asm.o
   objcopy --only-keep-debug bin/kernel bin/debug_symbols
-	//objcopy --strip-debug bin/kernel bin/kernel
+  //objcopy --strip-debug bin/kernel bin/kernel
 
-	rm *.o
+  rm *.o
   rm *.bin
-	exit
+  exit
 #endif
 
 #include <stdint.h>
@@ -53,16 +52,19 @@ exit
 #include "src/utils/string.h"
 #include "src/utils/persistent_block_allocator.h"
 
+
 //Main System
+#include "src/tasking/lock.h"
 #include "src/descriptor_tables.h"
-#include "src/kernel_synch.h"
 #include "src/kernel_pci.h"
 #include "src/system.h"
 #include "src/kernel.h"
 #include "src/hardware_keyboard.h"
 #include "src/kernel_log.h"
 #include "src/kernel_memory.h"
+#include "src/elf64.h"	
 #include "src/interrupt_handler.h"
+
 
 
 #include "src/kernel_task.h"
@@ -75,6 +77,9 @@ exit
 #include "src/filesystem/virtual_filesystem.h"
 #include "src/filesystem/storage_device.h"
 #include "src/filesystem/ext2_filesystem.h"
+
+#include "src/utils/buffered_file_reader.h"
+
 #include "src/filesystem/ext2_debug.h"
 
 //Graphics
@@ -87,6 +92,7 @@ exit
 
 //Desktop
 #include "src/desktop_enviroment/desktop_enviroment.h"
+#include "src/tasking/elf64_loader.h" 
 
 //USB devices and drivers
 #include "src/usb/usb.h"
@@ -114,6 +120,7 @@ exit
 #include "src/utils/memory.c"
 #include "src/utils/string.c"
 #include "src/utils/persistent_block_allocator.c"
+#include "src/utils/buffered_file_reader.c"
 
 //Filesystem Source files
 #include "src/filesystem/virtual_filesystem.c"
@@ -133,6 +140,7 @@ exit
 
 //Desktop
 #include "src/desktop_enviroment/desktop_enviroment.c"
+#include "src/tasking/elf64_loader.c"
 
 //USB
 #include "src/usb/usb_protocol.c"

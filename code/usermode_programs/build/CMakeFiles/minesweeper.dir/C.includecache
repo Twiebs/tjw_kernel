@@ -1,0 +1,18 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../../usermode_library/allay_graphics.h
+stdint.h
+-
+
+/home/torin/workspace/tjw_kernel/code/usermode_programs/minesweeper/minesweeper.c
+allay_graphics.h
+-
+stddef.h
+-
+

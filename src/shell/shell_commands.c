@@ -14,7 +14,7 @@ void print_directory_entries(VFS_Node_Info *info, void *userdata) {
 void shell_command_ls(Shell_Command_Parameter_Info *parameter_info) {
   Command_Line_Shell *shell = &globals.shell;
   VFS_Node_Handle handle = {};
-  if (vfs_aquire_node_handle(shell->current_directory, shell->current_directory_count, &handle)) {
+  if (vfs_acquire_node_handle(shell->current_directory, shell->current_directory_count, &handle)) {
     klog_error("ls: failed to get handle %.*s", (int)shell->current_directory_count, shell->current_directory);
     return;
   }
@@ -46,7 +46,7 @@ void shell_command_cat(Shell_Command_Parameter_Info *parameter_info) {
   }
 
   VFS_Node_Handle handle = {};
-  if (vfs_aquire_node_handle(path, path_length, &handle)) {
+  if (vfs_acquire_node_handle(path, path_length, &handle)) {
     klog_error("cat: failed to get handle %.*s", (int)path_length, path);
     return;
   }
@@ -70,4 +70,15 @@ void shell_command_lspci(Shell_Command_Parameter_Info *parameter_info) {
       pci_device->device_number, pci_device->function_number, pci_device->type_description,
       pci_device->subclass, pci_device->programming_interface, pci_device->vendor_id, pci_device->device_id);
   }
+}
+
+void shell_command_run(Shell_Command_Parameter_Info *parameter_info) {
+  Shell_Command_Parameter *path_param = &parameter_info->parameters[0];
+  const char *path = path_param->text;
+  size_t path_length = path_param->length;
+  process_create_from_elf64_file_string(path, path_length);
+}
+
+void shell_command_lazy(Shell_Command_Parameter_Info *parameter_info) {
+  process_create_from_elf64_file_string("/programs/minesweeper", sizeof("/programs/minesweeper") - 1);
 }

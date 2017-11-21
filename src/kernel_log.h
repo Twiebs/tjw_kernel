@@ -18,6 +18,7 @@ typedef enum {
   Log_Category_VFS,
   Log_Category_SYSTEM,
   Log_Category_PCI,
+  Log_Category_DESKTOP,
   Log_Category_COUNT
 } Log_Category;
 
@@ -28,7 +29,18 @@ static const char * LOG_CATEGORY_NAMES[] = {
   "VFS",
   "System",
   "PCI",
+  "DESKTOP",
   "__COUNT__"
+};
+
+static const char * LOG_CATEGORY_TAGS[] = {
+  "[Default] ",
+  "[Debug0] ",
+  "[Memory] ",
+  "[VFS] ",
+  "[System] ",
+  "[PCI] ",
+  "[Desktop] "
 };
 
 typedef struct {
@@ -58,3 +70,8 @@ void klog_remove_last_input_character(Circular_Log *log);
 void klog_submit_input_to_shell(Circular_Log *log);
 void klog_disable();
 void klog_enable();
+
+#define log_enable(category) klog_enable_category(&globals.log, Log_Category_##category)
+#define log_disable(category) klog_disable_category(&globals.log, Log_Category_##category)
+#define log_error(category, ...) klog_write_fmt(&globals.log, Log_Category_##category, Log_Level_ERROR, __VA_ARGS__)
+#define log_debug(category, ...) klog_write_fmt(&globals.log, Log_Category_##category, Log_Level_DEBUG, __VA_ARGS__)

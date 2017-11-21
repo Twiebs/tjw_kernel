@@ -1,0 +1,3 @@
+/home/torin/workspace/tjw_kernel/code/usermode_programs/build/CMakeFiles/rebuild_cache.dir
+/home/torin/workspace/tjw_kernel/code/usermode_programs/build/CMakeFiles/minesweeper.dir
+/home/torin/workspace/tjw_kernel/code/usermode_programs/build/CMakeFiles/edit_cache.dir

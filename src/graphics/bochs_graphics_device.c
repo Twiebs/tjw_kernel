@@ -65,6 +65,9 @@ Error_Code bochs_graphics_device_set_display_mode(Bochs_Graphics_Device *bochs_g
   bochs_graphics_device->framebuffer_b.data = (uint8_t *)(frambuffer_virtual_address + 
   	(display_mode->horizontal_resolution * display_mode->vertical_resolution * 4));
   bochs_graphics_device->current_framebuffer = &bochs_graphics_device->framebuffer_b;
+
+  bochs_graphics_device->base.width = display_mode->horizontal_resolution;
+  bochs_graphics_device->base.height = display_mode->vertical_resolution;
   return Error_Code_NONE;
 }
 
@@ -82,17 +85,7 @@ Error_Code bochs_graphics_device_initialize(PCI_Device *pci_device) {
 
   bochs_graphics_device->base.get_back_buffer = bochs_graphics_device_get_back_buffer;
   bochs_graphics_device->base.swap_buffers = bochs_graphics_device_swap_buffers;
-
-  Display_Mode display_mode = {};
-  //display_mode.horizontal_resolution = 1792;
-  //display_mode.vertical_resolution = 1008;
-  display_mode.horizontal_resolution = 1280;
-  display_mode.vertical_resolution = 720;
-  bochs_graphics_device->base.width = display_mode.horizontal_resolution;
-  bochs_graphics_device->base.height = display_mode.vertical_resolution;
-  Error_Code result = bochs_graphics_device_set_display_mode(bochs_graphics_device, &display_mode);
-  klog_debug("bochs_graphics_device initialized");
   globals.graphics_device = &bochs_graphics_device->base;
-  globals.system_info.run_mode = System_Run_Mode_DESKTOP_ENVIROMENT;
-  return result;
+  klog_debug("bochs_graphics_device initialized");
+  return Error_Code_NONE;
 }

@@ -33,15 +33,7 @@ typedef struct {
   Shell_Command commands[64];
   uint64_t command_count;
   Shell_Command_Parameter_Info parameter_info;
-  
 } Command_Line_Shell;
-
-static const char * LOG_CATEGORY_TAGS[] = {
-  "[Default] ",
-  "[Debug0] ",
-  "[Memory] ",
-  "[VFS] ",
-};
 
 void shell_initialize(Command_Line_Shell *shell);
 void shell_update(Command_Line_Shell *shell);
