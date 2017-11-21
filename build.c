@@ -65,10 +65,6 @@ exit
 #include "src/elf64.h"	
 #include "src/interrupt_handler.h"
 
-
-
-#include "src/kernel_task.h"
-
 //Shell
 #include "src/shell/command_line_shell.h"
 #include "src/shell/shell_commands.h"
@@ -112,7 +108,6 @@ exit
 #include "src/interrupt_handler.c"
 #include "src/kernel_log.c"
 #include "src/system.c" 
-#include "src/kernel_task.c"
 #include "src/kernel_memory.c"
 
 //Utilities Source Files
