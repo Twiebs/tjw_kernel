@@ -173,7 +173,7 @@ static void idt_install_all_interrupts() {
 
 #include "multiboot2.h"
 #include "hardware_serial.c"
-#include "core/primary_cpu_initialization.c"
+#include "system/primary_cpu_initialization.c"
 
 extern void ap_entry_procedure(void){
   asm volatile("hlt");
@@ -344,96 +344,18 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
   System_Info *system = &globals.system_info;
   system->run_mode = System_Run_Mode_DEBUG_SHELL;
 
-  { //NOTE(Torin) Initalize the lapic and configure the lapic timer
-    //NOTE(Torin) Arbitrarly maps the lapic and ioapic into the kernels virtual addresss space
-    //And initalizes the iopapic and lapic
-    kassert(system->lapic_physical_address != 0);
-    kassert(system->ioapic_physical_address != 0);
-    system->lapic_virtual_address = memory_map_physical_mmio(system->lapic_physical_address, 1);
-    system->ioapic_virtual_address = memory_map_physical_mmio(system->ioapic_physical_address, 1);
-    
-    static const uint64_t LAPIC_SIVR_REGISTER = 0xF0;
-    static const uint32_t LAPIC_SIVR_ENABLE = 1 << 8;
-    static const uint32_t LAPIC_VERSION_REGISTER = 0x30;
+  kassert(system->lapic_physical_address != 0);
+  kassert(system->ioapic_physical_address != 0);
+  system->lapic_virtual_address = memory_map_physical_mmio(system->lapic_physical_address, 1);
+  system->ioapic_virtual_address = memory_map_physical_mmio(system->ioapic_physical_address, 1);
 
-    asm volatile("cli");
-    lapic_write_register(system->lapic_virtual_address, LAPIC_SIVR_REGISTER, 0x31 | LAPIC_SIVR_ENABLE);
-    asm volatile("sti");
+  lapic_initialize(system->lapic_virtual_address);
 
-    uint32_t lapic_version_register = lapic_read_register(system->lapic_virtual_address, LAPIC_VERSION_REGISTER);
-    uint32_t lapic_version = lapic_version_register & 0xFF;
-    uint32_t lapic_max_lvt_entries = (lapic_version_register >> 16) & 0xFF;
-
-    static const uint32_t LAPIC_TIMER_IRQ_NUMBER_REGISTER = 0x320;
-    static const uint32_t LAPIC_TIMER_INITAL_COUNT_REGISTER = 0x380;
-    static const uint32_t LAPIC_TIMER_CURRENT_COUNT_REGISTER = 0x390;
-    static const uint32_t LAPIC_TIMER_DIVIDE_CONFIG_REGISTER = 0x3E0;
-
-    static const uint32_t LAPIC_TIMER_IRQ_MASKED = 1 << 16;
-    static const uint32_t LAPIC_TIMER_DIVIDE_2 = 0b00;
-    static const uint32_t LAPIC_TIMER_DIVIDE_4 = 0b01;
-    static const uint32_t LAPIC_TIMER_DIVIDE_8 = 0b10;
-    static const uint32_t LAPIC_TIMER_DIVIDE_16 = 0b11;
-    static const uint32_t LAPIC_TIMER_PERODIC_MODE = 0x20000; 
-
-    klog_info("initalzing lapic timer");
-
-    { //NOTE(Torin) Configure the PIT Timer 
-      static const uint8_t PIT_CHANNEL0_DATA_PORT = 0x40;
-      static const uint8_t PIT_COMMAND_PORT = 0x43;
-      static const uint8_t COMMAND_CHANNEL0 = (0b00) << 6;
-      static const uint8_t COMMAND_ACCESS_LOW_AND_HIGH = (0b11) << 4;
-      static const uint8_t COMMAND_MODE_SQUARE_WAVE = 0x06; 
-      static const uint8_t COMMAND_MODE_RATE_GENERATOR = 0x04; 
-      static const uint32_t PIT_BASE_FREQUENCY = 1193182;
-
-      static const uint8_t COUNTER0 = 0x00;
-      static const uint8_t RW_LOW_HIGH_MODE = 0x30;
-
-      uint32_t requested_frequency = 1000;
-      kassert(requested_frequency > 18);
-      kassert(requested_frequency < 1193181);
-      //set timer mode
-      write_port_uint8(PIT_COMMAND_PORT, COUNTER0 | COMMAND_MODE_RATE_GENERATOR | RW_LOW_HIGH_MODE);
-      //Set the divisor
-      uint32_t divisor = PIT_BASE_FREQUENCY / requested_frequency;
-      uint8_t divisor_low = (uint8_t)(divisor & 0xFF);
-      uint8_t divisor_high = (uint8_t)((divisor >> 8) & 0xFF);
-      write_port_uint8(PIT_CHANNEL0_DATA_PORT, divisor_low);
-      write_port_uint8(PIT_CHANNEL0_DATA_PORT, divisor_high);
-    }
-
-    static const uint8_t PIC1_DATA_PORT = 0x21; 
-    //NOTE(Torin) Unmask the PIT timer interrupt
-    write_port_uint8(PIC1_DATA_PORT, 0b11111110);
-    //NOTE(Torin) Start the LAPIC Timer
-    lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_DIVIDE_CONFIG_REGISTER, LAPIC_TIMER_DIVIDE_2);
-    lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, 0xFFFFFFFF);
-    lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_IRQ_MASKED);
-    //NOTE(Torin) Count how many ticks the LAPIC decrements in 32 milliseconds
-    globals.pit_timer_ticks = 0;
-    while (globals.pit_timer_ticks <= 32) { asm volatile("nop"); }
-    uint32_t ticks_remaining = lapic_read_register(system->lapic_virtual_address, LAPIC_TIMER_CURRENT_COUNT_REGISTER);  
-    uint32_t ticks_in_32_ms = 0xFFFFFFFF - ticks_remaining;
-    uint32_t ticks_per_millisecond = ticks_in_32_ms / 32;
-    if (ticks_per_millisecond == 0) {
-      klog_error("error initializing lapic timer");
-      return;
-    }
-
-    //klog_debug("ticks_per_millisecond: %u", ticks_per_millisecond);
-    //NOTE(Torin 2016-10-15) Disable PIT timer interrupt for PIC
-    write_port_uint8(PIC1_DATA_PORT, 0b11111111); 
-
-    //NOTE(Torin) Install main lapic timer interrupt handler
-    _interrupt_handlers[2] = (uintptr_t)lapic_periodic_timer_interrupt_handler;
-    lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, ticks_per_millisecond);
-    lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_PERODIC_MODE); 
-    ioapic_initalize(system->ioapic_virtual_address);
-  }
-
+  _interrupt_handlers[2] = (uintptr_t)lapic_periodic_timer_interrupt_handler;
+  lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, 0xFFFF);
+  lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_PERODIC_MODE); 
+  ioapic_initalize(system->ioapic_virtual_address);
   _interrupt_handlers[2] = (uintptr_t)lapic_timer_interrupt; 
-  //lapic_configure_timer(sys->lapic_virtual_address, 0xFFFF, 0x22, 1);
 
   initalize_cpu_info_and_start_secondary_cpus(system);
 

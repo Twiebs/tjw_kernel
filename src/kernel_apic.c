@@ -125,8 +125,7 @@ lapic_wait_milliseconds(uint32_t ms){
 //run as soon as possible
 
 //NOTE(Torin) Called from the bootstrap processor to send A SIPI signal to the target application processor 
-static void 
-lapic_startup_ap(uintptr_t apic_register_base, uint8_t target_apic_id, uint8_t target_page_number){
+static void lapic_startup_ap(uintptr_t apic_register_base, uint8_t target_apic_id, uint8_t target_page_number){
   static const uintptr_t APIC_ICR1_OFFSET = 0x300;
   static const uintptr_t APIC_ICR2_OFFSET = 0x310;
 
