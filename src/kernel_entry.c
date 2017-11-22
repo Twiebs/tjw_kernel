@@ -6,7 +6,6 @@
 // CPU into longmode with a longmode GDT; however, an longmode
 // IDT still must be initalized
 
-
 typedef struct {
   Circular_Log log;
   Command_Line_Shell shell;
@@ -57,119 +56,18 @@ Storage_Device *create_storage_device() {
 
 #include "kernel_apic.c"
 #include "kernel_acpi.c"
-#include "descriptor_tables.c"
+#include "system/descriptor_tables.c"
 #include "kernel_exceptions.c"
 #include "kernel_pci.c"
 #include "kernel_debug.c"
 #include "hardware_keyboard.c"
 #include "development_diagnostics.h"
 
-
-
-static IDT_Entry _idt[256];
-static uintptr_t _interrupt_handlers[256];
-
 static const uint8_t TRAMPOLINE_BINARY[] = {
 #include "trampoline.txt"
 };
 
-static void idt_install_all_interrupts() {
-  extern void asm_double_fault_handler();
-  extern void asm_debug_handler();
-  
-	for (uint32_t i = 0; i < 256; i++) {
-		idt_install_interrupt(_idt, i, (uintptr_t)asm_debug_handler);
-		_interrupt_handlers[i] = 0x00;
-	}
 
-	{ //Software Exceptions
-		extern void asm_isr0(void);
-		extern void asm_isr1(void);
-		extern void asm_isr2(void);
-		extern void asm_isr3(void);
-		extern void asm_isr4(void);
-		extern void asm_isr5(void);
-		extern void asm_isr6(void);
-		extern void asm_isr7(void);
-		extern void asm_isr9(void);
-		extern void asm_isr10(void);
-		extern void asm_isr11(void);
-		extern void asm_isr12(void);
-		extern void asm_isr13(void);
-		extern void asm_isr14(void);
-		extern void asm_isr15(void);
-		extern void asm_isr16(void);
-		extern void asm_isr17(void);
-		extern void asm_isr18(void);
-		extern void asm_isr19(void);
-		extern void asm_isr20(void);
-		extern void asm_isr21(void);
-		extern void asm_isr22(void);
-		extern void asm_isr23(void);
-		extern void asm_isr24(void);
-		extern void asm_isr25(void);
-		extern void asm_isr26(void);
-		extern void asm_isr27(void);
-		extern void asm_isr28(void);
-		extern void asm_isr29(void);
-		extern void asm_isr30(void);
-		extern void asm_isr31(void);
-
-		idt_install_interrupt(_idt, 0, (uintptr_t)asm_isr0);
-		idt_install_interrupt(_idt, 1, (uintptr_t)asm_isr1);
-		idt_install_interrupt(_idt, 2, (uintptr_t)asm_isr2);
-		idt_install_interrupt(_idt, 3, (uintptr_t)asm_isr3);
-		idt_install_interrupt(_idt, 4, (uintptr_t)asm_isr4);
-		idt_install_interrupt(_idt, 5, (uintptr_t)asm_isr5);
-		idt_install_interrupt(_idt, 6, (uintptr_t)asm_isr6);
-		idt_install_interrupt(_idt, 7, (uintptr_t)asm_isr7);
-		idt_install_interrupt(_idt, 8, (uintptr_t)asm_double_fault_handler);
-		idt_install_interrupt(_idt, 9, (uintptr_t)asm_isr9);
-		idt_install_interrupt(_idt, 10, (uintptr_t)asm_isr10);
-		idt_install_interrupt(_idt, 11, (uintptr_t)asm_isr11);
-		idt_install_interrupt(_idt, 12, (uintptr_t)asm_isr12);
-		idt_install_interrupt(_idt, 13, (uintptr_t)asm_isr13);
-		idt_install_interrupt(_idt, 14, (uintptr_t)asm_isr14);
-		idt_install_interrupt(_idt, 15, (uintptr_t)asm_isr15);
-		idt_install_interrupt(_idt, 16, (uintptr_t)asm_isr16);
-		idt_install_interrupt(_idt, 17, (uintptr_t)asm_isr17);
-		idt_install_interrupt(_idt, 18, (uintptr_t)asm_isr18);
-		idt_install_interrupt(_idt, 19, (uintptr_t)asm_isr19);
-		idt_install_interrupt(_idt, 20, (uintptr_t)asm_isr20);
-		idt_install_interrupt(_idt, 21, (uintptr_t)asm_isr21);
-		idt_install_interrupt(_idt, 22, (uintptr_t)asm_isr22);
-		idt_install_interrupt(_idt, 23, (uintptr_t)asm_isr23);
-		idt_install_interrupt(_idt, 24, (uintptr_t)asm_isr24);
-		idt_install_interrupt(_idt, 25, (uintptr_t)asm_isr25);
-		idt_install_interrupt(_idt, 26, (uintptr_t)asm_isr26);
-		idt_install_interrupt(_idt, 27, (uintptr_t)asm_isr27);
-		idt_install_interrupt(_idt, 28, (uintptr_t)asm_isr28);
-		idt_install_interrupt(_idt, 29, (uintptr_t)asm_isr29);
-		idt_install_interrupt(_idt, 30, (uintptr_t)asm_isr30);
-		idt_install_interrupt(_idt, 31, (uintptr_t)asm_isr31);
-	}
-
-	{ //Hardware Interrupts
-		static const uint32_t IRQ_PIT = 0x20; 
-		static const uint32_t IRQ_KEYBOARD = 0x21;
-		extern void asm_irq0(void);
-		extern void asm_irq1(void);
-    extern void asm_irq2(void);
-    extern void asm_irq128(void);
-
-    extern void asm_syscall_handler(void);
-    extern void asm_spurious_interrupt_handler(void);
-
-		_interrupt_handlers[0] = (uintptr_t)irq_handler_pit;
-		_interrupt_handlers[1] = (uintptr_t)irq_handler_keyboard;
-    _interrupt_handlers[2] = (uintptr_t)lapic_timer_interrupt;
-		idt_install_interrupt(_idt, IRQ_PIT, (uintptr_t)asm_irq0);
-		idt_install_interrupt(_idt, IRQ_KEYBOARD, (uintptr_t)asm_irq1);
-    idt_encode_entry((uintptr_t)&_idt[0x22], (uintptr_t)asm_irq2, true);
-    idt_encode_entry((uintptr_t)&_idt[0x80], (uintptr_t)asm_syscall_handler, true);
-    idt_encode_entry((uintptr_t)&_idt[0x31], (uintptr_t)asm_spurious_interrupt_handler, true);
-	}
-}
 
 #include "multiboot2.h"
 #include "hardware_serial.c"
@@ -178,6 +76,7 @@ static void idt_install_all_interrupts() {
 extern void ap_entry_procedure(void){
   asm volatile("hlt");
 }
+
 
 void initialize_task_state_segment(CPU_Info *cpu_info) {
   //NOTE(Torin: 2017-07-26) Kernel stack must be initalized
@@ -294,17 +193,8 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
   //but the IDT still need to be configured
 
   remap_and_disable_legacy_pic();
+  idt_install_all_interrupts();
 
-
-  {
-    idt_install_all_interrupts();
-    struct {
-      uint16_t limit;
-      uintptr_t address;
-    } __attribute__((packed)) idtr = { sizeof(_idt) - 1, (uintptr_t)_idt };
-    asm volatile ("lidt %0" : : "m"(idtr));
-    asm volatile ("sti");
-  }
 
   //NOTE(Torin, 2017-10-05) This is a wierd way to get info out of the multiboot bootloader. Not
   //too thriled about how this works for now...
@@ -351,11 +241,11 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
 
   lapic_initialize(system->lapic_virtual_address);
 
-  _interrupt_handlers[2] = (uintptr_t)lapic_periodic_timer_interrupt_handler;
+  set_interrupt_handler(2, lapic_periodic_timer_interrupt_handler);
   lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_INITAL_COUNT_REGISTER, 0xFFFF);
   lapic_write_register(system->lapic_virtual_address, LAPIC_TIMER_IRQ_NUMBER_REGISTER, 0x22 | LAPIC_TIMER_PERODIC_MODE); 
   ioapic_initalize(system->ioapic_virtual_address);
-  _interrupt_handlers[2] = (uintptr_t)lapic_timer_interrupt; 
+  set_interrupt_handler(2, lapic_timer_interrupt); 
 
   initalize_cpu_info_and_start_secondary_cpus(system);
 

@@ -55,15 +55,18 @@ exit
 
 //Main System
 #include "src/tasking/lock.h"
-#include "src/descriptor_tables.h"
+
 #include "src/kernel_pci.h"
+#include "src/kernel_memory.h"
+#include "src/system/descriptor_tables.h"
 #include "src/system.h"
 #include "src/kernel.h"
 #include "src/hardware_keyboard.h"
 #include "src/kernel_log.h"
-#include "src/kernel_memory.h"
+
+
 #include "src/elf64.h"	
-#include "src/interrupt_handler.h"
+#include "src/system/interrupt.h"
 
 //Shell
 #include "src/shell/command_line_shell.h"
@@ -105,7 +108,7 @@ exit
 
 //System
 #include "src/kernel_entry.c"
-#include "src/interrupt_handler.c"
+#include "src/system/interrupt.c"
 #include "src/kernel_log.c"
 #include "src/system.c" 
 #include "src/kernel_memory.c"

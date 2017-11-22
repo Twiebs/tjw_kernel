@@ -1,40 +1,4 @@
 
-void idt_install_interrupt(IDT_Entry *idt, const uint32_t irq_number, const uint64_t irq_handler_addr) {
-  static const uint64_t PRIVILEGE_LEVEL_0 = 0b00000000;
-  static const uint64_t PRIVILEGE_LEVEL_3 = 0b01100000;
-  static const uint64_t PRESENT_BIT = (1 << 7); 
-  
-  static const uint64_t TYPE_TASK_GATE_64 = 0x5;
-  static const uint64_t TYPE_INTERRUPT_GATE_64 = 0xE;
-  static const uint64_t TYPE_TRAP_GATE_64 = 0xF;
-
-  idt[irq_number].offset_0_15 = (uint16_t)(irq_handler_addr & 0xFFFF);
-  idt[irq_number].offset_16_31 = (uint16_t)((irq_handler_addr >> 16) & 0xFFFF);
-  idt[irq_number].offset_32_63 = (uint32_t)((irq_handler_addr >> 32) & 0xFFFFFFFF);
-  idt[irq_number].type_and_attributes = PRESENT_BIT | TYPE_INTERRUPT_GATE_64 | PRIVILEGE_LEVEL_0; 
-  idt[irq_number].code_segment_selector = GDT_RING0_CODE_ENTRY_OFFSET;
-  idt[irq_number].ist = 0;
-}
-
-void idt_encode_entry(const uintptr_t entry_addr, const uintptr_t handler_addr, const bool is_user_accessible) {
-  static const uint64_t PRIVILEGE_LEVEL_0 = 0b00000000;
-  static const uint64_t PRIVILEGE_LEVEL_3 = 0b01100000;
-  static const uint64_t PRESENT_BIT = (1 << 7); 
-  
-  static const uint64_t TYPE_TASK_GATE_64 = 0x5;
-  static const uint64_t TYPE_INTERRUPT_GATE_64 = 0xE;
-  static const uint64_t TYPE_TRAP_GATE_64 = 0xF;
-
-  IDT_Entry *entry = (IDT_Entry *)entry_addr;
-  entry->offset_0_15 = (uint16_t)(handler_addr & 0xFFFF);
-  entry->offset_16_31 = (uint16_t)((handler_addr >> 16) & 0xFFFF);
-  entry->offset_32_63 = (uint32_t)((handler_addr >> 32) & 0xFFFFFFFF);
-  entry->type_and_attributes = PRESENT_BIT | TYPE_INTERRUPT_GATE_64 | (is_user_accessible ?  PRIVILEGE_LEVEL_3 : PRIVILEGE_LEVEL_0); 
-  entry->code_segment_selector = GDT_RING0_CODE_ENTRY_OFFSET; //TODO(Torin: 2017-07-26) This looks wrong0
-  entry->ist = 0;
-}
-
-
 void gdt_encode_system_descriptor(uintptr_t base_address, uint32_t segment_limit, uint8_t type, uint8_t privlege_level, uintptr_t out) {
   kassert(segment_limit < (1 << 19));
   kassert(type < (1 << 4));

@@ -39,10 +39,9 @@ static inline void remap_and_disable_legacy_pic() {
   write_port_uint8(PIC1_DATA_PORT, ICW4_8068);
   write_port_uint8(PIC2_DATA_PORT, ICW4_8068);
   //NOTE(Torin, 2017-10-01) At this time the interrupts handled by
-  //the pic are masked out; however, the timer interrupt is left active
-  //because it will be used later to calibrate the lapic. TODO This should
-  //probably be disabled here and then re-enabled when the lapic is calibrated.
-  write_port_uint8(PIC1_DATA_PORT, 0b11111101);
+  //the pic are masked out; however, the timer interrupt will
+  //be reenabled when the lapic timer is calibrated
+  write_port_uint8(PIC1_DATA_PORT, 0b11111111);
   write_port_uint8(PIC2_DATA_PORT, 0b11111111);
 }
 
