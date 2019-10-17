@@ -26,17 +26,15 @@ exit
 #endif//BUILD_DEBUG
 
 #if defined(BUILD_IS_RUNNING)
-  nasm -fbin src/secondary_cpu_init.asm -o trampoline.bin 
-  bin/bin_to_txt trampoline.bin src/trampoline.txt
-  gcc COMPILER_FLAGS -m64 -mno-red-zone -nostdlib -ffreestanding -fno-stack-protector -I ../tjw_kernel/src -c build.c -o build.c.o
-  nasm -felf64 src/primary_cpu_init.asm -isrc/ -o primary_cpu_init.asm.o
-  nasm -felf64 src/x86_64_entry.asm -isrc/ -o x86_64_entry.asm.o
-  ld -melf_x86_64 -n -T kernel_link.ld -o bin/kernel build.c.o x86_64_entry.asm.o primary_cpu_init.asm.o
-  objcopy --only-keep-debug bin/kernel bin/debug_symbols
+  OutputDirectory=~/output
+  nasm -fbin src/secondary_cpu_init.asm -o $OutputDirectory/trampoline.bin 
+  $OutputDirectory/bin_to_txt $OutputDirectory/trampoline.bin src/trampoline.txt
+  gcc COMPILER_FLAGS -m64 -mno-red-zone -nostdlib -ffreestanding -fno-stack-protector -I ../tjw_kernel/src -c build.c -o $OutputDirectory/build.c.o
+  nasm -felf64 src/primary_cpu_init.asm -isrc/ -o $OutputDirectory/primary_cpu_init.asm.o
+  nasm -felf64 src/x86_64_entry.asm -isrc/ -o $OutputDirectory/x86_64_entry.asm.o
+  ld -melf_x86_64 -n -T kernel_link.ld -o $OutputDirectory/kernel $OutputDirectory/build.c.o $OutputDirectory/x86_64_entry.asm.o $OutputDirectory/primary_cpu_init.asm.o
+  objcopy --only-keep-debug $OutputDirectory/kernel $OutputDirectory/debug_symbols
   //objcopy --strip-debug bin/kernel bin/kernel
-
-  rm *.o
-  rm *.bin
   exit
 #endif
 
