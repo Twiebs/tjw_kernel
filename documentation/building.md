@@ -23,3 +23,13 @@ I just added a variable to the shell script at the top of build.c called _*Outpu
 I'm doing this crazy thing where I'm editing the source files in Windows but compiling on a laptop running Linux.
 I'm relying on using filesharing to compile directly from a folder. due to permissions and such I don't want to write to this folder
 so I need to add this so that I can output the binaries that the build script produces to a local directory.
+
+- Make sure nasm is installed
+- Set the OutputDirectory bash variable in build.c
+- make sure bin_to_txt is built and in the OutputDirectory
+- sh build.c
+
+#RunningTheKernel
+the main script that does this is called run.sh.
+There are a few configuration variables at the top of it that need to be hardcoded.
+qemu needs to be installed.
