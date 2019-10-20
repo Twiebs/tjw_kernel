@@ -11,6 +11,8 @@ kfs/*
 qemu/*
 vbox/*
 bochs/*
+intermediate/*
 
 kernel.dump
+
 
