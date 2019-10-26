@@ -1,0 +1,5 @@
+#!/bin/bash
+SCRIPT_DIR=$(dirname $0)
+TOOLS_SOURCE_DIRECTORY=$SCRIPT_DIR/../code/tools
+COMMON_SOURCE_DIRECTORY=$SCRIPT_DIR/../code/common
+BINARY_OUTPUT_DIRECTORY=$SCRIPT_DIR/../intermediate/binaries
