@@ -13,6 +13,9 @@
 
 #define HW_SERIAL_DIVISOR_LATCH_ACCESS_BIT (1 << 7)
 
+// https://wiki.osdev.org/Kernel_Debugging
+// https://wiki.osdev.org/Serial_Ports
+
 #define PORT 0x3F8
 void serial_debug_init() 
 {
@@ -29,42 +32,9 @@ int is_transmit_empty() {
    return read_port_uint8(PORT + 5) & 0x20;
 }
  
- #if 0
-void write_serial(char a) {
-   while (is_transmit_empty() == 0);
-   write_port(PORT,a);
-}
-#endif
-
 void write_serial(const char *src, size_t length){
   for(size_t i = 0; i < length; i++){
     while(is_transmit_empty() == 0) {}
     write_port_uint8(PORT, src[i]);
   }
 }
-
-
-#if 0
-internal void
-serial_enable_port(uint16_t port) 
-{
-	write_port(SERIAL_INTERUPT_ENABLE_REGISTER(port), 0x00);
-	write_port(SERIAL_LINE_CONTROL_REGISTER(port), 
-			HW_SERIAL_DIVISOR_LATCH_ACCESS_BIT);
-	write_port(SERIAL_DATA_REGISTER(port) + 0, 0x03);
-	write_port(SERIAL_DATA_REGISTER(port) + 1, 0x00); 
-	write_port(SERIAL_LINE_CONTROL_REGISTER(port), 0x03);
-	write_port(SERIAL_INTERUPT_IDENTIFICATION_AND_FIFIO_CONTROL_REGISTER(port), 0xC7);
-}
-
-internal void 
-serial_write_char(uint16_t port, char c) {
-	bool is_fifo_empty = false;
-	while(is_fifo_empty == false) {
-		uint8_t status = read_port(SERIAL_LINE_STATUS_PORT(port));
-		is_fifo_empty = (status & 0x20);
-	}
-
-	write_port(port, c);
-}
-#endif
