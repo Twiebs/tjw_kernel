@@ -222,10 +222,25 @@ uint8_t *memory_allocate_persistent_virtual_pages(uint64_t page_count) {
   return result;
 }
 
-void memory_manager_initialize() {
-  Kernel_Memory_State *memory = &globals.memory_state;
-  kassert(memory->usable_range_count > 0);
-  //NOTE(Torin 2017-08-11) Make sure usable range is sorted.
+void memory_manager_initialize(Primary_CPU_Initialization_Info *initialization_info) 
+{
+    kassert(initialization_info);
+    kassert(initialization_info->usable_range_count > 0);
+
+    Kernel_Memory_State *memory = &globals.memory_state;
+    kassert(memory->usable_range_count == 0);
+
+    // NOTE(Torin, 2020-01-17) Primary_CPU_Initialization_Info Contains the usable memory ranges
+    // available to the memory manager. This information is typically extracted from the multiboot2 info.
+    memory->usable_range_count=initialization_info->usable_range_count;
+    for (size_t i = 0; i < initialization_info->usable_range_count; i++)
+    {
+        memory->usable_ranges[i] = initialization_info->usable_ranges[i];
+    }
+    
+
+
+
 
   //NOTE(Torin 2017-08-11) Mark recursive map present
   g_p4_table.entries[511] |= PAGE_PRESENT_BIT | PAGE_WRITEABLE_BIT;

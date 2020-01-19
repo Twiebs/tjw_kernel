@@ -137,6 +137,12 @@ static inline void extract_initialization_info_from_multiboot2_tags(uint64_t mul
     kernel_panic();
   }
 
+    extern uint32_t _KERNEL_END;
+    // NOTE(Torin, 2020-01-17) This is where GRUB / multiboot2 puts the kernel.
+    static const size_t KERNEL_MULTIBOOT2_ORIGIN = 0x100000;
+    initialization_info->kernel_executable_physical_address_start = KERNEL_MULTIBOOT2_ORIGIN;
+    initialization_info->kernel_executable_physical_address_end = _KERNEL_END;
+
   struct multiboot_tag_mmap *mmap_tag = 0;
   struct multiboot_tag *tag = (struct multiboot_tag *)(multiboot2_address + 8);
   while (tag->type != MULTIBOOT_TAG_TYPE_END) {
@@ -172,7 +178,10 @@ static inline void extract_initialization_info_from_multiboot2_tags(uint64_t mul
     while((uintptr_t)mmap_entry < (uintptr_t)mmap_tag + mmap_tag->size){
       static const uint8_t MEMORY_AVAILABLE = 1;
       if(mmap_entry->type == MEMORY_AVAILABLE && mmap_entry->addr >= 0x100000){
-        memory_usable_range_add(mmap_entry->addr, mmap_entry->len);
+        Memory_Range *memory_range = &initialization_info->usable_ranges[initialization_info->usable_range_count++];
+        memory_range->physical_address = mmap_entry->addr;
+        memory_range->size_in_bytes = mmap_entry->len;
+        memory_range->physical_4KB_page_count = mmap_entry->len / 4096;
       }
        mmap_entry = (multiboot_memory_map_t *)((uintptr_t)mmap_entry + mmap_tag->entry_size);
     }
@@ -186,7 +195,8 @@ static inline void kernel_debug_shell_loop() {
 }
 
 
-extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_physical_address) {
+extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_physical_address) 
+{
 	serial_debug_init();
   //NOTE(Torin 2016-09-02) At this point the kernel has been called into by our
   //bootstrap assembly and interrupts are disabled.  A Longmode GDT has been loaded
@@ -195,7 +205,6 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
   remap_and_disable_legacy_pic();
   idt_install_all_interrupts();
 
-
   //NOTE(Torin, 2017-10-05) This is a wierd way to get info out of the multiboot bootloader. Not
   //too thriled about how this works for now...
   //This also currently has side-effects! It initializes memory ranges in the memory manager!
@@ -203,21 +212,11 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
   Primary_CPU_Initialization_Info initialization_info = {};
   extract_initialization_info_from_multiboot2_tags(multiboot2_magic, 
     multiboot2_physical_address, &initialization_info);
+  validate_primary_cpu_initialization_info(&initialization_info);
 
-  //NOTE(Torin, 2017-10-05) The multiboot info just provided us with memory ranges for
-  //the memory manager to use so we can now initialize it.
-  memory_manager_initialize();
-
+  memory_manager_initialize(&initialization_info);
 
   shell_initialize(&globals.shell);
-
-  //NOTE(Torin, 2017-10-05) The kernel is now going to get system information from
-  //the root system descriptor table.
-  //TODO(Torin 2017-08-13) Make sure all RSDT data is valid before use
-  if (initialization_info.rsdp_physical_address == 0) {
-    klog_error("Invalid Initialization_Info: RSDP phsyical address was not found");
-    kernel_panic();
-  }
 
   //TODO(Torin, 2017-10-05) It is very confusing to be casting a physical address to a pointer
   //and relying on it being in the memory mapped section of ram. We need to check to see if it's
@@ -226,9 +225,6 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
     acpi_parse_root_system_descriptor_version1((RSDP_Descriptor_1*)initialization_info.rsdp_physical_address);
   } else if (initialization_info.rsdp_version == 2) {
     acpi_parse_root_system_descriptor_version2((RSDP_Descriptor_2*)initialization_info.rsdp_physical_address);
-  } else {
-    klog_error("Invalid Initialization_Info: RSDP version is not supported!");
-    kernel_panic();
   }
 
   System_Info *system = &globals.system_info;

@@ -4,16 +4,87 @@
 //temporary and a custom bootloader will be written at a later time. To make that transiton
 //more seamless information about the system is abstracted out into a seprate mechanism and
 //kernel initialization uses that instead of relying on beening booted by a multiboot2 bootloader
-typedef struct {
-  uintptr_t rsdp_physical_address;
-  int rsdp_version;
+typedef struct Primary_CPU_Initialization_Info
+{
+  // TODO(Torin, 2020-01-17) kernel_executable_physical_addresses are not currently used.
+  // They are only set At the projects entry point and are currently only here for visualization purposes.
+  // They get logged out in dump_primary_cpu_initialization_info.
+  Physical_Address kernel_executable_physical_address_start;
+  Physical_Address kernel_executable_physical_address_end;
+
+  Physical_Address rsdp_physical_address;
+  int32_t rsdp_version;
+
+  // TODO(Torin, 2020-01-16) this is being duplicated
+  // more or less for no reason. I kind of like the idea of pulling this information out
+  // into our own data structures, but the memory Manager is going to end up with his own copy of this.
+  Memory_Range usable_ranges[8];
+  uint64_t usable_range_count;
 } Primary_CPU_Initialization_Info;
 
+// TODO(Torin, 2020-01-17) this is more or less a debug routine however unlike most of the debug routines
+// in the Project this one might end up valuable to actually have compiled in release builds.
+// It would be helpful to have this in the logs when diagnosing issues.
+void dump_primary_cpu_initialization_info(Primary_CPU_Initialization_Info *initialization_info)
+{
+    kassert(initialization_info);
+
+    klog_debug("Primary_CPU_Initialization_Info:");
+    klog_debug("  kernel_executable_physical_address_start: 0x%X", initialization_info->kernel_executable_physical_address_start);
+    klog_debug("  kernel_executable_physical_address_end: 0x%X", initialization_info->kernel_executable_physical_address_end);
+    const size_t kernel_executable_size_in_bytes = initialization_info->kernel_executable_physical_address_end  - 
+      initialization_info->kernel_executable_physical_address_start;
+    const size_t kernel_executable_size_in_kilobytes = kernel_executable_size_in_bytes / 1024;
+    const size_t kernel_executable_size_in_megabytes = kernel_executable_size_in_kilobytes / 1024;
+    klog_debug("  kernel_executable_size: %uMB %uKB", kernel_executable_size_in_megabytes, kernel_executable_size_in_kilobytes);
+
+    klog_debug("  rsdp_physical_address: 0x%X", initialization_info->rsdp_physical_address);
+    klog_debug("  rsdp_version: 0x%X", initialization_info->rsdp_version);
+    klog_debug("  usable_range_count: %X", initialization_info->usable_range_count);
+
+    for (size_t i = 0; i < initialization_info->usable_range_count; i++)
+    {
+        Memory_Range *memory_range = &initialization_info->usable_ranges[i];
+        const Physical_Address start_address = memory_range->physical_address;
+        const Physical_Address end_address = start_address + memory_range->size_in_bytes;
+        // NOTE(Torin, 2020-01-17) ideally we would show floating-point Megabytes here
+        // but we don't have floating-point turned on in the kernel right now.
+        // I don't think we want to bother doing that anyway. It's not worth it to have it set up  at this point.
+        const size_t size_in_megabytes = (memory_range->size_in_bytes / 1024) / 1024;
+        klog_debug("    memory_range: [0x%X, 0x%X] total_size: %uMB (%ubytes)", 
+          start_address, end_address, size_in_megabytes, memory_range->size_in_bytes);
+    }
+}
+
+
+void validate_primary_cpu_initialization_info(Primary_CPU_Initialization_Info *initialization_info)
+{
+  kassert(initialization_info);
+
+  dump_primary_cpu_initialization_info(initialization_info);
+
+  if (initialization_info->rsdp_physical_address == 0)
+  {
+    klog_error("Invalid Initialization_Info: RSDP phsyical address was not found");
+    kernel_panic();
+  }
+
+  kassert(initialization_info->kernel_executable_physical_address_start);
+  kassert(initialization_info->kernel_executable_physical_address_end);
+
+  kassert(initialization_info->rsdp_version == 1 || initialization_info->rsdp_version == 2);
+  kassert(initialization_info->usable_range_count > 0);
+
+  // TODO(Torin, 2020-01-16) I just found this note indicating that it's important
+  // that the memory ranges are sorted. I have no idea if that's true or not.
+  // Sounds reasonable.
+  //NOTE(Torin 2017-08-11) Make sure usable range is sorted.
+}
 
 //NOTE(Torin, 2017-10-01) This procedure is required to disable the legacy
 //PIC chip/emulation. The kernel uses both the LAPIC and IOAPIC instead.
 static inline void remap_and_disable_legacy_pic() {
-  //NOTE(Torin) Remap the legacy PIC8259 and mask out the interrupt vectors 
+  //NOTE(Torin) Remap the legacy PIC8259 and mask out the interrupt vectors
   static const uint8_t PIC1_COMMAND_PORT = 0x20;
   static const uint8_t PIC2_COMMAND_PORT = 0xA0;
   static const uint8_t PIC1_DATA_PORT = 0x21;
@@ -44,7 +115,6 @@ static inline void remap_and_disable_legacy_pic() {
   write_port_uint8(PIC1_DATA_PORT, 0b11111111);
   write_port_uint8(PIC2_DATA_PORT, 0b11111111);
 }
-
 
 static inline void configure_legacy_pit_timer() {
   static const uint8_t PIT_CHANNEL0_DATA_PORT = 0x40;

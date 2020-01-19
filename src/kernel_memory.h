@@ -66,9 +66,9 @@ static const uint64_t PAGE_NO_EXECUTE_BIT         = 1L << 63;
 //using the multiboot2 information. Usable ranges must be added
 //before memory_manager_initialize is called.
 
+typedef struct Primary_CPU_Initialization_Info Primary_CPU_Initialization_Info;
 
-void memory_manager_initialize();
-
+void memory_manager_initialize(Primary_CPU_Initialization_Info *initialization_info);
 
 uintptr_t memory_get_physical_address(uintptr_t virtual_address);
 uintptr_t memory_p4_index_of_virtual_address(uintptr_t virtual_address);
