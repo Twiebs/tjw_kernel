@@ -1,18 +1,3 @@
-//Legacy serial port driver for debugging purposes via bochs or qemu
-
-#define HW_COM1_PORT 0x3F8
-#define HW_COM2_PORT 0x2F8
-#define HW_COM3_PORT 0x3E8
-#define HW_COM4_PORT 0x2E8
-
-#define SERIAL_DATA_REGISTER(port) (port + 0)
-#define SERIAL_INTERUPT_ENABLE_REGISTER(port) (port + 1)
-#define SERIAL_INTERUPT_IDENTIFICATION_AND_FIFIO_CONTROL_REGISTER(port) (port + 2)
-#define SERIAL_LINE_CONTROL_REGISTER(port) (port + 3)
-#define SERIAL_LINE_STATUS_PORT(port) (port + 5)
-
-#define HW_SERIAL_DIVISOR_LATCH_ACCESS_BIT (1 << 7)
-
 // https://wiki.osdev.org/Kernel_Debugging
 // https://wiki.osdev.org/Serial_Ports
 
