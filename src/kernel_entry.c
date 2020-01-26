@@ -197,7 +197,8 @@ static inline void kernel_debug_shell_loop() {
 
 extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2_physical_address) 
 {
-	serial_debug_init();
+	development_only_initialize_serial_port_logging();
+
   //NOTE(Torin 2016-09-02) At this point the kernel has been called into by our
   //bootstrap assembly and interrupts are disabled.  A Longmode GDT has been loaded
   //but the IDT still need to be configured
