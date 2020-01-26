@@ -60,6 +60,7 @@ exit
 #include "src/system/descriptor_tables.h"
 #include "src/system.h"
 #include "src/kernel.h"
+#include "src/assembly.h"
 #include "src/hardware_keyboard.h"
 #include "src/kernel_log.h"
 
