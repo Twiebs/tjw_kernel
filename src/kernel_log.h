@@ -71,14 +71,11 @@ typedef struct {
 
 static_assert(sizeof(Log_Entry) == 256);
 
-//TODO(Torin) Change is_dirty to last_event_timestamp
 typedef struct {
   Log_Entry entries[CIRCULAR_LOG_ENTRY_COUNT];
   uint64_t entries_front;
   uint64_t entries_back;
-  Spin_Lock spinlock;
 } Circular_Log;
-
 
 void klog_write_fmt(Circular_Log *log, Log_Category category, Log_Level level, const char *fmt, ...);
 //void klog_write_string(Circular_Log *log, const char *string, size_t length);
