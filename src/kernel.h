@@ -1,8 +1,3 @@
-#define export extern
-#define external extern
-#define internal static 
-#define global_variable static 
-
 #define strict_assert(expr) kassert(expr)
 #define static_assert(expr) _Static_assert(expr, "ASSERTION FAILED(" #expr ")")
 #define kassert(expr) if(!(expr)) { klog_error("ASSERTION FAILED(%s) on line %u of file %s", #expr, (uint32_t)(__LINE__), __FILE__); kernel_panic(); }
