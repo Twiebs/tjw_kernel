@@ -127,12 +127,12 @@ void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log) {
 
 
     VGA_Color color = VGA_Color_LIGHT_GRAY;
-    if (entry->level == Log_Level_ERROR)   { color = VGA_Color_RED;    }
-    if (entry->level == Log_Level_WARNING) { color = VGA_Color_YELLOW; }
-    if (entry->level == Log_Level_INFO)    { color = VGA_Color_CYAN;   }
+    if (entry->log_level == Log_Level_ERROR)   { color = VGA_Color_RED;    }
+    if (entry->log_level == Log_Level_WARNING) { color = VGA_Color_YELLOW; }
+    if (entry->log_level == Log_Level_INFO)    { color = VGA_Color_CYAN;   }
 
-    const char *entry_tag_name = LOG_CATEGORY_TAGS[entry->category];
-    if (entry->category == Log_Category_DEFAULT) entry_tag_name = 0;
+    const char *entry_tag_name = LOG_CATEGORY_TAGS[entry->log_category];
+    if (entry->log_category == Log_Category_DEFAULT) entry_tag_name = 0;
     size_t entry_tag_name_length = cstring_length(entry_tag_name);
 
 
@@ -147,7 +147,7 @@ void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log) {
       message_offset = shell->character_number - entry_tag_name_length;
     }
 
-    int message_chars_to_write = entry->length;
+    int message_chars_to_write = entry->message_length;
     message_chars_to_write -= message_offset;
     message_chars_to_write = max(0, message_chars_to_write);
     message_chars_to_write = min((uint64_t)message_chars_to_write, shell->characters_per_line);

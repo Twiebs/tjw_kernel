@@ -17,7 +17,6 @@
 
 #define CONSOLE_ENTRY_COUNT (1024)
 #define CONSOLE_OUTPUT_BUFFER_SIZE (1 << 14)
-#define CIRCULAR_LOG_MESSAGE_SIZE 256 
 #define CIRCULAR_LOG_ENTRY_COUNT 256
 
 typedef enum {
@@ -60,12 +59,17 @@ static const char * LOG_CATEGORY_TAGS[] = {
   "[Desktop] "
 };
 
+// log_level + log_category + message_length = 4 bytes
+#define LOG_ENTRY_MESSAGE_SIZE  (256 - 4)
+
 typedef struct {
-  Log_Level level;
-  Log_Category category;
-  uint64_t length;
-  char message[CIRCULAR_LOG_MESSAGE_SIZE];
+  uint8_t log_level;
+  uint8_t log_category;
+  uint16_t message_length;
+  char message[LOG_ENTRY_MESSAGE_SIZE];
 } Log_Entry;
+
+static_assert(sizeof(Log_Entry) == 256);
 
 //TODO(Torin) Change is_dirty to last_event_timestamp
 typedef struct {

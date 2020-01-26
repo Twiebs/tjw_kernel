@@ -18,17 +18,17 @@ void klog_write_fmt(Circular_Log *log, Log_Category category, Log_Level level, c
   if(globals.is_logging_disabled) return;
 
   Log_Entry *entry = klog_get_next_entry(log);
-  entry->level = level;
-  entry->category = category;
+  entry->log_level = level;
+  entry->log_category = category;
   
   va_list args;
   va_start(args, fmt);
-  entry->length = vsnprintf(entry->message, CIRCULAR_LOG_MESSAGE_SIZE, fmt, args);
+  entry->message_length = vsnprintf(entry->message, LOG_ENTRY_MESSAGE_SIZE, fmt, args);
   va_end(args);
 
   asm volatile("cli");
   spin_lock_acquire(&log->spinlock);
-  write_serial(entry->message, entry->length);
+  write_serial(entry->message, entry->message_length);
   write_serial("\n", 1);
   spin_lock_release(&log->spinlock);
   asm volatile("sti");
