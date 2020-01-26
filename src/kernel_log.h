@@ -17,7 +17,7 @@
 
 #define CONSOLE_ENTRY_COUNT (1024)
 #define CONSOLE_OUTPUT_BUFFER_SIZE (1 << 14)
-#define CIRCULAR_LOG_ENTRY_COUNT 256
+#define CIRCULAR_LOG_ENTRY_COUNT 1024
 
 typedef enum {
   Log_Level_DEBUG,
@@ -71,11 +71,20 @@ typedef struct {
 
 static_assert(sizeof(Log_Entry) == 256);
 
+// This thing needs to be statically allocated because we want to be able to
+// log things before the memory manager is initialized. Since it will be statically allocated
+// I wanted to have a well-defined size that is 4096 page aligned.
 typedef struct {
-  Log_Entry entries[CIRCULAR_LOG_ENTRY_COUNT];
+  Log_Entry entries[CIRCULAR_LOG_ENTRY_COUNT]; // 256 * 1024 = 262144 = 64 pages
+  // 64 pages
+  uint8_t padding[4080];
   uint64_t entries_front;
   uint64_t entries_back;
+  // 65 pages
 } Circular_Log;
+
+static_assert((sizeof(Circular_Log) % 4096) == 0);
+static_assert((sizeof(Circular_Log) == (4096 * 65)));
 
 void klog_write_fmt(Circular_Log *log, Log_Category category, Log_Level level, const char *fmt, ...);
 //void klog_write_string(Circular_Log *log, const char *string, size_t length);
