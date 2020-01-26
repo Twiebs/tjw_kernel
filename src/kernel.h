@@ -2,21 +2,6 @@
 #define static_assert(expr) _Static_assert(expr, "ASSERTION FAILED(" #expr ")")
 #define kassert(expr) if(!(expr)) { klog_error("ASSERTION FAILED(%s) on line %u of file %s", #expr, (uint32_t)(__LINE__), __FILE__); kernel_panic(); }
 
-#define LOG_COMPILE_TIME_VERBOSITY_ERROR 0
-#define LOG_COMPILE_TIME_VERBOSITY_INFO  1
-#define LOG_COMPILE_TIME_VERBOSITY_DEBUG 2
-
-#define LOG_COMPILE_TIME_VERBOSITY LOG_COMPILE_TIME_VERBOSITY_DEBUG
-
-#if LOG_COMPILE_TIME_VERBOSITY >= LOG_COMPILE_TIME_VERBOSITY_DEBUG
-//#define klog_debug(...) klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_DEBUG, "[%s:%u]", __FILE__, (uint32_t)__LINE__); klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_DEBUG, __VA_ARGS__)
-#define klog_debug(...) klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_DEBUG, __VA_ARGS__)
-#else//KLOG_VERBOSITY >= KLOG_DEBUG
-#define klog_debug(...)
-#endif//KLOG_VERBOSITY >= KLOG_DEBUG
-#define klog_info(...)    klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_INFO, __VA_ARGS__)
-#define klog_warning(...) klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_WARNING, __VA_ARGS__)
-#define klog_error(...)   klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_ERROR, __VA_ARGS__)
 
 #define wait_for_condition(x, timeout) { \
   globals.lapic_timer_ticks = 0; \
