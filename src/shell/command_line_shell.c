@@ -116,50 +116,58 @@ void shell_process_keyboard_input(Command_Line_Shell *shell, Keyboard_State *key
   }
 }
 
-void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log) {
-  if (shell->requires_redraw == false) return;
-  vga_clear_screen();
-  size_t entry_count = log->entries_back - log->entries_front;
-  size_t entries_to_draw = min((uint32_t)(25 - 1), entry_count);
-  for (size_t i = 0; i < entries_to_draw; i++) {
-    size_t entry_index = ((log->entries_back - shell->line_offset) - (entries_to_draw - i)) % CONSOLE_ENTRY_COUNT;
-    Log_Entry *entry = &log->entries[entry_index];
-
-
-    VGA_Color color = VGA_Color_LIGHT_GRAY;
-    if (entry->log_level == Log_Level_ERROR)   { color = VGA_Color_RED;    }
-    if (entry->log_level == Log_Level_WARNING) { color = VGA_Color_YELLOW; }
-    if (entry->log_level == Log_Level_INFO)    { color = VGA_Color_CYAN;   }
-
-    const char *entry_tag_name = LOG_CATEGORY_TAGS[entry->log_category];
-    if (entry->log_category == Log_Category_DEFAULT) entry_tag_name = 0;
-    size_t entry_tag_name_length = cstring_length(entry_tag_name);
-
-
-    size_t length_of_tag_to_write = 0;
-    if (shell->character_number < entry_tag_name_length) {
-      length_of_tag_to_write = entry_tag_name_length - shell->character_number;
-      vga_write_string(entry_tag_name + shell->character_number, length_of_tag_to_write, color, 0, i);
+void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log)
+{
+    if (shell->requires_redraw == false)
+    {
+        return;
     }
 
-    size_t message_offset = 0;
-    if (shell->character_number > entry_tag_name_length) {
-      message_offset = shell->character_number - entry_tag_name_length;
+    vga_clear_screen();
+
+    size_t entry_count = log->entries_back - log->entries_front;
+    size_t entries_to_draw = min((uint32_t)(25 - 1), entry_count);
+    
+    for (size_t i = 0; i < entries_to_draw; i++) 
+    {
+        size_t entry_index = ((log->entries_back - shell->line_offset) - (entries_to_draw - i)) % CONSOLE_ENTRY_COUNT;
+        Log_Entry *entry = &log->entries[entry_index];
+
+
+        VGA_Color color = VGA_Color_LIGHT_GRAY;
+        if (entry->log_level == Log_Level_ERROR)   { color = VGA_Color_RED;    }
+        if (entry->log_level == Log_Level_WARNING) { color = VGA_Color_YELLOW; }
+        if (entry->log_level == Log_Level_INFO)    { color = VGA_Color_CYAN;   }
+
+        const char *entry_tag_name = LOG_CATEGORY_TAGS[entry->log_category];
+        if (entry->log_category == Log_Category_DEFAULT) entry_tag_name = 0;
+        size_t entry_tag_name_length = cstring_length(entry_tag_name);
+
+
+        size_t length_of_tag_to_write = 0;
+        if (shell->character_number < entry_tag_name_length) {
+          length_of_tag_to_write = entry_tag_name_length - shell->character_number;
+          vga_write_string(entry_tag_name + shell->character_number, length_of_tag_to_write, color, 0, i);
+        }
+
+        size_t message_offset = 0;
+        if (shell->character_number > entry_tag_name_length) {
+          message_offset = shell->character_number - entry_tag_name_length;
+        }
+
+        int message_chars_to_write = entry->message_length;
+        message_chars_to_write -= message_offset;
+        message_chars_to_write = max(0, message_chars_to_write);
+        message_chars_to_write = min((uint64_t)message_chars_to_write, shell->characters_per_line);
+        vga_write_string(entry->message + message_offset, message_chars_to_write, color, length_of_tag_to_write, i);
     }
 
-    int message_chars_to_write = entry->message_length;
-    message_chars_to_write -= message_offset;
-    message_chars_to_write = max(0, message_chars_to_write);
-    message_chars_to_write = min((uint64_t)message_chars_to_write, shell->characters_per_line);
-    vga_write_string(entry->message + message_offset, message_chars_to_write, color, length_of_tag_to_write, i);
-  }
+    size_t input_buffer_to_write = min(shell->characters_per_line, shell->input_buffer_count);
+    for (size_t i = 0; i < input_buffer_to_write; i++) {
+      vga_set_char(shell->input_buffer[i], VGA_Color_RED, i, 25 - 1); 
+    }
 
-  size_t input_buffer_to_write = min(shell->characters_per_line, shell->input_buffer_count);
-  for (size_t i = 0; i < input_buffer_to_write; i++) {
-    vga_set_char(shell->input_buffer[i], VGA_Color_RED, i, 25 - 1); 
-  }
-
-  shell->requires_redraw = false;
+    shell->requires_redraw = false;
 }
 
 void shell_update(Command_Line_Shell *shell) {
