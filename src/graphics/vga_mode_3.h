@@ -1,3 +1,7 @@
+
+static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
+static const uint8_t VGA_TEXT_ROW_COUNT = 25;
+
 typedef enum {
   VGA_Color_BLACK = 0,
   VGA_Color_BLUE  = 1,

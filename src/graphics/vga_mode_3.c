@@ -1,6 +1,5 @@
 
-static const uint8_t VGA_TEXT_COLUMN_COUNT = 80;
-static const uint8_t VGA_TEXT_ROW_COUNT = 25;
+
 static uint8_t *VGA_TEXT_BUFFER = (uint8_t *)0xB8000;
 
 void vga_set_char(char c, VGA_Color color, int x, int y) {
