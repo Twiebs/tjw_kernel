@@ -18,17 +18,18 @@ typedef struct {
   Shell_Command_Procedure procedure;
 } Shell_Command;
 
-typedef struct {
-  bool     requires_redraw;
-  uint64_t line_offset;
-  uint64_t character_number;
-  uint64_t characters_per_line;
-  uint64_t lines_per_screen;
+typedef struct 
+{
+    bool     requires_redraw;
+    uint64_t line_offset;
+    uint64_t character_number;
+    uint64_t characters_per_line;
+    uint64_t lines_per_screen;
 
-  char     input_buffer[256];
-  uint64_t input_buffer_count;
-  char     current_directory[1024];
-  size_t   current_directory_count;
+    char     input_buffer[256];
+    uint64_t input_buffer_count;
+    char     current_directory[1024];
+    size_t   current_directory_count;
 
   Shell_Command commands[64];
   uint64_t command_count;
