@@ -137,7 +137,8 @@ void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log)
     for (size_t i = 0; i < entries_to_draw; i++) 
     {
         size_t entry_index = ((log->entries_back - shell->line_offset) - (entries_to_draw - i)) % CONSOLE_ENTRY_COUNT;
-        Log_Entry *entry = &log->entries[entry_index];
+
+        const Log_Entry *entry = &log->entries[entry_index];
 
 
         VGA_Color color = VGA_Color_LIGHT_GRAY;
