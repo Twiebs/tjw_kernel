@@ -125,9 +125,15 @@ void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log)
 
     vga_clear_screen();
 
-    size_t entry_count = log->entries_back - log->entries_front;
-    size_t entries_to_draw = min((uint32_t)(25 - 1), entry_count);
-    
+    kassert(log->entries_back >= log->entries_front);
+    const uint64_t entry_count = log->entries_back - log->entries_front;
+    kassert(entry_count <= CIRCULAR_LOG_ENTRY_COUNT);
+
+    // VGA_TEXT_ROW_COUNT - 1 Because we need one line to draw user input.
+    static const uint64_t AVAILABLE_LINE_COUNT = VGA_TEXT_ROW_COUNT - 1;
+    const uint64_t entries_to_draw = min_uint64(AVAILABLE_LINE_COUNT, entry_count);
+    kassert(entries_to_draw <= AVAILABLE_LINE_COUNT);
+
     for (size_t i = 0; i < entries_to_draw; i++) 
     {
         size_t entry_index = ((log->entries_back - shell->line_offset) - (entries_to_draw - i)) % CONSOLE_ENTRY_COUNT;
