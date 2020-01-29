@@ -116,6 +116,26 @@ void shell_process_keyboard_input(Command_Line_Shell *shell, Keyboard_State *key
   }
 }
 
+VGA_Color get_color_for_log_level(const Log_Level log_level)
+{
+    VGA_Color result = VGA_Color_LIGHT_GRAY;
+
+    if (log_level == Log_Level_ERROR)
+    {
+        result = VGA_Color_RED;
+    }
+    else if (log_level == Log_Level_WARNING)
+    {
+        result = VGA_Color_YELLOW;
+    }
+    else if (log_level == Log_Level_INFO)
+    {
+        result = VGA_Color_CYAN;
+    }
+
+    return result;
+}
+
 void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log)
 {
     if (shell->requires_redraw == false)
@@ -140,11 +160,7 @@ void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log)
 
         const Log_Entry *entry = &log->entries[entry_index];
 
-
-        VGA_Color color = VGA_Color_LIGHT_GRAY;
-        if (entry->log_level == Log_Level_ERROR)   { color = VGA_Color_RED;    }
-        if (entry->log_level == Log_Level_WARNING) { color = VGA_Color_YELLOW; }
-        if (entry->log_level == Log_Level_INFO)    { color = VGA_Color_CYAN;   }
+        const VGA_Color color = get_color_for_log_level(entry->log_level);
 
         const char *entry_tag_name = LOG_CATEGORY_TAGS[entry->log_category];
         if (entry->log_category == Log_Category_DEFAULT) entry_tag_name = 0;
