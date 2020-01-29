@@ -136,12 +136,10 @@ VGA_Color get_color_for_log_level(const Log_Level log_level)
     return result;
 }
 
-void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log)
+void shell_draw_to_vga_text_buffer(const Command_Line_Shell *shell, const Circular_Log *log)
 {
-    if (shell->requires_redraw == false)
-    {
-        return;
-    }
+    kassert(shell);
+    kassert(log);
 
     vga_clear_screen();
 
@@ -186,11 +184,19 @@ void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log)
     }
 
     size_t input_buffer_to_write = min(shell->characters_per_line, shell->input_buffer_count);
-    for (size_t i = 0; i < input_buffer_to_write; i++) {
-      vga_set_char(shell->input_buffer[i], VGA_Color_RED, i, 25 - 1); 
+    for (size_t i = 0; i < input_buffer_to_write; i++) 
+    {
+        vga_set_char(shell->input_buffer[i], VGA_Color_RED, i, 25 - 1); 
     }
+}
 
-    shell->requires_redraw = false;
+void shell_draw_if_required(Command_Line_Shell *shell, Circular_Log *log)
+{
+    if (shell->requires_redraw)
+    {
+        shell_draw_to_vga_text_buffer(shell, log);
+        shell->requires_redraw = false;
+    }
 }
 
 void shell_update(Command_Line_Shell *shell) {
