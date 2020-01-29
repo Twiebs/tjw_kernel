@@ -24,7 +24,6 @@ typedef struct
     uint64_t line_offset;
     uint64_t character_number;
     uint64_t characters_per_line;
-    uint64_t lines_per_screen;
 
     char     input_buffer[256];
     uint64_t input_buffer_count;
