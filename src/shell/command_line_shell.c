@@ -95,15 +95,14 @@ void shell_process_keyboard_input(Command_Line_Shell *shell, Keyboard_State *key
         if (shell->character_number > 0) shell->character_number--;
         shell->requires_redraw = true;
       } else if (scancode == KEYBOARD_SCANCODE1_UP_PRESSED) {
-        if (shell->line_offset < ARRAY_COUNT(log->entries)) {
-          shell->line_offset += 1;
+        if (shell->last_log_entry_to_draw > log->entries_front) {
+          shell->last_log_entry_to_draw -= 1;
           shell->requires_redraw = true;
         }
 
-        shell->requires_redraw = true;
       } else if (scancode == KEYBOARD_SCANCODE1_DOWN_PRESSED){
-        if (shell->line_offset > 0) {
-          shell->line_offset -= 1;
+        if (shell->last_log_entry_to_draw < log->entries_back) {
+          shell->last_log_entry_to_draw += 1;
           shell->requires_redraw = true;
         }
       }
@@ -183,18 +182,21 @@ void shell_draw_to_vga_text_buffer(const Command_Line_Shell *shell, const Circul
     vga_clear_screen();
 
     kassert(log->entries_back >= log->entries_front);
-    const uint64_t entry_count = log->entries_back - log->entries_front;
-    kassert(entry_count <= CIRCULAR_LOG_ENTRY_COUNT);
+    kassert(shell->last_log_entry_to_draw <= log->entries_back);
+    kassert(shell->last_log_entry_to_draw >= log->entries_front);
 
-    // VGA_TEXT_ROW_COUNT - 1 Because we need one line to draw user input.
-    static const uint64_t AVAILABLE_LINE_COUNT = VGA_TEXT_ROW_COUNT - 1;
-    const uint64_t entries_to_draw = min_uint64(AVAILABLE_LINE_COUNT, entry_count);
-    kassert(entries_to_draw <= AVAILABLE_LINE_COUNT);
+    static const int64_t AVAILABLE_LINE_COUNT = VGA_TEXT_ROW_COUNT - 1;
+    const uint64_t first_log_entry_to_draw = (uint64_t)max_int64((int64_t)log->entries_front, (shell->last_log_entry_to_draw - AVAILABLE_LINE_COUNT));
+    kassert(shell->last_log_entry_to_draw >= first_log_entry_to_draw);
+    const uint64_t number_of_entries_to_draw = shell->last_log_entry_to_draw - first_log_entry_to_draw;
+    kassert(number_of_entries_to_draw <= (uint64_t)AVAILABLE_LINE_COUNT);
 
-    for (size_t i = 0; i < entries_to_draw; i++) 
+    for (size_t i = 0; i < number_of_entries_to_draw; i++) 
     {
-        size_t entry_index = ((log->entries_back - shell->line_offset) - (entries_to_draw - i)) % CONSOLE_ENTRY_COUNT;
+        const uint64_t current_entry = first_log_entry_to_draw + i;
+        const uint64_t entry_index  = current_entry % CONSOLE_ENTRY_COUNT;
         const Log_Entry *entry = &log->entries[entry_index];
+
         draw_log_entry(entry, i, shell->character_number);
     }
 

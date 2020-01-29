@@ -4,9 +4,16 @@
 #define strncmp(a, b, num) __builtin_strncmp(a, b, num)
 #define ldexp(x, exp) __builtin_ldexp(x, exp)
 
-static inline uint64_t min_uint64(uint64_t a, uint64_t b) {
-  uint64_t result = a < b ? a : b;
-  return result;
+static inline uint64_t min_uint64(uint64_t a, uint64_t b) 
+{
+    uint64_t result = a < b ? a : b;
+    return result;
+}
+
+static inline int64_t max_int64(int64_t a, int64_t b) 
+{
+    const int64_t result = a > b ? a : b;
+    return result;
 }
 
 #define min(a,b) (a < b ? a : b)

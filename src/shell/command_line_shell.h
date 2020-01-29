@@ -21,7 +21,7 @@ typedef struct {
 typedef struct 
 {
     bool     requires_redraw;
-    uint64_t line_offset;
+    uint64_t last_log_entry_to_draw;
     uint64_t character_number;
 
     char     input_buffer[256];

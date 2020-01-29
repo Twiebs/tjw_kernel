@@ -30,7 +30,12 @@ void klog_write_fmt(Circular_Log *log, Log_Category category, Log_Level level, c
 
   write_serial(entry->message, entry->message_length);
   write_serial("\n", 1);
+
   globals.shell.requires_redraw = true;
+  if (globals.shell.last_log_entry_to_draw + 1 == log->entries_back)
+  {
+    globals.shell.last_log_entry_to_draw += 1;
+  }
 }
 
 void klog_disable()
