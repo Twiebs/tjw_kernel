@@ -139,6 +139,40 @@ VGA_Color get_color_for_log_level(const Log_Level log_level)
     return result;
 }
 
+void draw_log_entry(const Log_Entry *entry, const uint64_t line_number, const uint64_t character_offset)
+{
+  // VGA_TEXT_ROW_COUNT - 1 Because we need one line to draw user input.
+  static const uint64_t AVAILABLE_LINE_COUNT = VGA_TEXT_ROW_COUNT - 1;
+  kassert(line_number <= AVAILABLE_LINE_COUNT);
+
+  const VGA_Color color = get_color_for_log_level(entry->log_level);
+
+  const char *entry_tag_name = LOG_CATEGORY_TAGS[entry->log_category];
+  if (entry->log_category == Log_Category_DEFAULT)
+    entry_tag_name = 0;
+
+  const uint64_t entry_tag_name_length = cstring_length(entry_tag_name);
+
+  uint64_t length_of_tag_to_write = 0;
+  if (character_offset < entry_tag_name_length)
+  {
+    length_of_tag_to_write = entry_tag_name_length - character_offset;
+    vga_write_string(entry_tag_name + character_offset, length_of_tag_to_write, color, 0, line_number);
+  }
+
+  uint64_t message_offset = 0;
+  if (character_offset > entry_tag_name_length)
+  {
+    message_offset = character_offset - entry_tag_name_length;
+  }
+
+  int message_chars_to_write = entry->message_length;
+  message_chars_to_write -= message_offset;
+  message_chars_to_write = max(0, message_chars_to_write);
+  message_chars_to_write = min((uint64_t)message_chars_to_write, VGA_TEXT_COLUMN_COUNT);
+  vga_write_string(entry->message + message_offset, message_chars_to_write, color, length_of_tag_to_write, line_number);
+}
+
 void shell_draw_to_vga_text_buffer(const Command_Line_Shell *shell, const Circular_Log *log)
 {
     kassert(shell);
@@ -158,32 +192,8 @@ void shell_draw_to_vga_text_buffer(const Command_Line_Shell *shell, const Circul
     for (size_t i = 0; i < entries_to_draw; i++) 
     {
         size_t entry_index = ((log->entries_back - shell->line_offset) - (entries_to_draw - i)) % CONSOLE_ENTRY_COUNT;
-
         const Log_Entry *entry = &log->entries[entry_index];
-
-        const VGA_Color color = get_color_for_log_level(entry->log_level);
-
-        const char *entry_tag_name = LOG_CATEGORY_TAGS[entry->log_category];
-        if (entry->log_category == Log_Category_DEFAULT) entry_tag_name = 0;
-        size_t entry_tag_name_length = cstring_length(entry_tag_name);
-
-
-        size_t length_of_tag_to_write = 0;
-        if (shell->character_number < entry_tag_name_length) {
-          length_of_tag_to_write = entry_tag_name_length - shell->character_number;
-          vga_write_string(entry_tag_name + shell->character_number, length_of_tag_to_write, color, 0, i);
-        }
-
-        size_t message_offset = 0;
-        if (shell->character_number > entry_tag_name_length) {
-          message_offset = shell->character_number - entry_tag_name_length;
-        }
-
-        int message_chars_to_write = entry->message_length;
-        message_chars_to_write -= message_offset;
-        message_chars_to_write = max(0, message_chars_to_write);
-        message_chars_to_write = min((uint64_t)message_chars_to_write, VGA_TEXT_COLUMN_COUNT);
-        vga_write_string(entry->message + message_offset, message_chars_to_write, color, length_of_tag_to_write, i);
+        draw_log_entry(entry, i, shell->character_number);
     }
 
     size_t input_buffer_to_write = min(VGA_TEXT_COLUMN_COUNT, shell->input_buffer_count);
