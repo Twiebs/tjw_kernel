@@ -23,7 +23,6 @@ typedef struct
     bool     requires_redraw;
     uint64_t line_offset;
     uint64_t character_number;
-    uint64_t characters_per_line;
 
     char     input_buffer[256];
     uint64_t input_buffer_count;

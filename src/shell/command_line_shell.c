@@ -179,11 +179,11 @@ void shell_draw_to_vga_text_buffer(const Command_Line_Shell *shell, const Circul
         int message_chars_to_write = entry->message_length;
         message_chars_to_write -= message_offset;
         message_chars_to_write = max(0, message_chars_to_write);
-        message_chars_to_write = min((uint64_t)message_chars_to_write, shell->characters_per_line);
+        message_chars_to_write = min((uint64_t)message_chars_to_write, VGA_TEXT_COLUMN_COUNT);
         vga_write_string(entry->message + message_offset, message_chars_to_write, color, length_of_tag_to_write, i);
     }
 
-    size_t input_buffer_to_write = min(shell->characters_per_line, shell->input_buffer_count);
+    size_t input_buffer_to_write = min(VGA_TEXT_COLUMN_COUNT, shell->input_buffer_count);
     for (size_t i = 0; i < input_buffer_to_write; i++) 
     {
         vga_set_char(shell->input_buffer[i], VGA_Color_RED, i, 25 - 1); 
@@ -225,7 +225,6 @@ void shell_command_register(Command_Line_Shell *shell, const char *name, uint64_
 void shell_initialize(Command_Line_Shell *shell) {
   shell->current_directory[0] = '/';
   shell->current_directory_count = 1;
-  shell->characters_per_line= 80;
   shell_command_register(shell, "help", 0, shell_command_help);
   shell_command_register(shell, "ls", 0, shell_command_ls);
   shell_command_register(shell, "cd", 1, shell_command_cd);
