@@ -79,6 +79,11 @@ void shell_command_run(Shell_Command_Parameter_Info *parameter_info) {
   process_create_from_elf64_file_string(path, path_length);
 }
 
+void shell_command_version(Shell_Command_Parameter_Info *parameter_info)
+{
+  klog_info("Kernel Version %u.%u.%u", KERNEL_VERSION_MAJOR, KERNEL_VERSION_MINOR, KERNEL_VERSION_REVISION);
+}
+
 void shell_command_lazy(Shell_Command_Parameter_Info *parameter_info) {
   process_create_from_elf64_file_string("/programs/minesweeper", sizeof("/programs/minesweeper") - 1);
 }

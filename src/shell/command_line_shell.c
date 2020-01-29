@@ -242,11 +242,12 @@ void shell_command_register(Command_Line_Shell *shell, const char *name, uint64_
 void shell_initialize(Command_Line_Shell *shell) {
   shell->current_directory[0] = '/';
   shell->current_directory_count = 1;
-  shell_command_register(shell, "help", 0, shell_command_help);
-  shell_command_register(shell, "ls", 0, shell_command_ls);
   shell_command_register(shell, "cd", 1, shell_command_cd);
+  shell_command_register(shell, "ls", 0, shell_command_ls);
   shell_command_register(shell, "cat", 1, shell_command_cat);
+  shell_command_register(shell, "help", 0, shell_command_help);
   shell_command_register(shell, "lspci", 0, shell_command_lspci);
   shell_command_register(shell, "run", 1, shell_command_run);
+  shell_command_register(shell, "version", 0, shell_command_version);
   shell_command_register(shell, "q", 0, shell_command_lazy);
 }
