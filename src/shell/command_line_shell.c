@@ -84,7 +84,10 @@ void shell_process_keyboard_input(Command_Line_Shell *shell, Keyboard_State *key
       } else if (scancode == KEYBOARD_SCANCODE1_ENTER_PRESSED) {
         shell_execute_command(shell);
       } else if (scancode == KEYBOARD_SCANCODE1_RIGHT_PRESSED) {
-        shell->character_number++;
+        if (shell->character_number < (LOG_ENTRY_MESSAGE_SIZE - VGA_TEXT_COLUMN_COUNT))
+        {
+          shell->character_number++;
+        }
         shell->requires_redraw = true;
       } else if (scancode == KEYBOARD_SCANCODE1_LEFT_PRESSED) {
         if (shell->character_number > 0) shell->character_number--;
