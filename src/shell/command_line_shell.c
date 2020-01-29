@@ -84,7 +84,9 @@ void shell_process_keyboard_input(Command_Line_Shell *shell, Keyboard_State *key
       } else if (scancode == KEYBOARD_SCANCODE1_ENTER_PRESSED) {
         shell_execute_command(shell);
       } else if (scancode == KEYBOARD_SCANCODE1_RIGHT_PRESSED) {
-        if (shell->character_number < (LOG_ENTRY_MESSAGE_SIZE - VGA_TEXT_COLUMN_COUNT))
+        kassert(LOG_ENTRY_MESSAGE_SIZE > VGA_TEXT_COLUMN_COUNT);
+        static const uint64_t MAX_CHARACTER_OFFSET  = (uint64_t)(LOG_ENTRY_MESSAGE_SIZE - VGA_TEXT_COLUMN_COUNT);
+        if (shell->character_number < MAX_CHARACTER_OFFSET)
         {
           shell->character_number++;
         }
