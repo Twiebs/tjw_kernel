@@ -21,6 +21,7 @@
 #define log_error(category, ...) klog_write_fmt(&globals.log, Log_Category_##category, Log_Level_ERROR, __VA_ARGS__)
 #define log_debug(category, ...) klog_write_fmt(&globals.log, Log_Category_##category, Log_Level_DEBUG, __VA_ARGS__)
 
+
 #define CONSOLE_ENTRY_COUNT (1024)
 #define CONSOLE_OUTPUT_BUFFER_SIZE (1 << 14)
 #define CIRCULAR_LOG_ENTRY_COUNT 1024

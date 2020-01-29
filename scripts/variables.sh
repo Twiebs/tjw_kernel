@@ -11,7 +11,7 @@ IMAGE_OUTPUT_DIRECTORY=$INTERMEDIATE_DIRECTORY/images
 LOG_OUTPUT_DIRECTORY=$INTERMEDIATE_DIRECTORY/log
 
 #GRUB configuration
-GRUB_CONFIG_FILE=$SCRIPT_DIR/../grub_configuration/grub.cfg
+GRUB_CONFIG_FILE=$SCRIPT_DIR/../miscellaneous/grub.cfg
 
 #QEMU configuration
 QEMU_EXECUTABLE=qemu-system-x86_64.exe
