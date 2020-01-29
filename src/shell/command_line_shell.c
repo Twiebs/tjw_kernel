@@ -57,7 +57,6 @@ void shell_execute_command(Command_Line_Shell *shell) {
             return;
           } else { 
             command->procedure(&parameter_info);
-            klog_debug("returned!");
             shell_clear_input_buffer(shell);
             return;
           }
