@@ -15,6 +15,12 @@
 #define klog_warning(...) klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_WARNING, __VA_ARGS__)
 #define klog_error(...) klog_write_fmt(&globals.log, Log_Category_DEFAULT, Log_Level_ERROR, __VA_ARGS__)
 
+#define log_enable(category) klog_enable_category(&globals.log, Log_Category_##category)
+#define log_disable(category) klog_disable_category(&globals.log, Log_Category_##category)
+
+#define log_error(category, ...) klog_write_fmt(&globals.log, Log_Category_##category, Log_Level_ERROR, __VA_ARGS__)
+#define log_debug(category, ...) klog_write_fmt(&globals.log, Log_Category_##category, Log_Level_DEBUG, __VA_ARGS__)
+
 #define CONSOLE_ENTRY_COUNT (1024)
 #define CONSOLE_OUTPUT_BUFFER_SIZE (1 << 14)
 #define CIRCULAR_LOG_ENTRY_COUNT 1024
@@ -97,8 +103,3 @@ void klog_remove_last_input_character(Circular_Log *log);
 void klog_submit_input_to_shell(Circular_Log *log);
 void klog_disable();
 void klog_enable();
-
-#define log_enable(category) klog_enable_category(&globals.log, Log_Category_##category)
-#define log_disable(category) klog_disable_category(&globals.log, Log_Category_##category)
-#define log_error(category, ...) klog_write_fmt(&globals.log, Log_Category_##category, Log_Level_ERROR, __VA_ARGS__)
-#define log_debug(category, ...) klog_write_fmt(&globals.log, Log_Category_##category, Log_Level_DEBUG, __VA_ARGS__)
