@@ -28,6 +28,9 @@ void klog_write_fmt(Circular_Log *log, Log_Category category, Log_Level level, c
   entry->message_length = vsnprintf(entry->message, LOG_ENTRY_MESSAGE_SIZE, fmt, args);
   va_end(args);
 
+  const char *entry_tag_name = LOG_CATEGORY_TAGS[entry->log_category];
+  const uint64_t entry_tag_name_length = cstring_length(entry_tag_name);
+  write_serial(entry_tag_name, entry_tag_name_length);
   write_serial(entry->message, entry->message_length);
   write_serial("\n", 1);
 
