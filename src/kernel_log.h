@@ -38,6 +38,7 @@ typedef enum
 {
     Log_Category_DEFAULT,
     Log_Category_DEBUG0,
+    Log_Category_INITIALIZATION,
     Log_Category_MEMORY,
     Log_Category_VFS,
     Log_Category_SYSTEM,
@@ -51,6 +52,7 @@ static const char* LOG_CATEGORY_NAMES[] =
 {
     "Default",
     "Debug0",
+    "Initialization",
     "Memory",
     "VFS",
     "System",
@@ -64,6 +66,7 @@ static const char* LOG_CATEGORY_TAGS[] =
 {
     "[Default] ",
     "[Debug0] ",
+    "[Initialization]",
     "[Memory] ",
     "[VFS] ",
     "[System] ",
