@@ -96,7 +96,7 @@ void initialize_task_state_segment(CPU_Info *cpu_info) {
 
 
 void initalize_cpu_info_and_start_secondary_cpus(System_Info *system) {
-  klog_info("initalizing cpu infos...");
+  log_info(INITIALIZATION, "Initializing cpu infos");
   extern uintptr_t stack_top; //This is the temp stack created in asm
   CPU_Info *cpu_info = &system->cpu_infos[0];
   cpu_info->kernel_stack_top = (uint64_t)&stack_top;
