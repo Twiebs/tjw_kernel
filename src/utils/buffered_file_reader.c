@@ -23,14 +23,12 @@ uint64_t buffered_file_reader_read_bytes_to_buffer(Buffered_File_Reader *reader,
   while (total_bytes_written < bytes) {
 	  uint64_t bytes_to_write = min_uint64(bytes_to_write_remaining, reader->buffer_remaining);
 	  memory_copy(buffer + total_bytes_written, reader->buffer + reader->buffer_offset, bytes_to_write);
-    klog_debug("coppied %lu bytes!", bytes_to_write);
 	  total_bytes_written += bytes_to_write;
 	  bytes_to_write_remaining -= bytes_to_write;
 	  reader->buffer_offset += bytes_to_write;
 	  reader->buffer_remaining -= bytes_to_write;
 
 	  if (total_bytes_written < bytes) {
-      klog_debug("uhhhhh were reading again!");
 	  	if (vfs_node_read_file(&reader->handle, reader->file_offset, 4, reader->buffer)) {
 	  	  return total_bytes_written;
 	  	}

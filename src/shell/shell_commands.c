@@ -59,7 +59,7 @@ void shell_command_cat(Shell_Command_Parameter_Info *parameter_info) {
     return;
   }
   
-  klog_debug("%s", temporary_buffer);
+  log_debug(DEFAULT, "%s", temporary_buffer);
 }
 
 void shell_command_lspci(Shell_Command_Parameter_Info *parameter_info) {

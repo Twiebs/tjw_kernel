@@ -39,7 +39,7 @@ void log_bytes(void *data, size_t size) {
   uint8_t *bytes = (uint8_t *)data;
   size_t row_count = size / 8;
   for (size_t i = 0; i < row_count; i++) {
-    klog_debug("  0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X",
+    log_debug(DEFAULT, "  0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X",
       bytes[i*8 + 0], bytes[i*8 + 1], bytes[i*8 + 2], bytes[i*8 + 3], 
       bytes[i*8 + 4], bytes[i*8 + 5], bytes[i*8 + 6], bytes[i*8 + 7]);
   }

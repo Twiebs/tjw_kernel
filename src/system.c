@@ -25,7 +25,7 @@ uint8_t *cpu_get_temporary_memory() {
 }
 
 void silly_breakpoint() {
-  klog_debug("[Debug] Breakpoint hit (Press F1 to continue)");
+  log_debug(DEBUG0, "Breakpoint hit (Press F1 to continue)");
   shell_draw_if_required(&globals.shell, &globals.log);
   bool paused = true;
   while (paused) {    
