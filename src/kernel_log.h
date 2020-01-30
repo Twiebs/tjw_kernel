@@ -67,12 +67,12 @@ static const char* LOG_CATEGORY_TAGS[] =
 {
     "[Default] ",
     "[Debug0] ",
-    "[Initialization]",
+    "[Initialization] ",
     "[Memory] ",
     "[VFS] ",
     "[System] ",
     "[PCI] ",
-    "[EHCI]",
+    "[EHCI] ",
     "[Desktop] "
 };
 
