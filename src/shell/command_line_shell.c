@@ -157,6 +157,7 @@ void draw_log_entry(const Log_Entry *entry, const uint64_t line_number, const ui
   if (character_offset < entry_tag_name_length)
   {
     length_of_tag_to_write = entry_tag_name_length - character_offset;
+    kassert(length_of_tag_to_write <= VGA_TEXT_COLUMN_COUNT);
     vga_write_string(entry_tag_name + character_offset, length_of_tag_to_write, color, 0, line_number);
   }
 
@@ -166,10 +167,11 @@ void draw_log_entry(const Log_Entry *entry, const uint64_t line_number, const ui
     message_offset = character_offset - entry_tag_name_length;
   }
 
-  int message_chars_to_write = entry->message_length;
+  int32_t message_chars_to_write = entry->message_length;
   message_chars_to_write -= message_offset;
   message_chars_to_write = max(0, message_chars_to_write);
-  message_chars_to_write = min((uint64_t)message_chars_to_write, VGA_TEXT_COLUMN_COUNT);
+  kassert(length_of_tag_to_write <= VGA_TEXT_COLUMN_COUNT);
+  message_chars_to_write = min((uint64_t)message_chars_to_write, VGA_TEXT_COLUMN_COUNT - length_of_tag_to_write);
   vga_write_string(entry->message + message_offset, message_chars_to_write, color, length_of_tag_to_write, line_number);
 }
 
