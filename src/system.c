@@ -42,6 +42,6 @@ uint8_t *system_allocate_persistent_miscellaneous_device(size_t size) {
   spin_lock_acquire(&system->miscellaneous_device_allocator_lock);
   uint8_t *result = persistent_block_allocator_allocate(&system->miscellaneous_device_allocator, size, 16);
   spin_lock_release(&system->miscellaneous_device_allocator_lock);
-  klog_debug("Allocated persistent miscellaneous device: size(%lu), address(0x%X)", size, result);
+  log_debug(MEMORY, "Allocated persistent miscellaneous device: size(%lu), address(0x%X)", size, result);
   return result;
 }

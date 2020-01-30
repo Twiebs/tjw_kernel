@@ -78,14 +78,15 @@ Error_Code bochs_graphics_device_initialize(PCI_Device *pci_device) {
   bochs_graphics_device->max_display_height = bochs_graphics_device_read_port(BOCHS_GRAPHICS_DEVICE_REGISTER_RESOLUTION_Y);
   bochs_graphics_device_write_port(BOCHS_GRAPHICS_DEVICE_REGISTER_ENABLE, BOCHS_GRAPHICS_DEVICE_DISABLED);
   bochs_graphics_device->framebuffer_memory_physical_address = pci_device_get_base_address_0(pci_device);
-  klog_debug("initialized bochs_graphics_device");
-  klog_debug(" max_display_width: %u", bochs_graphics_device->max_display_width);
-  klog_debug(" max_display_height: %u", bochs_graphics_device->max_display_height);
-  klog_debug(" frambuffer_physical_address: 0x%X", bochs_graphics_device->framebuffer_memory_physical_address);
 
   bochs_graphics_device->base.get_back_buffer = bochs_graphics_device_get_back_buffer;
   bochs_graphics_device->base.swap_buffers = bochs_graphics_device_swap_buffers;
   globals.graphics_device = &bochs_graphics_device->base;
-  klog_debug("bochs_graphics_device initialized");
+
+  log_info(INITIALIZATION, "initialized bochs_graphics_device");
+  log_debug(INITIALIZATION, " max_display_width: %u", bochs_graphics_device->max_display_width);
+  log_debug(INITIALIZATION, " max_display_height: %u", bochs_graphics_device->max_display_height);
+  log_debug(INITIALIZATION, " frambuffer_physical_address: 0x%X", bochs_graphics_device->framebuffer_memory_physical_address);
+
   return Error_Code_NONE;
 }
