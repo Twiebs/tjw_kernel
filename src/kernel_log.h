@@ -34,36 +34,42 @@ typedef enum {
   Log_Level_ERROR,
 } Log_Level;
 
-typedef enum {
-  Log_Category_DEFAULT,
-  Log_Category_DEBUG0,
-  Log_Category_MEMORY,
-  Log_Category_VFS,
-  Log_Category_SYSTEM,
-  Log_Category_PCI,
-  Log_Category_DESKTOP,
-  Log_Category_COUNT
+typedef enum 
+{
+    Log_Category_DEFAULT,
+    Log_Category_DEBUG0,
+    Log_Category_MEMORY,
+    Log_Category_VFS,
+    Log_Category_SYSTEM,
+    Log_Category_PCI,
+    Log_Category_EHCI,
+    Log_Category_DESKTOP,
+    Log_Category_COUNT
 } Log_Category;
 
-static const char * LOG_CATEGORY_NAMES[] = {
-  "Default",
-  "Debug0",
-  "Memory",
-  "VFS",
-  "System",
-  "PCI",
-  "DESKTOP",
-  "__COUNT__"
+static const char* LOG_CATEGORY_NAMES[] = 
+{
+    "Default",
+    "Debug0",
+    "Memory",
+    "VFS",
+    "System",
+    "PCI",
+    "EHCI",
+    "DESKTOP",
+    "__COUNT__"
 };
 
-static const char * LOG_CATEGORY_TAGS[] = {
-  "[Default] ",
-  "[Debug0] ",
-  "[Memory] ",
-  "[VFS] ",
-  "[System] ",
-  "[PCI] ",
-  "[Desktop] "
+static const char* LOG_CATEGORY_TAGS[] = 
+{
+    "[Default] ",
+    "[Debug0] ",
+    "[Memory] ",
+    "[VFS] ",
+    "[System] ",
+    "[PCI] ",
+    "[EHCI]",
+    "[Desktop] "
 };
 
 // log_level + log_category + message_length = 4 bytes
