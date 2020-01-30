@@ -199,7 +199,7 @@ extern void kernel_longmode_entry(uint64_t multiboot2_magic, uint64_t multiboot2
 {
 	development_only_initialize_serial_port_logging();
 
-  klog_info("Kernel Version %u.%u.%u", KERNEL_VERSION_MAJOR, KERNEL_VERSION_MINOR, KERNEL_VERSION_REVISION);
+  log_info(INITIALIZATION, "Kernel Version %u.%u.%u", KERNEL_VERSION_MAJOR, KERNEL_VERSION_MINOR, KERNEL_VERSION_REVISION);
 
   //NOTE(Torin 2016-09-02) At this point the kernel has been called into by our
   //bootstrap assembly and interrupts are disabled.  A Longmode GDT has been loaded

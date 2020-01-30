@@ -29,18 +29,18 @@ void dump_primary_cpu_initialization_info(Primary_CPU_Initialization_Info *initi
 {
     kassert(initialization_info);
 
-    klog_debug("Primary_CPU_Initialization_Info:");
-    klog_debug("  kernel_executable_physical_address_start: 0x%X", initialization_info->kernel_executable_physical_address_start);
-    klog_debug("  kernel_executable_physical_address_end: 0x%X", initialization_info->kernel_executable_physical_address_end);
+    log_debug(INITIALIZATION, "Primary_CPU_Initialization_Info:");
+    log_debug(INITIALIZATION, "  kernel_executable_physical_address_start: 0x%X", initialization_info->kernel_executable_physical_address_start);
+    log_debug(INITIALIZATION, "  kernel_executable_physical_address_end: 0x%X", initialization_info->kernel_executable_physical_address_end);
     const size_t kernel_executable_size_in_bytes = initialization_info->kernel_executable_physical_address_end  - 
       initialization_info->kernel_executable_physical_address_start;
     const size_t kernel_executable_size_in_kilobytes = kernel_executable_size_in_bytes / 1024;
     const size_t kernel_executable_size_in_megabytes = kernel_executable_size_in_kilobytes / 1024;
-    klog_debug("  kernel_executable_size: %uMB %uKB", kernel_executable_size_in_megabytes, kernel_executable_size_in_kilobytes);
+    log_debug(INITIALIZATION, "  kernel_executable_size: %uMB %uKB", kernel_executable_size_in_megabytes, kernel_executable_size_in_kilobytes);
 
-    klog_debug("  rsdp_physical_address: 0x%X", initialization_info->rsdp_physical_address);
-    klog_debug("  rsdp_version: 0x%X", initialization_info->rsdp_version);
-    klog_debug("  usable_range_count: %X", initialization_info->usable_range_count);
+    log_debug(INITIALIZATION, "  rsdp_physical_address: 0x%X", initialization_info->rsdp_physical_address);
+    log_debug(INITIALIZATION, "  rsdp_version: 0x%X", initialization_info->rsdp_version);
+    log_debug(INITIALIZATION, "  usable_range_count: %X", initialization_info->usable_range_count);
 
     for (size_t i = 0; i < initialization_info->usable_range_count; i++)
     {
@@ -51,7 +51,7 @@ void dump_primary_cpu_initialization_info(Primary_CPU_Initialization_Info *initi
         // but we don't have floating-point turned on in the kernel right now.
         // I don't think we want to bother doing that anyway. It's not worth it to have it set up  at this point.
         const size_t size_in_megabytes = (memory_range->size_in_bytes / 1024) / 1024;
-        klog_debug("    memory_range: [0x%X, 0x%X] total_size: %uMB (%ubytes)", 
+        log_debug(INITIALIZATION, "    memory_range: [0x%X, 0x%X] total_size: %uMB (%ubytes)", 
           start_address, end_address, size_in_megabytes, memory_range->size_in_bytes);
     }
 }
@@ -197,7 +197,7 @@ static inline void multiboot2_get_elf_section_info(struct multiboot_tag_elf_sect
   for (size_t i = 0; i < elf_sections->num; i++) {
     ELF_Section_Header *section = (ELF_Section_Header *)(elf_sections->sections + (i * elf_sections->entsize));
     const char *name = section->name_offset + string_table;
-    klog_debug("%s", name);
+    log_debug(INITIALIZATION, "%s", name);
   }
 }
 
