@@ -73,10 +73,10 @@ static int ehci_check_qh_status(EHCI_Queue_Head *qh){
 
 static int ehci_check_port_status(uint32_t volatile *port_register){
   EHCI_Port *port = (EHCI_Port *)port_register;
-  klog_debug(" connect_status_change: %u", (uint32_t)port->connect_status_change);
-  klog_debug(" port_enabled_change: %u", (uint32_t)port->port_enabled_change);
-  klog_debug(" over_current_change: %u", (uint32_t)port->over_current_change);
-  klog_debug(" port_enabled: %u", (uint32_t)port->port_enabled);
+  log_debug(EHCI, " connect_status_change: %u", (uint32_t)port->connect_status_change);
+  log_debug(EHCI, " port_enabled_change: %u", (uint32_t)port->port_enabled_change);
+  log_debug(EHCI, " over_current_change: %u", (uint32_t)port->over_current_change);
+  log_debug(EHCI, " port_enabled: %u", (uint32_t)port->port_enabled);
   return 1;
 }
 
@@ -121,14 +121,14 @@ static inline void ehci_enable_asynch_schedule(EHCI_Controller *hc){
 
   int status = ehci_check_qh_status(qh);
   if (status == 0) {
-    klog_debug("CONTROL TRANSFER ERROR");
-    klog_debug(" ");
-    klog_debug("setup_qtd: ");
+    log_debug(EHCI, "CONTROL TRANSFER ERROR");
+    log_debug(EHCI, " ");
+    log_debug(EHCI, "setup_qtd: ");
     kdebug_log_qtd(setup_qtd);
-    klog_debug(" ");
-    klog_debug("status_qtd: ");
+    log_debug(EHCI, " ");
+    log_debug(EHCI, "status_qtd: ");
     kdebug_log_qtd(status_qtd);
-    klog_debug("usb_status");
+    log_debug(EHCI, "usb_status");
     kdebug_log_hc_status(hc);
     return 0;
   }
@@ -162,28 +162,28 @@ static inline int ehci_control_transfer_with_data(EHCI_Controller *hc, uint8_t d
 
   if(status == -1){
     klog_error("[CONTROL_TRANSFER_ERROR]");
-    klog_debug("qh_qtd:");
+    log_debug(EHCI, "qh_qtd:");
     kdebug_log_qtd_token(qh->qtd_token);
-    klog_debug("setup_qtd: ");
+    log_debug(EHCI, "setup_qtd: ");
     kdebug_log_qtd(setup_qtd);
-    klog_debug("data_qtd: ");
+    log_debug(EHCI, "data_qtd: ");
     kdebug_log_qtd(data_qtd);
-    klog_debug("status_qtd: ");
+    log_debug(EHCI, "status_qtd: ");
     kdebug_log_qtd(status_qtd);
-    klog_debug("usb_status");
+    log_debug(EHCI, "usb_status");
     kdebug_log_hc_status(hc);
     return 0;
   } else if (status == 0) {
     klog_error("[CONTROL_TRANSFER_TIMEOUT");
-    klog_debug("qh_qtd:");
+    log_debug(EHCI, "qh_qtd:");
     kdebug_log_qtd_token(qh->qtd_token);
-    klog_debug("setup_qtd: ");
+    log_debug(EHCI, "setup_qtd: ");
     kdebug_log_qtd(setup_qtd);
-    klog_debug("data_qtd: ");
+    log_debug(EHCI, "data_qtd: ");
     kdebug_log_qtd(data_qtd);
-    klog_debug("status_qtd: ");
+    log_debug(EHCI, "status_qtd: ");
     kdebug_log_qtd(status_qtd);
-    klog_debug("usb_status");
+    log_debug(EHCI, "usb_status");
     kdebug_log_hc_status(hc);
     return 0;
   }
@@ -225,7 +225,7 @@ int ehci_bulk_transfer_with_data(EHCI_Controller *hc, USB_Mass_Storage_Device *m
 
   if(status == 0) {
     klog_error("bulk out transaction error");
-    klog_debug("queue_head:");
+    log_debug(EHCI, "queue_head:");
     kdebug_log_qtd_token(out_qh->qtd_token);
     kdebug_log_qtd(out_data_qtd);
     return 0;
@@ -240,20 +240,20 @@ int ehci_bulk_transfer_with_data(EHCI_Controller *hc, USB_Mass_Storage_Device *m
 
   if(status == 0) {
     klog_error("bulk in transaction timed out without completing");
-    klog_debug("queue_head:");
+    log_debug(EHCI, "queue_head:");
     kdebug_log_qtd_token(in_qh->qtd_token);
-    klog_debug("in_data:");
+    log_debug(EHCI, "in_data:");
     kdebug_log_qtd(in_data_qtd);
-    klog_debug("in_status:");
+    log_debug(EHCI, "in_status:");
     kdebug_log_qtd(in_status_qtd);
     return 0;
   } else if (status == -1) {
     klog_error("bulk in tranaction resulted in an error");
-    klog_debug("queue_head:");
+    log_debug(EHCI, "queue_head:");
     kdebug_log_qtd_token(in_qh->qtd_token);
-    klog_debug("in_data:");
+    log_debug(EHCI, "in_data:");
     kdebug_log_qtd(in_data_qtd);
-    klog_debug("in_status:");
+    log_debug(EHCI, "in_status:");
     kdebug_log_qtd(in_status_qtd);
     return 0;
   }
@@ -311,7 +311,7 @@ int ehci_bulk_transfer_no_data(EHCI_Controller *hc, USB_Mass_Storage_Device *msd
   int status = ehci_check_qh_status(out_qh);
   if (status == 0) {
     klog_error("bulk out transaction error");
-    klog_debug("queue_head:");
+    log_debug(EHCI, "queue_head:");
     kdebug_log_qtd_token(out_qh->qtd_token);
     kdebug_log_qtd(out_data_qtd);
     return 0;
@@ -325,16 +325,16 @@ int ehci_bulk_transfer_no_data(EHCI_Controller *hc, USB_Mass_Storage_Device *msd
   ehci_disable_asynch_schedule(hc);
   if (status == 0) {
     klog_error("bulk in transaction timed out without completing");
-    klog_debug("queue_head:");
+    log_debug(EHCI, "queue_head:");
     kdebug_log_qtd_token(in_qh->qtd_token);
-    klog_debug("in_status:");
+    log_debug(EHCI, "in_status:");
     kdebug_log_qtd(in_status_qtd);
     return 0;
   } else if (status == -1) {
     klog_error("bulk in tranaction resulted in an error");
-    klog_debug("queue_head:");
+    log_debug(EHCI, "queue_head:");
     kdebug_log_qtd_token(in_qh->qtd_token);
-    klog_debug("in_status:");
+    log_debug(EHCI, "in_status:");
     kdebug_log_qtd(in_status_qtd);
     return 0;
   }
@@ -402,9 +402,9 @@ Error_Code ehci_read_to_physical_address(EHCI_Controller *hc, USB_Mass_Storage_D
     transfer_length |= read_command.transfer_length_1 << 8;
 
     klog_error("[FAILED] USB MSD Read");
-    klog_debug(" cbw.transfer_length: %u", (uint32_t)read_command.cbw.transfer_length);
-    klog_debug(" transfer_length: %u", (uint32_t)transfer_length);
-    klog_debug(" logical_block_address: %u", (uint32_t)logical_block_address);
+    log_debug(EHCI, " cbw.transfer_length: %u", (uint32_t)read_command.cbw.transfer_length);
+    log_debug(EHCI, " transfer_length: %u", (uint32_t)transfer_length);
+    log_debug(EHCI, " logical_block_address: %u", (uint32_t)logical_block_address);
     return Error_Code_FAILED_READ;
   }
   
@@ -431,7 +431,7 @@ int ehci_initalize_device(EHCI_Controller *hc, USB_Device *device) {
   { //Get Vendor and product strings
     uint8_t string_descriptor_buffer[256] = {};
     if (ehci_get_descriptor(hc, USB_DESCRIPTOR_TYPE_STRING, 0, 0, 8, string_descriptor_buffer) == 0){
-      klog_debug("failed to get string descriptor list");
+      log_debug(EHCI, "failed to get string descriptor list");
       return 0;
     }
 
@@ -833,7 +833,7 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
           if(is_port_enabled == false){
             klog_error("Port %lu failed to enable", port_index);
           } else {
-            //klog_debug("Port %lu enabled sucuessfuly", port_index);
+            //log_debug(EHCI, "Port %lu enabled sucuessfuly", port_index);
             //TODO(Torin 2016-10-15) Put this inside of the EHCI controler struct!
             USB_Device *device = &globals.usb_devices[globals.usb_device_count];
             globals.usb_device_count++;
