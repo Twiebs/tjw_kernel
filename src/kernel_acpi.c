@@ -92,7 +92,7 @@ void acpi_rsdt_parse_madt(ACPI_MADT *madt) {
       case MADT_Entry_Type_PROCESSOR_LOCAL_APIC: {
         MADT_Entry_Processor_Local_APIC * local_apic = (MADT_Entry_Processor_Local_APIC *)madt_entry; 
         bool is_apic_enabled = local_apic->flags & 0b1;
-        //klog_debug("[acpi] lapic: processor_id: %u apic_id: %u is %s", local_apic->processor_id, local_apic->apic_id, is_apic_enabled ? "enabled" : "disabled");
+        //log_debug(ACPI, ("[acpi] lapic: processor_id: %u apic_id: %u is %s", local_apic->processor_id, local_apic->apic_id, is_apic_enabled ? "enabled" : "disabled");
 
         if (system->total_cpu_count < ARRAY_COUNT(system->cpu_infos)){
           system->cpu_lapic_ids[system->total_cpu_count] = local_apic->apic_id;
@@ -136,7 +136,7 @@ void acpi_parse_root_system_descriptor_table(ACPI_SDT_Header *rsdt) {
 
   for (size_t i = 0; i < entry_count; i++) {
     uintptr_t header_physical_addr = (uintptr_t)entries[i];
-    klog_debug("[ACPI] attempting to parse rdst entry at 0x%X", header_physical_addr);
+    log_debug(ACPI, "qattempting to parse rdst entry at 0x%X", header_physical_addr);
     uintptr_t physical_page_address = header_physical_addr & ~0xFFF;
     uint64_t page_offset = header_physical_addr & 0xFFF;
     memory_map_physical_to_virtual(physical_page_address, globals.memory_state.current_kernel_persistent_virtual_memory_address);
@@ -150,15 +150,15 @@ void acpi_parse_root_system_descriptor_table(ACPI_SDT_Header *rsdt) {
 
     //Multiple APIC Description Table
     if (header->signature == ACPI_MADT_SIGNATURE) {
-      klog_debug("[ACPI] found MADT ACPI table");
+      log_debug(ACPI, "found MADT ACPI table");
       //silly_breakpoint();
       ACPI_MADT *madt = (ACPI_MADT *)header;
       acpi_rsdt_parse_madt(madt);
       //silly_breakpoint();
     } else if (header->signature == ACPI_MCFG_SIGNATURE){
-      klog_debug("[ACPI] found MCFG ACPI table");
+      log_debug(ACPI, "found MCFG ACPI table");
     } else {
-      klog_debug("[ACPI] skiping rdst entry");
+      log_debug(ACPI, "skiping rdst entry");
     }
 
 
@@ -169,7 +169,7 @@ void acpi_parse_root_system_descriptor_table(ACPI_SDT_Header *rsdt) {
     //silly_breakpoint();
   }
     
-  klog_debug("[ACPI] Finished parsing RSDT");
+  log_debug(ACPI, "Finished parsing RSDT");
 }
 
 
@@ -199,7 +199,7 @@ Error_Code acpi_parse_root_system_descriptor_version1(RSDP_Descriptor_1 *rsdp) {
 
 
 Error_Code acpi_parse_root_system_descriptor_version2(RSDP_Descriptor_2 *rsdp) {
-  klog_debug("[ACPI] Parsing RSDT from RSDP2");
+  log_debug(ACPI, "Parsing RSDT from RSDP2");
   if (!acpi_rsdp_is_signature_valid(&rsdp->first_part)) {
     klog_error("RSDP is invalid!");
     return Error_Code_INVALID_DATA;

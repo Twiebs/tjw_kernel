@@ -207,7 +207,7 @@ void memory_unmap_virtual_address(uintptr_t virtual_address) {
   uintptr_t physical_page = p1_table->entries[p1_index] & ~0xFFF;
   p1_table->entries[p1_index] = 0;
   memory_tlb_flush();
-  klog_debug("[Memory] Unmapped physical page: 0x%X from virtual address: 0x%X", physical_page, virtual_address);
+  log_debug(MEMORY, "Unmapped physical page: 0x%X from virtual address: 0x%X", physical_page, virtual_address);
 }
 
 uint8_t *memory_allocate_persistent_virtual_pages(uint64_t page_count) {
@@ -263,7 +263,7 @@ void memory_manager_initialize(Primary_CPU_Initialization_Info *initialization_i
   kassert((offset_into_range % 4096) == 0);
   memory->next_free_physical_page_index_in_current_range = offset_into_range / 4096;
   memory->current_usable_range = range;
-  klog_info("[Memory] Kernel Memory Manager initalized");
+  log_info(MEMORY, "Kernel Memory Manager initalized");
 }
 
 uintptr_t memory_map_physical_mmio(uintptr_t physical_address, uint64_t page_count) {

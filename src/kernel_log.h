@@ -43,6 +43,7 @@ typedef enum
     Log_Category_MEMORY,
     Log_Category_VFS,
     Log_Category_SYSTEM,
+    Log_Category_ACPI,
     Log_Category_PCI,
     Log_Category_EHCI,
     Log_Category_DESKTOP,
@@ -57,6 +58,7 @@ static const char* LOG_CATEGORY_NAMES[] =
     "Memory",
     "VFS",
     "System",
+    "ACPI",
     "PCI",
     "EHCI",
     "DESKTOP",
@@ -71,6 +73,7 @@ static const char* LOG_CATEGORY_TAGS[] =
     "[Memory] ",
     "[VFS] ",
     "[System] ",
+    "[ACPI] ",
     "[PCI] ",
     "[EHCI] ",
     "[Desktop] "
