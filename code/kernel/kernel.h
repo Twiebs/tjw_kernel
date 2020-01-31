@@ -1,7 +1,7 @@
 
 #define KERNEL_VERSION_MAJOR    0
 #define KERNEL_VERSION_MINOR    0
-#define KERNEL_VERSION_REVISION 2
+#define KERNEL_VERSION_REVISION 3
 
 #define strict_assert(expr) kassert(expr)
 #define static_assert(expr) _Static_assert(expr, "ASSERTION FAILED(" #expr ")")
