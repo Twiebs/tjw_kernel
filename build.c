@@ -1,9 +1,3 @@
-#if 0
-echo =========================================================================================================
-gcc -DBUILD_IS_RUNNING -E build.c | sh
-exit
-#endif
-
 #define BUILD_DEBUG
 #define FORCE_REDRAW_ON_LOG_ENTRY 1
 
@@ -24,20 +18,6 @@ exit
 #else//BUILD_DEBUG
 #define COMPILER_FLAGS -g -O2
 #endif//BUILD_DEBUG
-
-#if defined(BUILD_IS_RUNNING)
-  OutputDirectory=intermediate/binaries
-  mkdir -p $OutputDirectory
-  nasm -fbin src/secondary_cpu_init.asm -o $OutputDirectory/trampoline.bin 
-  $OutputDirectory/bin_to_txt $OutputDirectory/trampoline.bin src/trampoline.txt
-  gcc COMPILER_FLAGS -m64 -mno-red-zone -nostdlib -ffreestanding -fno-stack-protector -I ../tjw_kernel/src -c build.c -o $OutputDirectory/build.c.o
-  nasm -felf64 src/primary_cpu_init.asm -isrc/ -o $OutputDirectory/primary_cpu_init.asm.o
-  nasm -felf64 src/x86_64_entry.asm -isrc/ -o $OutputDirectory/x86_64_entry.asm.o
-  ld -melf_x86_64 -n -T kernel_link.ld -o $OutputDirectory/kernel $OutputDirectory/build.c.o $OutputDirectory/x86_64_entry.asm.o $OutputDirectory/primary_cpu_init.asm.o
-  objcopy --only-keep-debug $OutputDirectory/kernel $OutputDirectory/debug_symbols
-  objcopy --strip-debug $OutputDirectory/kernel $OutputDirectory/kernel
-  exit
-#endif
 
 #include <stdint.h>
 #include <stdarg.h>
