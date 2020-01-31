@@ -1,1 +1,0 @@
-qemu-img create filesystem.img 4G
