@@ -1,8 +1,6 @@
 #!/bin/bash
 source $(dirname $0)/variables.sh
 
-mkdir -p $BINARY_OUTPUT_DIRECTORY
-
 COMPILER_FLAGS="-g -O0"
 
 nasm -fbin $KERNEL_SOURCE_DIRECTORY/secondary_cpu_init.asm -o $BINARY_OUTPUT_DIRECTORY/trampoline.bin 
