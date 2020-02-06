@@ -664,8 +664,13 @@ static inline int ehci_is_hc_halted(volatile EHCI_Operational_Registers *op_regs
   return result;
 }
 
-int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *pci_device){
   //TODO(Torin 2016-10-20) PCI Devices should be stored in a seperate location in memory
+
+int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *pci_device) 
+{
+  
+  log_info(EHCI, "Initializing USB EHCI at physical address 0x%X", ehci_physical_address);
+
 
   uintptr_t physical_page_to_map = ehci_physical_address;
   size_t physical_page_offset = 0;
@@ -673,6 +678,8 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
     physical_page_to_map &= ~0xFFFLL; 
     physical_page_offset = ehci_physical_address - physical_page_to_map;
   }
+
+
 
   EHCI_Controller *hc = (EHCI_Controller *)memory_allocate_persistent_virtual_pages(2);
 
