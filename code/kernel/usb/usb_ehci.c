@@ -1,4 +1,3 @@
-#include "usb/ehci_debug.c"
 
 static void ehci_init_qtd(EHCI_QTD *previous_td, EHCI_QTD *current_td, uintptr_t current_td_physical_address, bool toggle, uint8_t transfer_type, uint16_t size, uintptr_t data_physical_address) {
   kassert(size < 32767);

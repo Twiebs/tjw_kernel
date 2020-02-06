@@ -75,7 +75,7 @@
 
 //USB devices and drivers
 #include "usb/usb.h"
-#include "usb/ehci.h"
+#include "usb/usb_ehci.h"
 #include "usb/usb_device.h"
 
 //Debug Procedures
@@ -122,7 +122,9 @@
 
 //USB
 #include "usb/usb_protocol.c"
-#include "usb/ehci.c"
+#include "usb/debug_usb.c"
+#include "usb/debug_usb_ehci.c"
+#include "usb/usb_ehci.c"
 
 //Debug
 #include "graphics/display_debug.c"

@@ -1,7 +1,6 @@
 
 static const uint8_t SCSI_PAGE_CODE_RIGID_DRIVE_GEOMETRY = 0x04;
 
-#include "usb_debug.c"
 
 typedef struct {
   USB_Command_Block_Wrapper cbw;
