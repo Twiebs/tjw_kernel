@@ -640,8 +640,7 @@ ehci_reset_port(volatile uint32_t *port){
   static const uint32_t EHCI_PORT_ENABLED_CHANGED_BIT = 1 << 3;
 
   *port = *port | EHCI_PORT_RESET_BIT;
-  kassert(*port & EHCI_PORT_RESET_BIT);
-  //NOTE(Torin 2016-09-17) Must Wait Max 50ms (USB2.0 spec 10.2.8.1)
+  // kassert(*port & EHCI_PORT_RESET_BIT);  //NOTE(Torin 2016-09-17) Must Wait Max 50ms (USB2.0 spec 10.2.8.1)
   lapic_wait_milliseconds(50);
   *port = *port & ~EHCI_PORT_RESET_BIT;
   //NOTE(Torin 2016-09-25) The HC has 2ms to set RESET bit to 0
