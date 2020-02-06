@@ -668,7 +668,7 @@ static inline int ehci_is_hc_halted(volatile EHCI_Operational_Registers *op_regs
 
 int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *pci_device) 
 {
-  
+
   log_info(EHCI, "Initializing USB EHCI at physical address 0x%X", ehci_physical_address);
 
 
@@ -696,13 +696,13 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
   //to release memory if it fails just make sure it is accounted for properly
 
   { //NOTE(Torin 2016-09-04) Extract information from hhcparams register
-    static const uint32_t HHCPARAMS_EXT_CAPS_MASK = 0xFF00;
-    static const uint32_t HHCPARAMS_ADDRESSING_BIT = (1 << 0);
-    static const uint32_t ADDRESSING_CAPABILITY_32 = 0b00;
-    static const uint32_t ADDRESSING_CAPABILITY_64 = 0b01;
-    uint32_t addressing_capability = hc->cap_regs->hcc_params & HHCPARAMS_ADDRESSING_BIT;
-    uint32_t extended_capabilities = (hc->cap_regs->hcc_params & HHCPARAMS_EXT_CAPS_MASK) >> 8;
-    if(addressing_capability == ADDRESSING_CAPABILITY_64) hc->is_64bit_capable = true;
+    uint32_t extended_capabilities = hc->cap_regs->hcc_params.extended_capabilities_pointer;
+
+    if (hc->cap_regs->hcc_params.is_64_bit)
+    {
+      hc->is_64bit_capable = true;
+    }
+
     if(extended_capabilities >= 0x40){
       static const uint32_t EHCI_USBLEGSUP_REGISTER_OFFSET = 0x00;
       uint32_t legacy_support_register = extended_capabilities + EHCI_USBLEGSUP_REGISTER_OFFSET;

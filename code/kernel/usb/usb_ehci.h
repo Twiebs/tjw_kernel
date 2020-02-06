@@ -1,10 +1,21 @@
 
 typedef struct {
+  uint32_t is_64_bit                        : 1; // 0
+  uint32_t must_use_1024_size_frame_list    : 1; // 1
+  uint16_t supports_park_feature            : 1; // 2
+  uint32_t reserved0                        : 1; // 3
+  uint32_t isochronous_scheduling_threshold : 4; // 4-7
+  uint64_t extended_capabilities_pointer    : 8; // 8-15
+  uint32_t reserved1                        : 16; // 16-31
+} __attribute((packed)) EHCI_Host_Controller_Capability_Parameters;
+static_assert(sizeof(EHCI_Host_Controller_Capability_Parameters) == 4);
+
+typedef struct {
   uint8_t capability_length;
   uint8_t reserved;
   uint16_t hci_version;
   uint32_t hcs_params;
-  uint32_t hcc_params;
+  EHCI_Host_Controller_Capability_Parameters hcc_params;
   uint64_t hcsp_port_route;
 } __attribute((packed)) EHCI_Capability_Registers;
 static_assert(sizeof(EHCI_Capability_Registers) == 20);
@@ -113,7 +124,7 @@ typedef struct {
 
   volatile EHCI_Operational_Registers *op_regs;
   volatile EHCI_Capability_Registers *cap_regs;
-  
+
   PCI_Device pci_device;
 
   uint8_t port_count;
