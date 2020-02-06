@@ -1,23 +1,25 @@
-typedef struct {
-  volatile uint8_t capability_length;
-  volatile uint8_t reserved;
-  volatile uint16_t hci_version;
-  volatile uint32_t hcs_params;
-  volatile uint32_t hcc_params;
-  volatile uint64_t hcsp_port_route;
-} __attribute((packed)) EHCI_Capability_Registers;
 
 typedef struct {
-  volatile uint32_t usb_command;
-  volatile uint32_t usb_status;
-  volatile uint32_t usb_interrupt;
-  volatile uint32_t frame_index;
-  volatile uint32_t ctrl_ds_segment;
-  volatile uint32_t perodic_list_base;
-  volatile uint32_t async_list_address;
-  volatile uint32_t reserved[9];
-  volatile uint32_t config_flag;
-  volatile uint32_t ports[0];
+  uint8_t capability_length;
+  uint8_t reserved;
+  uint16_t hci_version;
+  uint32_t hcs_params;
+  uint32_t hcc_params;
+  uint64_t hcsp_port_route;
+} __attribute((packed)) EHCI_Capability_Registers;
+static_assert(sizeof(EHCI_Capability_Registers) == 20);
+
+typedef struct {
+  uint32_t usb_command;
+  uint32_t usb_status;
+  uint32_t usb_interrupt;
+  uint32_t frame_index;
+  uint32_t ctrl_ds_segment;
+  uint32_t perodic_list_base;
+  uint32_t async_list_address;
+  uint32_t reserved[9];
+  uint32_t config_flag;
+  uint32_t ports[0];
 } __attribute((packed)) EHCI_Operational_Registers;
 
 typedef struct {
@@ -109,8 +111,9 @@ typedef struct {
   uintptr_t first_page_physical_address;
   uintptr_t second_page_physical_address;
 
-  EHCI_Operational_Registers *op_regs;
-  EHCI_Capability_Registers *cap_regs;
+  volatile EHCI_Operational_Registers *op_regs;
+  volatile EHCI_Capability_Registers *cap_regs;
+  
   PCI_Device pci_device;
 
   uint8_t port_count;

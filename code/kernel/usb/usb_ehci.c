@@ -658,7 +658,7 @@ ehci_reset_port(volatile uint32_t *port){
    return false;
 }
 
-static inline int ehci_is_hc_halted(EHCI_Operational_Registers *op_regs){
+static inline int ehci_is_hc_halted(volatile EHCI_Operational_Registers *op_regs){
   static const uint32_t USBSTATUS_CONTROLLER_HALTED = (1 << 12);
   int result = op_regs->usb_status & USBSTATUS_CONTROLLER_HALTED;
   return result;
@@ -674,10 +674,12 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
     physical_page_offset = ehci_physical_address - physical_page_to_map;
   }
 
-  uintptr_t ehci_registers_virtual_address = memory_map_physical_mmio(physical_page_to_map, 1);
   EHCI_Controller *hc = (EHCI_Controller *)memory_allocate_persistent_virtual_pages(2);
-  hc->cap_regs = (EHCI_Capability_Registers *)(ehci_registers_virtual_address + physical_page_offset);
-  hc->op_regs = (EHCI_Operational_Registers *)(ehci_registers_virtual_address + physical_page_offset + hc->cap_regs->capability_length);
+
+  const Virtual_Address ehci_registers_virtual_address = memory_map_physical_mmio(physical_page_to_map, 1);
+  hc->cap_regs = (volatile EHCI_Capability_Registers *)(ehci_registers_virtual_address + physical_page_offset);
+  hc->op_regs = (volatile EHCI_Operational_Registers *)(ehci_registers_virtual_address + physical_page_offset + hc->cap_regs->capability_length);
+
   hc->pci_device = *pci_device;
   hc->first_page_physical_address = memory_get_physical_address((uintptr_t)hc + 0);
   hc->second_page_physical_address = memory_get_physical_address((uintptr_t)hc + 4096); 
