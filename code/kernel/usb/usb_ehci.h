@@ -2,10 +2,10 @@
 typedef struct {
   uint32_t is_64_bit                        : 1; // 0
   uint32_t must_use_1024_size_frame_list    : 1; // 1
-  uint16_t supports_park_feature            : 1; // 2
+  uint32_t supports_park_feature            : 1; // 2
   uint32_t reserved0                        : 1; // 3
   uint32_t isochronous_scheduling_threshold : 4; // 4-7
-  uint64_t extended_capabilities_pointer    : 8; // 8-15
+  uint32_t extended_capabilities_pointer    : 8; // 8-15
   uint32_t reserved1                        : 16; // 16-31
 } __attribute((packed)) EHCI_Host_Controller_Capability_Parameters;
 static_assert(sizeof(EHCI_Host_Controller_Capability_Parameters) == 4);

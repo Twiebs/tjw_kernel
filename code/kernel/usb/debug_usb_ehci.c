@@ -1,4 +1,14 @@
 
+void debug_log_ehci_capability_registers(volatile EHCI_Capability_Registers *cap_regs)
+{
+  log_debug(EHCI, "ehci_capability_registers:");
+  log_debug(EHCI, "  is_64_bit: %u", (uint32_t)cap_regs->hcc_params.is_64_bit);
+  log_debug(EHCI, "  must_use_1024_size_frame_list: %u", (uint32_t)cap_regs->hcc_params.must_use_1024_size_frame_list);
+  log_debug(EHCI, "  supports_park_feature: %u", (uint32_t)cap_regs->hcc_params.supports_park_feature);
+  log_debug(EHCI, "  isochronous_scheduling_threshold: 0x%X", (uint64_t)cap_regs->hcc_params.isochronous_scheduling_threshold);
+  log_debug(EHCI, "  extended_capabilities_pointer: 0x%X", (uint64_t)cap_regs->hcc_params.extended_capabilities_pointer);
+}
+
 void kdebug_log_ehci_operational_registers(EHCI_Operational_Registers *opregs){
   log_debug(EHCI, "usbcmd: 0x%X", (uint64_t)opregs->usb_command);
   log_debug(EHCI, "usbstd: 0x%X", (uint64_t)opregs->usb_status);

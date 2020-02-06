@@ -686,6 +686,7 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
   const Virtual_Address ehci_registers_virtual_address = memory_map_physical_mmio(physical_page_to_map, 1);
   hc->cap_regs = (volatile EHCI_Capability_Registers *)(ehci_registers_virtual_address + physical_page_offset);
   hc->op_regs = (volatile EHCI_Operational_Registers *)(ehci_registers_virtual_address + physical_page_offset + hc->cap_regs->capability_length);
+  debug_log_ehci_capability_registers(hc->cap_regs);
 
   hc->pci_device = *pci_device;
   hc->first_page_physical_address = memory_get_physical_address((uintptr_t)hc + 0);
@@ -701,6 +702,11 @@ int ehci_initalize_host_controller(uintptr_t ehci_physical_address, PCI_Device *
     if (hc->cap_regs->hcc_params.is_64_bit)
     {
       hc->is_64bit_capable = true;
+    }
+    else
+    {
+      klog_error("echi controller does not support 64 bit structures");
+      return 0;
     }
 
     if(extended_capabilities >= 0x40){
