@@ -78,13 +78,17 @@
 #include "usb/usb_ehci.h"
 #include "usb/usb_device.h"
 
+// ahci
+#include "ahci.h"
+
 //Debug Procedures
 #include "kernel_debug.h"
 #include "memory_debug.h"
 #include "graphics/display_debug.h"
 
+//=================================================================================================================================
 //  Source Files
-//===========================
+//=================================================================================================================================
 
 //System
 #include "kernel_entry.c"
@@ -125,6 +129,9 @@
 #include "usb/debug_usb.c"
 #include "usb/debug_usb_ehci.c"
 #include "usb/usb_ehci.c"
+
+// ahci
+#include "ahci.c"
 
 //Debug
 #include "graphics/display_debug.c"

@@ -105,7 +105,12 @@ const char *type_description, PCI_Device_Initialization_Procedure initialization
   pci_device_driver->type_description = type_description;
 }
 
-void pci_initialize_default_device_drivers() {
+void pci_initialize_default_device_drivers() 
+{
+  // AHCI
+  pci_device_driver_create(PCI_Device_Class_MASS_STORAGE_CONTROLLER, 0x01, 0x80, 
+    0x8086, 0x7010, "AHCI - Advanced Host Controller Interface (SATA)", ahci_initalize);
+
   //USB Host Controller Drivers
   pci_device_driver_create(PCI_Device_Class_SERIAL_BUS_CONTROLLER, PCI_SUBCLASS_USB_CONTROLLER,
     PCI_PROGRAMMING_INTERFACE_XHCI_CONTROLLER, 0xFFFF, 0x0000, "USB XHCI Host Controller", 0);

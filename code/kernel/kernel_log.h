@@ -46,6 +46,7 @@ typedef enum
     Log_Category_ACPI,
     Log_Category_PCI,
     Log_Category_EHCI,
+    Log_Category_AHCI,
     Log_Category_DESKTOP,
     Log_Category_COUNT
 } Log_Category;
@@ -61,6 +62,7 @@ static const char* LOG_CATEGORY_NAMES[] =
     "ACPI",
     "PCI",
     "EHCI",
+    "AHCI",
     "DESKTOP",
     "__COUNT__"
 };
@@ -76,6 +78,7 @@ static const char* LOG_CATEGORY_TAGS[] =
     "[ACPI] ",
     "[PCI] ",
     "[EHCI] ",
+    "[AHCI] ",
     "[Desktop] "
 };
 

@@ -75,6 +75,7 @@ typedef struct {
   volatile uint8_t padding[12]; //QTD Must have 64 byte alignment
 } __attribute((packed)) EHCI_QTD; //64 bytes
 
+
 //TODO(Torin 2016-10-21) Does the QH need to be 32byte algined or literaly cache line aligned?
 //Or can it be aligned on 32Byte boundry (96Byte struct size)???
 typedef struct {
