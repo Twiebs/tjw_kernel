@@ -53,6 +53,13 @@ typedef struct {
   uint8_t interrupt_pin;
   uint8_t interrupt_line;
 
+  uint32_t base_address_0;
+  uint32_t base_address_1;
+  uint32_t base_address_2;
+  uint32_t base_address_3;
+  uint32_t base_address_4;
+  uint32_t base_address_5;
+
   bool has_extended_capibilities;
   bool is_initalized;
   const char *type_description; //Staticly allocated string
@@ -71,6 +78,7 @@ typedef struct {
 } PCI_Device_Driver;
 
 uintptr_t pci_device_get_base_address_0(PCI_Device *pci_device);
+uintptr_t pci_device_get_base_address_5(PCI_Device *pci_device);
 
 PCI_Device *pci_device_create(uint8_t bus_number, uint8_t device_number, uint8_t function_number);
 void pci_device_driver_create(uint8_t class_code, uint8_t subclass, uint8_t programming_interface,  uint16_t vendor_id, uint16_t device_id,
@@ -84,3 +92,5 @@ void pci_enumerate_and_create_devices();
 void pci_initialize_valid_devices();
 
 Error_Code pci_ehci_initialize(PCI_Device *pci_device);
+
+void pci_debug_log_pci_device(PCI_Device *pci_device);

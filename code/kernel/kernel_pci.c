@@ -58,6 +58,14 @@ uintptr_t pci_device_get_base_address_0(PCI_Device *pci_device) {
   return base_address;
 }
 
+uintptr_t pci_device_get_base_address_5(PCI_Device *pci_device) {
+  pci_device_config_address_set(pci_device, 0x24);
+  uint32_t base_address = pci_read_uint32();
+  base_address &= 0xFFFFFFF0;
+  return base_address;
+}
+
+
 
 Error_Code pci_ehci_initialize(PCI_Device *pci_device) {
   pci_device_config_address_set(pci_device, 0x10);
@@ -107,9 +115,11 @@ const char *type_description, PCI_Device_Initialization_Procedure initialization
 
 void pci_initialize_default_device_drivers() 
 {
-  // AHCI
+  // AHCI Advanced Host Controller Interface (SATA)
   pci_device_driver_create(PCI_Device_Class_MASS_STORAGE_CONTROLLER, 0x01, 0x80, 
     0x8086, 0x7010, "AHCI - Advanced Host Controller Interface (SATA)", ahci_initalize);
+  pci_device_driver_create(PCI_Device_Class_MASS_STORAGE_CONTROLLER, 0x06, 0x01, 
+    0x8086, 0x2829, "AHCI - Advanced Host Controller Interface (SATA)", ahci_initalize);
 
   //USB Host Controller Drivers
   pci_device_driver_create(PCI_Device_Class_SERIAL_BUS_CONTROLLER, PCI_SUBCLASS_USB_CONTROLLER,
@@ -175,9 +185,23 @@ void pci_device_set_type_description(PCI_Device *pci_device) {
   };
 }
 
+void pci_debug_log_pci_device(PCI_Device *pci_device)
+{
+    log_debug(PCI, "PCI Device:");
+    log_debug(PCI, "  %s", pci_device->type_description);
+    log_debug(PCI, "  base_address_0:  0x%X", (uint64_t)pci_device->base_address_0);
+    log_debug(PCI, "  base_address_1:  0x%X", (uint64_t)pci_device->base_address_1);
+    log_debug(PCI, "  base_address_2:  0x%X", (uint64_t)pci_device->base_address_2);
+    log_debug(PCI, "  base_address_3:  0x%X", (uint64_t)pci_device->base_address_3);
+    log_debug(PCI, "  base_address_4:  0x%X", (uint64_t)pci_device->base_address_4);
+    log_debug(PCI, "  base_address_5:  0x%X", (uint64_t)pci_device->base_address_5);
+}
+
+
 //NOTE(Torin 2017) When this procedure is called the pci_device
 //already has its vendor_id and device_id information 
-void pci_device_get_info(PCI_Device *pci_device) {
+void pci_device_get_info(PCI_Device *pci_device) 
+{
   pci_device_config_address_set(pci_device, 0x08);
   pci_read_4x8(&pci_device->class_code, &pci_device->subclass, 
     &pci_device->programming_interface, &pci_device->revision_id);
@@ -192,6 +216,27 @@ void pci_device_get_info(PCI_Device *pci_device) {
   uint8_t max_latency, min_grant, interrupt_pin, interrupt_line;
   pci_read_4x8(&max_latency, &min_grant, &interrupt_pin, &interrupt_line);
   pci_device_set_type_description(pci_device);
+
+  pci_device_config_address_set(pci_device, 0x10);
+  pci_device->base_address_0 = pci_read_uint32();
+  pci_device->base_address_0 = pci_device->base_address_0 & 0xFFFFFFF0;
+  pci_device_config_address_set(pci_device, 0x14);
+  pci_device->base_address_1 = pci_read_uint32();
+  pci_device->base_address_1 = pci_device->base_address_1 & 0xFFFFFFF0;
+  pci_device_config_address_set(pci_device, 0x18);
+  pci_device->base_address_2 = pci_read_uint32();
+  pci_device->base_address_2 = pci_device->base_address_2 & 0xFFFFFFF0;
+  pci_device_config_address_set(pci_device, 0x1C);
+  pci_device->base_address_3 = pci_read_uint32();
+  pci_device->base_address_3 = pci_device->base_address_3 & 0xFFFFFFF0;
+  pci_device_config_address_set(pci_device, 0x20);
+  pci_device->base_address_4 = pci_read_uint32();
+  pci_device->base_address_4 = pci_device->base_address_4 & 0xFFFFFFF0;
+  pci_device_config_address_set(pci_device, 0x24);
+  pci_device->base_address_5 = pci_read_uint32();
+  pci_device->base_address_5 = pci_device->base_address_5 & 0xFFFFFFF0;
+
+  pci_debug_log_pci_device(pci_device);
 }
 
 void pci_enumerate_and_create_devices() {
