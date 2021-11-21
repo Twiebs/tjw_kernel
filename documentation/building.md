@@ -40,6 +40,15 @@ The main script that does this is called run.sh.
 There are a few configuration variables at the top of it that need to be hardcoded.
 qemu needs to be installed.
 
+# Building and running an ISO
+- Make sure `xorriso` is installed
+- Make sure `nasm` is installed
+- Make sure `gcc` is installed
+- Build kernel tools by running `scripts/build_tools.sh`
+- Build kernel by running `scripts/build_kernel.sh`
+- Make ISO file by running `scripts/make_iso.sh`
+- Run ISO with qemu using `scripts/run_qemu_iso.sh`
+
 # Windows
 Must use WSL2
 Install qemu on windows
