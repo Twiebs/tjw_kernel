@@ -8,6 +8,7 @@ I'm writing this documentation two years since the last time I touched this proj
 - objcopy
 - ld
 - sh
+- grub-mkrescue (grub-common)
 
 # Compiling The Tools
 
