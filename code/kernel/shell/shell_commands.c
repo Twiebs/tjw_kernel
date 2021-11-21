@@ -70,6 +70,12 @@ void shell_command_lspci(Shell_Command_Parameter_Info *parameter_info) {
       pci_device->device_number, pci_device->function_number, pci_device->type_description,
       pci_device->subclass, pci_device->programming_interface, pci_device->vendor_id, pci_device->device_id);
   }
+
+  for (size_t i = 0; i < system->pci_device_count; i++) {
+    PCI_Device *pci_device = &system->pci_devices[i];
+    pci_debug_log_pci_device(pci_device);
+  }
+
 }
 
 void shell_command_run(Shell_Command_Parameter_Info *parameter_info) {
