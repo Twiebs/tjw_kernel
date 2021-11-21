@@ -94,3 +94,4 @@ void pci_initialize_valid_devices();
 Error_Code pci_ehci_initialize(PCI_Device *pci_device);
 
 void pci_debug_log_pci_device(PCI_Device *pci_device);
+void pci_debug_dump_pci_device_drivers();

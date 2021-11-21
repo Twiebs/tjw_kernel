@@ -118,6 +118,8 @@ void pci_initialize_default_device_drivers()
   // AHCI Advanced Host Controller Interface (SATA)
   pci_device_driver_create(PCI_Device_Class_MASS_STORAGE_CONTROLLER, 0x06, 0x01, 
     0x8086, 0x2829, "AHCI - Advanced Host Controller Interface (SATA)", ahci_initalize);
+  pci_device_driver_create(PCI_Device_Class_MASS_STORAGE_CONTROLLER, 0x06, 0x01, 
+    0x8086, 0x2922, "AHCI - Advanced Host Controller Interface (SATA)", ahci_initalize);
 
   //USB Host Controller Drivers
   pci_device_driver_create(PCI_Device_Class_SERIAL_BUS_CONTROLLER, PCI_SUBCLASS_USB_CONTROLLER,
@@ -182,23 +184,6 @@ void pci_device_set_type_description(PCI_Device *pci_device) {
       }
   };
 }
-
-void pci_debug_log_pci_device(PCI_Device *pci_device)
-{
-    log_debug(PCI, "PCI Device:");
-    log_debug(PCI, "  %s", pci_device->type_description);
-    log_debug(PCI, "  class_code: 0x%X", (uint64_t)pci_device->class_code);
-    log_debug(PCI, "  subclass: 0x%X", (uint64_t)pci_device->subclass);
-    log_debug(PCI, "  vendor_id: 0x%X", (uint64_t)pci_device->vendor_id);
-    log_debug(PCI, "  device_id: 0x%X", (uint64_t)pci_device->device_id);
-    log_debug(PCI, "  base_address_0:  0x%X", (uint64_t)pci_device->base_address_0);
-    log_debug(PCI, "  base_address_1:  0x%X", (uint64_t)pci_device->base_address_1);
-    log_debug(PCI, "  base_address_2:  0x%X", (uint64_t)pci_device->base_address_2);
-    log_debug(PCI, "  base_address_3:  0x%X", (uint64_t)pci_device->base_address_3);
-    log_debug(PCI, "  base_address_4:  0x%X", (uint64_t)pci_device->base_address_4);
-    log_debug(PCI, "  base_address_5:  0x%X", (uint64_t)pci_device->base_address_5);
-}
-
 
 //NOTE(Torin 2017) When this procedure is called the pci_device
 //already has its vendor_id and device_id information 
@@ -306,5 +291,31 @@ void pci_initialize_valid_devices() {
   for (size_t i = 0; i < system->pci_device_count; i++) {
     PCI_Device *pci_device = &system->pci_devices[i];
     pci_initialize_device(pci_device);
+  }
+}
+
+
+void pci_debug_log_pci_device(PCI_Device *pci_device)
+{
+    log_debug(PCI, "PCI Device:");
+    log_debug(PCI, "  %s", pci_device->type_description);
+    log_debug(PCI, "  class_code: 0x%X", (uint64_t)pci_device->class_code);
+    log_debug(PCI, "  subclass: 0x%X", (uint64_t)pci_device->subclass);
+    log_debug(PCI, "  vendor_id: 0x%X", (uint64_t)pci_device->vendor_id);
+    log_debug(PCI, "  device_id: 0x%X", (uint64_t)pci_device->device_id);
+    log_debug(PCI, "  base_address_0:  0x%X", (uint64_t)pci_device->base_address_0);
+    log_debug(PCI, "  base_address_1:  0x%X", (uint64_t)pci_device->base_address_1);
+    log_debug(PCI, "  base_address_2:  0x%X", (uint64_t)pci_device->base_address_2);
+    log_debug(PCI, "  base_address_3:  0x%X", (uint64_t)pci_device->base_address_3);
+    log_debug(PCI, "  base_address_4:  0x%X", (uint64_t)pci_device->base_address_4);
+    log_debug(PCI, "  base_address_5:  0x%X", (uint64_t)pci_device->base_address_5);
+}
+
+void pci_debug_dump_pci_device_drivers() {
+  System_Info *system = &globals.system_info;
+  for (size_t i = 0; i < system->pci_device_driver_count; i++) {
+    PCI_Device_Driver *driver = &system->pci_device_drivers[i];
+    log_debug(PCI, "PCI Device Driver:");
+    log_debug(PCI, "  name: %s", driver->type_description);
   }
 }

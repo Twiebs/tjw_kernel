@@ -76,6 +76,8 @@ void shell_command_lspci(Shell_Command_Parameter_Info *parameter_info) {
     pci_debug_log_pci_device(pci_device);
   }
 
+  pci_debug_dump_pci_device_drivers();
+
 }
 
 void shell_command_run(Shell_Command_Parameter_Info *parameter_info) {
