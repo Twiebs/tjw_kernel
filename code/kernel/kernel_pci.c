@@ -189,6 +189,10 @@ void pci_debug_log_pci_device(PCI_Device *pci_device)
 {
     log_debug(PCI, "PCI Device:");
     log_debug(PCI, "  %s", pci_device->type_description);
+    log_debug(PCI, "  class_code: 0x%X", (uint64_t)pci_device->class_code);
+    log_debug(PCI, "  subclass: 0x%X", (uint64_t)pci_device->subclass);
+    log_debug(PCI, "  vendor_id: 0x%X", (uint64_t)pci_device->vendor_id);
+    log_debug(PCI, "  device_id: 0x%X", (uint64_t)pci_device->device_id);
     log_debug(PCI, "  base_address_0:  0x%X", (uint64_t)pci_device->base_address_0);
     log_debug(PCI, "  base_address_1:  0x%X", (uint64_t)pci_device->base_address_1);
     log_debug(PCI, "  base_address_2:  0x%X", (uint64_t)pci_device->base_address_2);
