@@ -116,8 +116,6 @@ const char *type_description, PCI_Device_Initialization_Procedure initialization
 void pci_initialize_default_device_drivers() 
 {
   // AHCI Advanced Host Controller Interface (SATA)
-  pci_device_driver_create(PCI_Device_Class_MASS_STORAGE_CONTROLLER, 0x01, 0x80, 
-    0x8086, 0x7010, "AHCI - Advanced Host Controller Interface (SATA)", ahci_initalize);
   pci_device_driver_create(PCI_Device_Class_MASS_STORAGE_CONTROLLER, 0x06, 0x01, 
     0x8086, 0x2829, "AHCI - Advanced Host Controller Interface (SATA)", ahci_initalize);
 
