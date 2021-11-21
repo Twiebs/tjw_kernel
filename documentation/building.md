@@ -8,7 +8,9 @@ I'm writing this documentation two years since the last time I touched this proj
 - objcopy
 - ld
 - sh
+- grub2 (grub-install)
 - grub-mkrescue (grub-common)
+- xorriso (for grub-mkrescue)
 
 # Compiling The Tools
 
@@ -37,3 +39,8 @@ so I need to add this so that I can output the binaries that the build script pr
 The main script that does this is called run.sh.
 There are a few configuration variables at the top of it that need to be hardcoded.
 qemu needs to be installed.
+
+# Windows
+Must use WSL2
+Install qemu on windows
+Add qemu to path
