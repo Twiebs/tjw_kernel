@@ -237,8 +237,6 @@ void pci_device_get_info(PCI_Device *pci_device)
   pci_device_config_address_set(pci_device, 0x24);
   pci_device->base_address_5 = pci_read_uint32();
   pci_device->base_address_5 = pci_device->base_address_5 & 0xFFFFFFF0;
-
-  pci_debug_log_pci_device(pci_device);
 }
 
 void pci_enumerate_and_create_devices() {
