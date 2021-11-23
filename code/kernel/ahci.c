@@ -105,6 +105,10 @@ Error_Code ahci_initalize(PCI_Device *pci_device)
 {
     log_info(AHCI, "Initializing AHCI - Advanced Host Controller Interface (SATA)");
 
+    kassert(offsetof(AHCI_Registers, ports) == 0x100);
+    kassert(sizeof(((AHCI_Registers*)0)->ports) == 4096);
+
+
     pci_debug_log_pci_device(pci_device);
 
     const uintptr_t registers_physical_address =  pci_device->base_address_5;
