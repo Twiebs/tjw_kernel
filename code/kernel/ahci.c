@@ -135,7 +135,25 @@ Error_Code ahci_initalize(PCI_Device *pci_device)
     volatile AHCI_HBA_Capabilities *hba_capabilities = &registers->hba_capabilities;
     debug_log_AHCI_HBA_Capabilities(hba_capabilities);
 
-
+    // Check the types of all of the ports.
+    // I have no idea if iterate over the ports like this.
+    // other driver implementations I've seen probed the ports to determine if
+    // that port is active. I'm not sure that there any guarantees that these will appear sequentially.
+    const size_t port_count = (size_t)hba_capabilities->number_of_ports;
+    for (size_t i = 0; i < port_count; i++) {
+        volatile AHCI_Port_Registers *port = &registers->ports[i];
+        if (port->signature == AHCI_PORT_SIGNATURE_SATA) {
+            log_debug(AHCI, "port%u: SATA", (uint32_t)i);
+        } else if (port->signature == AHCI_PORT_SIGNATURE_SATAPI) {
+            log_debug(AHCI, "port%u: SATAPI", (uint32_t)i);
+        } else if (port->signature == AHCI_PORT_SIGNATURE_ENCLOSURE_MANAGEMENT_BRIDGE) {
+            log_debug(AHCI, "port%u: EnclosureManagementBridge", (uint32_t)i);
+        } else if (port->signature == AHCI_PORT_SIGNATURE_PORT_MULTIPLIER) {
+            log_debug(AHCI, "port%u: PortMultiplier", (uint32_t)i);
+        } else {
+            log_debug(AHCI, "port%u: UnrecognizedPortSignature", (uint32_t)i);
+        }
+    }
 
     return Error_Code_NONE;
 }

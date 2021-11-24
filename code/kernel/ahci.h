@@ -32,6 +32,12 @@ typedef struct {
 } __attribute((packed)) AHCI_HBA_Capabilities;
 static_assert(sizeof(AHCI_HBA_Capabilities) == 4);
 
+
+static const uint32_t AHCI_PORT_SIGNATURE_SATA = 0x00000101;
+static const uint32_t AHCI_PORT_SIGNATURE_SATAPI = 0xEB140101;
+static const uint32_t AHCI_PORT_SIGNATURE_ENCLOSURE_MANAGEMENT_BRIDGE = 0xC33C0101;
+static const uint32_t AHCI_PORT_SIGNATURE_PORT_MULTIPLIER = 0x96690101;
+
 typedef struct {
     uint64_t command_list_base_address;
     uint64_t fis_base_address;
