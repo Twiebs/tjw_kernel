@@ -1,8 +1,12 @@
-
+// Acronyms: 
 // AHCI: Advance Host Controller Interface
 // FIS: Frame Information Structure
 // HBA: Host Bus Adapter
 // ABAR: AHCI Base Memory Register
+
+// Links: 
+// https://wiki.osdev.org/AHCI
+// https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/serial-ata-ahci-spec-rev1-3-1.pdf
 
 // NOTE(Torin, 2020-02-13) for some godforsaken reason the AHCI minor version number
 // is not a regular integer. It has to be one of these values. At first glance it may look like
